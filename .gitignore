@@ -1,12 +1,13 @@
 node_modules
 dist
 coverage
+# Secrets: env files (an .env.example may be committed), keys and certificates
 .env*
+!.env.example
+*.pem
+*.key
 *.tsbuildinfo
 .DS_Store
-
-# Local examples and experiments
-/sandbox/
 
 # Data of the dev Postgres (pnpm --filter @quard/db dev:db)
 .pglite/
