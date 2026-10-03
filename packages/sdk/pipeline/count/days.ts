@@ -1,34 +1,9 @@
 import { newEventId, type CountMessage } from "@quard/shared";
-import type { FailResult, GuardCall, Mode, RuleResult } from "../../guards/call.ts";
+import type { FailResult, GuardCall, RuleResult } from "../../guards/call.ts";
 import { addDayUsed, dayCounts, dayUsed, noteDayUsed, utcDay } from "../../guards/limit/daily.ts";
 import type { LimitOptions } from "../../guards/options.ts";
 import type { Control } from "../../transport/link/control.ts";
-import { recordDecision } from "../checks.ts";
-
-type Cap = { rule: string; max: number; mode: Mode };
-
-// One per-day counter of a call, with the cap of every guard on it
-type Counter = { counter: string; add: number; caps: Cap[] };
-
-// Each counter once per call, so two guards on one tool don't add twice
-function countersOf(call: GuardCall, limits: readonly LimitOptions[]): Counter[] {
-    const counters = new Map<string, Counter>();
-    for (const options of limits) {
-        const mode = options.mode ?? "block";
-        for (const { rule, counter, add, max } of dayCounts(call, options)) {
-            const found = counters.get(counter) ?? { counter, add, caps: [] };
-            found.caps.push({ rule, max, mode });
-            counters.set(counter, found);
-        }
-    }
-    return [...counters.values()].filter((found) => found.add > 0);
-}
-
-// The smallest cap of the guards that block, which control enforces
-function enforcedCap(found: Counter): number | undefined {
-    const caps = found.caps.filter((cap) => cap.mode === "block").map((cap) => cap.max);
-    return caps.length === 0 ? undefined : Math.min(...caps);
-}
+import { countersOf, enforcedCap, refusal, type Counter } from "./caps.ts";
 
 // Counts here when control can't, adding nothing when a blocking cap is passed
 function countHere(control: Control | undefined, tool: string, counters: Counter[], day: string): number[] {
@@ -72,23 +47,6 @@ async function countThere(control: Control, tool: string, found: Counter, day: s
     return total;
 }
 
-// Block mode refuses at the first cap passed, observe mode records it once
-function refusal(call: GuardCall, over: readonly Cap[], checked: readonly RuleResult[]): FailResult | undefined {
-    const flagged = new Set(checked.filter((done) => done.decision !== "allow").map((done) => done.rule));
-    for (const { rule, mode } of over) {
-        const result: FailResult = { guard: "limit", rule, decision: "block", mode, reason: "daily_limit_reached" };
-        if (mode === "block") {
-            recordDecision(call, result);
-            return result;
-        }
-        if (!flagged.has(rule)) {
-            flagged.add(rule);
-            recordDecision(call, result);
-        }
-    }
-    return undefined;
-}
-
 // Adds the call to its per-day counters, which control shares across processes
 export async function countDays(
     call: GuardCall,
@@ -96,7 +54,7 @@ export async function countDays(
     control: Control | undefined,
     checked: readonly RuleResult[],
 ): Promise<FailResult | undefined> {
-    const counters = countersOf(call, limits);
+    const counters = countersOf(limits, (options) => dayCounts(call, options));
     if (counters.length === 0) {
         return undefined;
     }
@@ -106,5 +64,5 @@ export async function countDays(
             ? await Promise.all(counters.map((found) => countThere(control, call.tool, found, day)))
             : countHere(control, call.tool, counters, day);
     const over = counters.flatMap((found, index) => found.caps.filter((cap) => (totals[index] as number) > cap.max));
-    return refusal(call, over, checked);
+    return refusal(call, over, checked, "daily_limit_reached");
 }
