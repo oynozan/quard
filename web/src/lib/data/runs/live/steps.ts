@@ -190,9 +190,9 @@ function guardStep(decision: StoredDecision, labels: RunLabel[]): Step {
     };
 }
 
-// The approval a call waits on, as a step under the call from its first check until now
-function waitingStep(waiter: RunWaiter, labels: RunLabel[], firstCheck: Map<string, number>, now: number): Step {
-    const startedAt = firstCheck.get(waiter.stepId) ?? ms(waiter.since);
+// The approval a call waits on, from its last check, the ask, until now
+function waitingStep(waiter: RunWaiter, labels: RunLabel[], lastCheck: Map<string, number>, now: number): Step {
+    const startedAt = lastCheck.get(waiter.stepId) ?? ms(waiter.since);
     const context = contextOf(readBefore(labels, startedAt).map(labelOf));
     return {
         ...base,
@@ -218,11 +218,14 @@ function waitingStep(waiter: RunWaiter, labels: RunLabel[], firstCheck: Map<stri
     };
 }
 
-// Calls, checks and waiting approvals in time order, each call before its own checks
+// Steps in time order, a call before its checks and a wait after them
 export function buildSteps(source: StepSource, waiting: RunWaiter[] = [], now = 0): Step[] {
+    // Decisions arrive in time order
     const firstCheck = new Map<string, number>();
+    const lastCheck = new Map<string, number>();
     for (const decision of source.decisions) {
         if (!firstCheck.has(decision.stepId)) firstCheck.set(decision.stepId, ms(decision.at));
+        lastCheck.set(decision.stepId, ms(decision.at));
     }
     const owner = new Map<string, string>();
     for (const step of source.steps) {
@@ -233,7 +236,8 @@ export function buildSteps(source: StepSource, waiting: RunWaiter[] = [], now = 
             step.kind === "model_call" ? modelStep(step, source.labels) : toolStep(step, source, firstCheck, owner),
         ),
         ...source.decisions.filter(shown).map((d) => guardStep(d, source.labels)),
-        ...waiting.map((waiter) => waitingStep(waiter, source.labels, firstCheck, now)),
+        // Last, so the stable sort keeps a wait after the ask it ties with
+        ...waiting.map((waiter) => waitingStep(waiter, source.labels, lastCheck, now)),
     ];
     return steps.sort((a, b) => a.startedAt - b.startedAt || rank(a.kind) - rank(b.kind));
 }
