@@ -44,6 +44,21 @@ describe("redactEvent", () => {
         });
     });
 
+    it("masks a card number sent as a number in tool call arguments", () => {
+        const event: RunEvent = {
+            type: "tool_call",
+            ...base,
+            tool: "payByCard",
+            arguments: { card: 4111111111111111, amount: 50 },
+            status: "blocked",
+            influenced: false,
+            flagged: false,
+            durationMs: 1,
+        };
+
+        expect(redactEvent(redactor, event)).toEqual({ ...event, arguments: { card: "4111…1111", amount: 50 } });
+    });
+
     it("redacts the strings of other events", () => {
         const call: RunEvent = {
             type: "tool_call",

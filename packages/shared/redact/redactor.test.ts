@@ -50,6 +50,31 @@ describe("redactor.value", () => {
         });
     });
 
+    it("masks a card number sent as a number, as the same digits in text", () => {
+        const masked = redactor.value({ card: 4111111111111111, amex: 378282246310005, list: [5555555555554444] });
+
+        expect(masked).toEqual({ card: "4111…1111", amex: "3782…0005", list: ["5555…4444"] });
+        expect(masked).toEqual(
+            redactor.value({ card: "4111111111111111", amex: "378282246310005", list: ["5555555555554444"] }),
+        );
+    });
+
+    it("keeps other numbers as numbers", () => {
+        const numbers = [
+            4950, 4111111111111112, 1000000000000008, 1696334400000, -4111111111111111, 4111111111111111.5,
+        ];
+
+        expect(redactor.value(numbers)).toEqual(numbers);
+    });
+
+    it("checks a number past 2^53 by the digits JSON stores for it", () => {
+        // A 17-digit card number that a number holds exactly
+        expect(redactor.value(52222222222222344)).toBe("5222…2344");
+        // A 19-digit one loses its last digits, so what is left is no card number
+        const rounded: unknown = JSON.parse("4000000000000000006");
+        expect(redactor.value(rounded)).toBe(rounded);
+    });
+
     it("removes whatever a secret-named field holds", () => {
         expect(redactor.value({ password: "hunter2", token: { value: "x" }, name: "Jo" })).toEqual({
             password: "…",

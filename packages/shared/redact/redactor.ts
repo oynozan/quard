@@ -1,6 +1,6 @@
 import { replaceEmails } from "../normalize/email.ts";
 import { replaceIbans } from "../normalize/iban.ts";
-import { replaceCards } from "./cards.ts";
+import { isCard, replaceCards } from "./cards.ts";
 import { keyedHash } from "./hash.ts";
 import { CUT, maskCard, maskEmail, maskIban } from "./masks.ts";
 import { removeSecrets, SECRET_FIELD } from "./secrets.ts";
@@ -11,7 +11,7 @@ export type Redactor = {
     // A value key such as "iban:DE89...". Sensitive ones become
     // "iban:DE89…3000#<hash>", so search and tracing still match.
     key(key: string): string;
-    // Every string inside a value. Secret-named fields lose their value.
+    // Every string and card number inside a value, with secret-named fields emptied
     value(value: unknown): unknown;
 };
 
@@ -44,6 +44,10 @@ export function createRedactor(hashKey: Buffer): Redactor {
     const value = (input: unknown, depth = 0): unknown => {
         if (typeof input === "string") {
             return redactText(input);
+        }
+        // JSON stores a number as the digits String() writes, so those are checked like text
+        if (typeof input === "number" && isCard(String(input))) {
+            return redactText(String(input));
         }
         if (input === null || typeof input !== "object") {
             return input;
