@@ -51,6 +51,12 @@ describe("without a policy file or feed", () => {
         expect(feedMissing()).toBe(false);
         expect(signatureMode()).toBe("block");
     });
+
+    it("keeps the defaults for detector rules left undefined", () => {
+        const unset = { mode: undefined, flagAt: undefined, stripAt: 0.95 };
+
+        expect(effectiveDetectorRules(unset)).toEqual({ mode: "enforce", flagAt: 0.5, stripAt: 0.95 });
+    });
 });
 
 describe("a policy file", () => {

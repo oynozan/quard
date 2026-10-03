@@ -115,8 +115,11 @@ export function currentPreset(): Preset {
     return PRESETS[currentPolicy()?.strictness ?? "balanced"];
 }
 
+// A rule set to undefined, for example from an unset environment
+// variable, keeps its default instead of turning the detector off
 export function effectiveDetectorRules(fromCode: Partial<DetectorRules> | undefined): DetectorRules {
-    return { ...DEFAULT_DETECTOR_RULES, ...fromCode, ...currentPolicy()?.detector };
+    const set = Object.fromEntries(Object.entries(fromCode ?? {}).filter(([, value]) => value !== undefined));
+    return { ...DEFAULT_DETECTOR_RULES, ...set, ...currentPolicy()?.detector };
 }
 
 export function signatureFeed(): CompiledFeed | undefined {
