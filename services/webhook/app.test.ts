@@ -8,8 +8,8 @@ describe("webhook app", () => {
         expect(await res.json()).toEqual({ status: "ok", service: "webhook" });
     });
 
-    it("serves events only when it has a database", async () => {
-        const res = await createApp().request("/v1/events", { method: "POST" });
+    it.each(["/v1/events", "/v1/labels"])("serves %s only when it has a database", async (path) => {
+        const res = await createApp().request(path, { method: "POST" });
 
         expect(res.status).toBe(404);
     });
