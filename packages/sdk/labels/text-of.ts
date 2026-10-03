@@ -1,6 +1,7 @@
 import { flattenArgs } from "@quard/shared";
 
-function keysOf(value: unknown, seen: WeakSet<object>): string[] {
+// Every object key inside a value, nested ones included
+export function keysOf(value: unknown, seen = new WeakSet<object>()): string[] {
     if (value === null || typeof value !== "object" || seen.has(value)) {
         return [];
     }
