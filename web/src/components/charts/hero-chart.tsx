@@ -9,8 +9,6 @@ import { cn } from "@/lib/utils";
 import { ChartTooltip, HeaderDivider, LiveMark, Readout, TableToggle } from "./chart-parts";
 
 const BUCKET_MS = 10 * 60_000;
-// Rough readout size, used to hide the peak label when the readout would cover it.
-const TIP_W = 110;
 
 type HeroChartProps = {
     greeting: string;
@@ -27,8 +25,7 @@ export function HeroChart({ greeting, values, endsAt, live = true }: HeroChartPr
 
     const total = values.reduce((sum, v) => sum + v, 0);
     const startsAt = endsAt - values.length * BUCKET_MS;
-    const peakText = `${Math.max(...values)} · 00:00`;
-    const layout = heroLayout(values, Math.max(240, width), peakText.length * 5);
+    const layout = heroLayout(values, Math.max(240, width));
     const { field, buckets, bucketSize, peak } = layout;
     const span = bucketSize * BUCKET_MS;
     const bucketStart = (i: number) => startsAt + i * span;
@@ -45,9 +42,6 @@ export function HeroChart({ greeting, values, endsAt, live = true }: HeroChartPr
                   y: Math.max(0, field.height - (buckets[hover] / layout.unit) * field.pitch - 52),
                   alignRight: hover > buckets.length / 2,
               };
-    const tipLeft = tip === null ? 0 : tip.alignRight ? tip.x - TIP_W : tip.x;
-    const peakCovered =
-        tip !== null && tip.y < peak.label.h && tipLeft < peak.label.x + peak.label.w && tipLeft + TIP_W > peak.label.x;
     const columnAt = (clientX: number, left: number) =>
         Math.min(buckets.length - 1, Math.max(0, Math.floor((clientX - left) / field.pitch)));
 
@@ -141,21 +135,6 @@ export function HeroChart({ greeting, values, endsAt, live = true }: HeroChartPr
                             ) : null}
                             {live ? <rect className="cursor-blink" {...layout.cursor} fill="var(--signal)" /> : null}
                         </svg>
-
-                        <span
-                            aria-hidden
-                            className="mono absolute text-[10px] leading-[10px] whitespace-nowrap text-ink"
-                            style={{
-                                left: peak.label.x,
-                                width: peak.label.w,
-                                top: peak.label.h / 2 - 5,
-                                textAlign: "center",
-                                opacity: peakCovered ? 0 : 1,
-                            }}
-                        >
-                            {formatInt(peak.value)}{" "}
-                            <span className="text-ink-muted">· {formatClock(bucketStart(peak.index))}</span>
-                        </span>
 
                         <div
                             aria-hidden

@@ -14,7 +14,7 @@ export type HeroLayout = {
     unit: number;
     ticks: { value: number; y: number }[];
     cursor: Rect;
-    peak: { index: number; value: number; x: number; label: Rect };
+    peak: { index: number; value: number };
 };
 
 // Merge 10-minute buckets so the columns fit narrow screens.
@@ -36,7 +36,7 @@ function pickPitch(available: number, columns: number): { pitch: number; size: n
 }
 
 // Lays out the hero field so it spans the given width exactly.
-export function heroLayout(values: number[], width: number, peakLabelWidth: number): HeroLayout {
+export function heroLayout(values: number[], width: number): HeroLayout {
     const { pitch, size } = pickPitch(width, values.length);
     const buckets = mergeBuckets(values, size);
     const cell = pitch - GAP;
@@ -48,13 +48,6 @@ export function heroLayout(values: number[], width: number, peakLabelWidth: numb
     const { max, step } = niceScale(highest);
     const unit = max / HERO_DATA_ROWS;
 
-    const peakIndex = buckets.indexOf(highest);
-    const peakX = peakIndex * pitch + cell / 2;
-    const bandHeight = HERO_BAND_ROWS * pitch;
-    const labelW = Math.ceil((peakLabelWidth + 2 * pitch) / pitch) * pitch;
-    const labelX = Math.max(0, Math.min(width - labelW, Math.round(peakX - labelW / 2)));
-    const label = { x: labelX, y: 0, w: labelW, h: bandHeight - GAP };
-
     const field = columnField({
         values: buckets,
         dataRows: HERO_DATA_ROWS,
@@ -64,7 +57,6 @@ export function heroLayout(values: number[], width: number, peakLabelWidth: numb
         columnWidths,
         trailingColumns: totalColumns - buckets.length,
         corners: { radius: 32, tl: true, tr: true, br: true },
-        knockouts: [label],
     });
 
     const ticks = [1, 2, 3].map((k) => ({ value: k * step, y: gridlineY(field, Math.round((k * step) / unit)) }));
@@ -80,6 +72,6 @@ export function heroLayout(values: number[], width: number, peakLabelWidth: numb
         unit,
         ticks,
         cursor,
-        peak: { index: peakIndex, value: highest, x: peakX, label },
+        peak: { index: buckets.indexOf(highest), value: highest },
     };
 }

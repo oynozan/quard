@@ -69,10 +69,8 @@ export function CellColumns({
         preferredCell: cell,
         emphasis,
     };
-    const base = columnsLayout({ ...input, peakTextWidth: 0 });
-    const top = Math.max(0, ...base.groups);
-    const peakText = `${formatValue(top, format)} · ${names.axis(names.start(base.groups.indexOf(top) * base.merge))}`;
-    const layout = ready && top > 0 ? columnsLayout({ ...input, peakTextWidth: monoWidth(peakText, 10) }) : base;
+    // No peak label: a value floating in the top band reads as a stray mark.
+    const layout = columnsLayout({ ...input, peakTextWidth: 0 });
     const { field, pitch, groups, lit } = layout;
     const litWidth = lit * pitch - GAP;
 
@@ -165,21 +163,6 @@ export function CellColumns({
                         </>
                     ) : null}
                 </svg>
-
-                {layout.peak ? (
-                    <span
-                        aria-hidden
-                        className="mono absolute text-center text-[10px] leading-[10px] whitespace-nowrap text-ink"
-                        style={{
-                            left: AXIS + layout.peak.label.x,
-                            width: layout.peak.label.w,
-                            top: layout.peak.label.h / 2 - 5,
-                        }}
-                    >
-                        {formatValue(layout.peak.value, format)}{" "}
-                        <span className="text-ink-muted">· {names.axis(groupStart(layout.peak.index))}</span>
-                    </span>
-                ) : null}
 
                 {state === "empty" ? (
                     <FieldMessage
