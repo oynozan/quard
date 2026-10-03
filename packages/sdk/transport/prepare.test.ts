@@ -26,6 +26,24 @@ describe("prepareEvent", () => {
         });
     });
 
+    it("masks a card number sent as a number, in the arguments and their keys", () => {
+        const event: RunEvent = {
+            type: "tool_call",
+            ...base,
+            tool: "payByCard",
+            arguments: { card: 4111111111111111, amount: 50 },
+            status: "blocked",
+            influenced: false,
+            flagged: false,
+            durationMs: 1,
+        };
+
+        const prepared = prepareEvent(event, redactor);
+
+        expect(prepared).toMatchObject({ arguments: { card: "4111…1111", amount: 50 } });
+        expect(JSON.stringify(prepared)).not.toContain("4111111111111111");
+    });
+
     it("redacts other events as they are", () => {
         const event: RunEvent = { type: "warning", ...base, code: "unwrapped_tool", tool: "mail jane@acme.com" };
 

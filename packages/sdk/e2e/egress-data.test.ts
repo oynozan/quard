@@ -1,10 +1,11 @@
-import type { RunEvent } from "@quard/shared";
+import { createRedactor, parseHashKey, type RunEvent } from "@quard/shared";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { guard, isGuardRefusal, quard, type EgressOptions } from "../index.ts";
 import { decisionsOf } from "../test/events.ts";
 import { tempDir, writeJson } from "../test/files.ts";
 import { resetAll } from "../test/reset.ts";
+import { createUploader, type Send } from "../transport/uploader.ts";
 
 // An agent sends email. Secrets, card numbers and IBANs in what it
 // sends are blocked, masked or allowed before the email goes out.
@@ -68,6 +69,22 @@ describe("data sent by email", () => {
 
         expect(isGuardRefusal(refused) && refused.field).toBe("card number");
         expect(raw).not.toHaveBeenCalled();
+    });
+
+    it("uploads that refused call with the number masked", async () => {
+        const { sendEmail } = mailer();
+        const bodies: string[] = [];
+        const send: Send = async (_url, init) => {
+            bodies.push(String(init.body));
+            return new Response(null, { status: 202 });
+        };
+        const redactor = createRedactor(parseHashKey("ab".repeat(32)));
+
+        await sendEmail({ to: TO, body: 4242424242424242 });
+        await createUploader({ webhookUrl: "http://webhook.test", key: "qk_test_abc", redactor, send }).flush();
+
+        expect(bodies.join("\n")).toContain('"body":"4242…4242"');
+        expect(bodies.join("\n")).not.toContain("4242424242424242");
     });
 
     it("allows an IBAN under the balanced preset and masks it under strict", async () => {
