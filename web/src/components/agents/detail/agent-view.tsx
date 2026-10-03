@@ -9,10 +9,15 @@ import { AgentPermissions } from "./agent-permissions";
 import { AgentStats } from "./agent-stats";
 import { VersionsTable } from "./versions-table";
 
+function noCalls(name: string): string {
+    return `${name} made no model calls in the last 24 hours`;
+}
+
 function activitySummary(name: string, values: number[]): string {
     const peak = Math.max(0, ...values);
+    if (peak === 0) return noCalls(name);
     const at = values.indexOf(peak);
-    const latest = values[values.length - 1] ?? 0;
+    const latest = values[values.length - 1];
     return `Model calls by ${name} per hour over the last 24 hours. Peak ${formatInt(peak)} at ${formatClock(NOW - 24 * HOUR + at * HOUR)} UTC, latest ${formatInt(latest)}.`;
 }
 
@@ -40,7 +45,7 @@ export function AgentView({ detail }: { detail: AgentDetail }) {
                         unit="calls"
                         unitOne="call"
                         rows={16}
-                        emptyText={`${agent.name} made no model calls in the last 24 hours`}
+                        emptyText={noCalls(agent.name)}
                         summary={activitySummary(agent.name, detail.activity)}
                         readouts={[
                             {

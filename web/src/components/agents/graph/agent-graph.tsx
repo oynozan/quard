@@ -10,7 +10,6 @@ import { GraphLegend } from "./graph-legend";
 
 function summaryOf(graph: Graph): string {
     const { nodes, edges } = graph;
-    if (nodes.length === 0) return `No agents reported in the last ${graph.windowDays} days.`;
     const busiest = edges[0];
     const heavy = edges.filter((edge) => edge.untrustedShare >= 0.6).length;
     const busy = busiest

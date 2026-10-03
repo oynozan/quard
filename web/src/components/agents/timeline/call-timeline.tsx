@@ -56,7 +56,6 @@ function Legend({ calls }: { calls: AgentCall[] }) {
 }
 
 function summaryOf(name: string, calls: AgentCall[]): string {
-    if (calls.length === 0) return `${name} has made no calls yet.`;
     const untrusted = calls.filter((call) => call.context.trust === "untrusted").length;
     const stopped = calls.filter((call) => markOf(call) === "block").length;
     const oldest = calls[calls.length - 1];

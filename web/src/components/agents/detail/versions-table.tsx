@@ -3,6 +3,7 @@ import { SectionHeading } from "@/components/kit/headings";
 import { Badge } from "@/components/kit/labels";
 import type { AgentVersionRow } from "@/lib/data/agents";
 import { formatShortDate, shortHash } from "@/lib/format";
+import { plural } from "../lib/words";
 
 // What changed in the tools since the version before
 function toolChange(row: AgentVersionRow, before: AgentVersionRow | undefined): string {
@@ -18,7 +19,9 @@ function toolChange(row: AgentVersionRow, before: AgentVersionRow | undefined): 
 
 // The tool list and its change, shown when hovering the version cell
 function toolsTitle(row: AgentVersionRow, before: AgentVersionRow | undefined): string {
-    return `${row.tools.length} tools: ${row.tools.join(", ")} (${toolChange(row, before)})`;
+    const change = toolChange(row, before);
+    if (row.tools.length === 0) return `No tools (${change})`;
+    return `${row.tools.length} ${plural(row.tools.length, "tool")}: ${row.tools.join(", ")} (${change})`;
 }
 
 // Each version records its model, instructions and tools once, so an incident ties to the version behind it

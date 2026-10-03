@@ -29,9 +29,7 @@ function edgeSentence(edge: AgentEdge): string {
 function Tip({ hover, edges, nodes, agents, width }: TipProps) {
     if (!hover) return null;
     if (hover.kind === "edge") {
-        const placed = edges[hover.index];
-        if (!placed) return null;
-        const { edge, mid } = placed;
+        const { edge, mid } = edges[hover.index];
         const right = mid.x > width / 2;
         return (
             <ChartTooltip
@@ -45,9 +43,8 @@ function Tip({ hover, edges, nodes, agents, width }: TipProps) {
             />
         );
     }
-    const node = nodes.find((item) => item.name === hover.name);
-    const agent = agents.get(hover.name);
-    if (!node || !agent) return null;
+    const node = nodes.find((item) => item.name === hover.name)!;
+    const agent = agents.get(hover.name)!;
     const right = node.x > width / 2;
     const roles = nodeRoles(agent);
     return (
@@ -88,7 +85,10 @@ export function GraphField({ nodes, edges, summary }: { nodes: AgentNode[]; edge
     const graph = useMemo(() => placeGraph(layout, edges, width), [layout, edges, width]);
     const cursor = useCursor(graph.edges.length, "first");
 
-    const hover: Hover = cursor.index !== null ? { kind: "edge", index: cursor.index } : pointer;
+    const held: Hover = cursor.index !== null ? { kind: "edge", index: cursor.index } : pointer;
+    // A link or agent removed under the pointer never fires mouseleave
+    const gone = held?.kind === "edge" ? !graph.edges[held.index] : held?.kind === "node" && !agents.has(held.name);
+    const hover = gone ? null : held;
     const lit = (placed: PlacedEdge, index: number) => {
         if (!hover) return true;
         if (hover.kind === "edge") return hover.index === index;
@@ -103,14 +103,14 @@ export function GraphField({ nodes, edges, summary }: { nodes: AgentNode[]; edge
                 edges.some((e) => (e.from === other && e.to === name) || (e.to === other && e.from === name))
             );
         }
-        const edge = graph.edges[hover.index]?.edge;
-        return !edge || edge.from === name || edge.to === name;
+        const { edge } = graph.edges[hover.index];
+        return edge.from === name || edge.to === name;
     };
     const announce =
-        hover?.kind === "edge" && graph.edges[hover.index]
+        hover?.kind === "edge"
             ? edgeSentence(graph.edges[hover.index].edge)
-            : hover?.kind === "node" && agents.get(hover.name)
-              ? `${hover.name}: ${formatInt(agents.get(hover.name)?.runs24h ?? 0)} runs in 24 hours`
+            : hover?.kind === "node"
+              ? `${hover.name}: ${formatInt(agents.get(hover.name)!.runs24h)} runs in 24 hours`
               : "";
 
     return (
@@ -174,8 +174,8 @@ export function GraphField({ nodes, edges, summary }: { nodes: AgentNode[]; edge
             </div>
             <ul aria-label="Agents">
                 {graph.nodes.map((node) => {
-                    const agent = agents.get(node.name);
-                    if (!agent) return null;
+                    // The layout places exactly the agents it was given
+                    const agent = agents.get(node.name)!;
                     return (
                         <GraphNode
                             key={node.name}

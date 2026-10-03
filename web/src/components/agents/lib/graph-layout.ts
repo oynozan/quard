@@ -14,7 +14,7 @@ function layersOf(names: string[], edges: AgentEdge[]): Map<string, number> {
         let changed = false;
         for (const edge of delegations) {
             const next = (layer.get(edge.from) ?? 0) + 1;
-            if (layer.has(edge.to) && next > (layer.get(edge.to) ?? 0) && next < names.length) {
+            if (layer.has(edge.to) && next > layer.get(edge.to)! && next < names.length) {
                 layer.set(edge.to, next);
                 changed = true;
             }
@@ -71,12 +71,13 @@ export function layoutGraph(names: string[], edges: AgentEdge[]): GraphLayout {
         // The first layer sits beside the agents it talks to; agents with no links go last
         const wanted = byLayer[0].map((name) => {
             const near = names.filter((other) => layerOf.get(other) === 1 && linked(name, other));
-            return { name, at: mean(near.map((other) => slot.get(other) ?? 0)) ?? Infinity };
+            return { name, at: mean(near.map((other) => slot.get(other)!)) ?? Infinity };
         });
         spread(wanted).forEach((value, name) => slot.set(name, value));
     }
 
-    const nodes = names.map((name) => ({ name, layer: layerOf.get(name) ?? 0, slot: slot.get(name) ?? 0 }));
+    // Every name has a layer and a slot by now
+    const nodes = names.map((name) => ({ name, layer: layerOf.get(name)!, slot: slot.get(name)! }));
     const low = Math.min(...nodes.map((node) => node.slot));
     const shifted = nodes.map((node) => ({ ...node, slot: node.slot - low }));
     return { nodes: shifted, layers, slots: Math.max(...shifted.map((node) => node.slot)) + 1 };
