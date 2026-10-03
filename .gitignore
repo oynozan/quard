@@ -7,3 +7,6 @@ coverage
 
 # Local examples and experiments
 /sandbox/
+
+# Data of the dev Postgres (pnpm --filter @quard/db dev:db)
+.pglite/

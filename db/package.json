@@ -7,6 +7,7 @@
         "migrate": "node main.ts",
         "test": "vitest run --coverage",
         "typecheck": "tsc --noEmit",
+        "dev:db": "node dev/server-main.ts",
         "create-project": "node cli/setup-main.ts"
     },
     "dependencies": {
