@@ -1,4 +1,5 @@
 // @vitest-environment node
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Page } from "./page";
 import { shoot } from "./shoot";
@@ -40,7 +41,7 @@ describe("shoot", () => {
         expect(page.install).toHaveBeenCalled();
         expect(page.evaluate).toHaveBeenCalledWith('window.__shots.mark([{"n":1,"sel":"h1"}])');
         expect(page.capture).toHaveBeenCalledWith(undefined);
-        expect(opts.write).toHaveBeenCalledWith("out/runs.webp", Buffer.from("img"));
+        expect(opts.write).toHaveBeenCalledWith(path.join("out", "runs.webp"), Buffer.from("img"));
     });
 
     it("clicks first, grows to the full page and crops to the clip", async () => {

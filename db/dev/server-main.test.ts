@@ -21,7 +21,11 @@ describe("dev server main", () => {
 
         await import("./server-main.ts");
 
-        expect(startDevServer).toHaveBeenCalledWith({ dataDir: expect.stringMatching(/db\/\.pglite$/), port: 54329 });
+        // Windows paths use backslashes
+        expect(startDevServer).toHaveBeenCalledWith({
+            dataDir: expect.stringMatching(/db[\\/]\.pglite$/),
+            port: 54329,
+        });
         expect(log).toHaveBeenCalledWith(expect.stringContaining("DATABASE_URL=postgres://"));
     });
 

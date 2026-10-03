@@ -63,7 +63,7 @@ describe("finding pages", () => {
             mdxFiles(content)
                 .map((file) => path.relative(content, file))
                 .sort(),
-        ).toEqual(["concepts/index.mdx", "guides/runs.mdx", "index.mdx"]);
+        ).toEqual([path.join("concepts", "index.mdx"), path.join("guides", "runs.mdx"), "index.mdx"]);
     });
 });
 
