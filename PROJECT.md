@@ -147,6 +147,7 @@ quard.configure({
     key: process.env.QUARD_AGENT_KEY,
     webhookUrl: process.env.QUARD_WEBHOOK_URL,
     controlUrl: process.env.QUARD_CONTROL_URL,
+    hashKey: process.env.QUARD_HASH_KEY,
 });
 
 const client = quard.wrap(new OpenAI());
@@ -253,7 +254,7 @@ Origin comes from the wrapper that let the content in. It never comes from the c
 
 The rows for email, files and unknown content are **Claude's pick**.
 
-Teams change one origin at a time, in code. Every override is recorded in the run. Apps open to the public can mark the user as untrusted.
+Teams change one origin at a time, in code or in the policy file. Every override is recorded in the run. Apps open to the public can mark the user as untrusted.
 
 ```ts
 quard.configure({
@@ -299,9 +300,11 @@ From the spec:
 **Fleet check** (Q9)
 
 - The check watches recipients, IBANs and domains first seen in the fleet less than 7 days ago. Once a 5th separate run uses one within 24 hours, it is blocked everywhere.
-- Teams name the fields to watch, such as `iban`. Blocked attempts count too.
+- Teams name the fields to watch on a `limit` guard, such as `fleetCheck: ["iban"]`. Blocked attempts count too.
 - A blocked value goes on the quarantine list. It stays there until someone marks it known in the dashboard.
 - For its first 7 days, the check runs in observe mode, because it has no history yet.
+
+**Per-day limits** (`maxCallsPerDay`, `maxAmountPerDay`) count every agent's calls to the tool across the project, per UTC day. `control` keeps the count, so every process shares it. (**Claude's pick**)
 
 ### Guards inside monitor
 
@@ -317,13 +320,13 @@ monitor applies the same checks to what never passes through `guard()`, from Gua
 
 Decided by Q6 and Q7.
 
-- Rules live only in code, in `guard()` options. They change through pull requests and roll back with a redeploy.
+- Rules live in code, in `guard()` options, and optionally in one JSON policy file set with `quard.configure({ policyFile })`. Code rules change through pull requests and roll back with a redeploy. Operators can edit the policy file while agents run: a tool listed there uses the file's options instead of its code options, from its next call on. (**Owner**)
 - Each guard needs `name`: the tool name the model sees. `guard()` throws without it, because a function's own name can differ (`rawFetchPage`) or be lost to minifiers. The dashboard uses it to keep a rule's history across deploys and to link the model's tool call to the matching guarded call.
-- On connect, the SDK sends its active rules, as names and a hash, to `control`. Every decision records that hash. The dashboard shows which rules ran but does not edit them.
+- On connect, and again whenever they change, the SDK sends its active rules, as names and a hash, to `control`. Every decision records that hash. The dashboard shows which rules ran but does not edit them.
 - Rules a team writes **block by default**. `mode: "observe"` records "would block" or "would ask" and lets the call run. Observe rules never change the final decision.
 - Approval guards have no mode. They always ask.
 - Defaults the product sets start in observe mode: the run limits and the fleet check's first 7 days. Jev stays in observe mode for all of v1.
-- Switching a rule's mode is a code change and a redeploy.
+- Switching a rule's mode is a code change and a redeploy, or an edit to the policy file.
 
 ```ts
 // Enforces at once (default mode: "block")
@@ -333,7 +336,7 @@ const sendEmail = guard(rawSendEmail, { type: "egress", name: "sendEmail", allow
 const payInvoice = guard(rawPayInvoice, {
     type: "limit",
     name: "payInvoice",
-    maxAmountPerDay: 50000,
+    maxAmountPerDay: { field: "amount", max: 50000 },
     mode: "observe",
 });
 ```
@@ -387,7 +390,7 @@ Decided by Q8, Q21 and Q24.
 - An approval is stored with a hash of the normalized arguments. "Approve once" is bound to the run, agent, step and tool. "Always approve" is bound to the agent, tool and argument hash.
 - While a request is open, a new identical call (same agent, tool and arguments) waits on the same request instead of opening another. (**Claude's pick**)
 - A waiting process can stop, for example after a crash or a host time limit. Its heartbeats then stop, and the dashboard shows the request as "no longer waiting". The request stays open. An "approve once" given then is used by the next identical call. (**Claude's pick**)
-- Some hosts stop a waiting call. Vercel Functions and Cloud Run stop after 5 minutes by default. Vercel allows up to 800 seconds on Pro and Enterprise and 5 minutes on Hobby; Cloud Run allows up to 60 minutes. Teams there should raise the limit where they can, or set the optional `timeout` on a guard. There is no timeout by default. (**Claude's pick**)
+- Some hosts stop a waiting call. Vercel Functions and Cloud Run stop after 5 minutes by default. Vercel allows up to 800 seconds on Pro and Enterprise and 5 minutes on Hobby; Cloud Run allows up to 60 minutes. Teams there should raise the limit where they can, or set the optional `timeout`, in seconds, on the approval guard. There is no timeout by default. (**Claude's pick**)
 - The approver must see real values, so an open request keeps the full arguments. After the decision only the hash is kept. See [Redaction](#redaction).
 
 ```ts
@@ -580,8 +583,8 @@ Decided by Q18 and Q19, all **Claude's pick**.
     - **Revocation:** revoked agent keys and revoked "always approve" decisions.
     - **Label lookups:** the labels behind a reference in a message, a memory item or a chained response. (**Claude's pick**)
 - **worker** runs jobs from the queue: the root-cause finder, replay, the AI reviewer and retention cleanup. It has no endpoint.
-- **web** is the dashboard. It reads and writes Postgres through its own server code and does not call `control`. When an approver decides, `web` writes the decision to Postgres, and `control` hears about it through Postgres `LISTEN/NOTIFY`. (**Claude's pick**)
-- **Dashboard sign-in.** Privy, with an email code or GitHub. There are no passwords. Quard keeps its own signed session cookie, and the allowed emails and GitHub names are set on the server. Every approval records who decided. (**Owner**)
+- **web** is the dashboard. It reads and writes Postgres through its own server code and does not call `control`. When an approver decides, `web` writes the decision to Postgres, and `control` hears about it through Postgres `LISTEN/NOTIFY`. `control` also checks for decisions once a second, so a missed notification only delays the answer. (**Claude's pick**)
+- **Dashboard sign-in.** Privy, with an email code or GitHub. There are no passwords. Anyone who signs in with a verified email or a GitHub account can use the dashboard. Quard keeps its own signed session cookie. Every approval records who decided. (**Owner**)
 
 ## Dashboard
 
@@ -597,7 +600,7 @@ From the spec, plus the approval decisions.
 - **Agent graph:** agents as nodes and messages as edges colored by labels, with a click-through to each agent's timeline.
 - **Search** across all runs: for example every run that touched a domain or used a given IBAN. Sensitive values are searched by their keyed hash.
 - **Approvals:** open requests with their arguments, origins and influence path, answered with approve once, always approve or deny. Also a list of "always" approvals that can be revoked.
-- **Settings:** agent keys, accounts and roles, and retention. Origin overrides and rules are shown read-only, because they live in code.
+- **Settings:** agent keys, accounts and roles, and retention. Origin overrides and rules are shown read-only, because they live in code and the policy file.
 
 Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs before writing code there, as [web/AGENTS.md](web/AGENTS.md) says.
 
@@ -611,8 +614,8 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | Q2 | First providers and languages | OpenAI Responses API, TypeScript | Owner |
 | Q3 | Hosted web search | Allowed at URL level and recorded as `unscanned`; teams' own guarded search tool for page text | Owner |
 | Q4 | Name | Quard. `quard` was free on npm and PyPI on 2026-10-03 | Owner |
-| Q5 | Who sets trust | Built-in defaults, per-origin overrides in code | Owner |
-| Q6 | Where rules live | Code only; the dashboard shows them | Owner |
+| Q5 | Who sets trust | Built-in defaults, per-origin overrides in code or the policy file | Owner |
+| Q6 | Where rules live | Code, plus an optional policy file operators can change while agents run; the dashboard shows them | Owner |
 | Q7 | Rollout mode | Block by default, observe per rule; product defaults start in observe | Owner |
 | Q8 | Where approvals happen | A dashboard page | Owner |
 | Q9 | Fleet check trigger | New within 7 days; a 5th separate run within 24 h | Owner |
@@ -638,6 +641,10 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Where guards run | In-process; the backend for shared state | Spec |
 | — | Database and queue | Postgres only, with pg-boss | Claude's pick |
 | — | SDK event format | Our own JSON API to `webhook`; W3C ids | Claude's pick |
+| — | SDK link to `control` | One WebSocket that reconnects; `control` also checks for decisions every second | Claude's pick |
+| — | Agent keys | One key per app; an app may host several agents | Claude's pick |
+| — | Late "approve once" | Used by the next identical call | Claude's pick |
+| — | Per-day limits | Per tool across the project, per UTC day | Claude's pick |
 | — | Auth | Agent keys for the SDK; Privy sign-in (email code or GitHub) for the dashboard | Owner |
 | — | SDK names | The `quard` object (`wrap`, `run`, `agent`, `configure`, `inject`, `resume`), `guard()`, `isGuardRefusal`, `GuardBlockedError` | Owner |
 | — | Blocked tool calls inside monitor | The call stays in the response, marked blocked; the guarded tool refuses it | Owner |
@@ -658,7 +665,5 @@ These points changed the spec. The spec doc was updated to match them on 2026-10
 Not decided yet:
 
 - **Hosted MCP approvals.** Answering an approval request takes a follow-up model request. Decide whether monitor sends it inside the same client call or hands it to the app.
-- **Agent keys.** One key per agent, or one per app that may host several agents.
-- **Late "approve once".** Used by the next identical call, as picked above, or dropped.
 - **WebSocket transport.** The OpenAI Agents SDK can reach the Responses API over a WebSocket. The fetch hook does not cover it yet.
 - **Node 26** becomes LTS on 2026-10-28. Move the services to it then.

@@ -8,7 +8,8 @@ The call pauses until someone answers. Then the tool runs with exactly the appro
 
 - **No time limit.** A request waits until someone answers, and an approval never expires.
 - **Identical calls.** While a request is open, a new identical call, from the same agent to the same tool with the same arguments, waits on the same request instead of opening another.
-- **Stopped processes.** If the waiting process stops, for example after a crash, its heartbeats stop and the dashboard shows the request as no longer waiting. The request stays open.
+- **Stopped processes.** If the waiting process stops, for example after a crash, its heartbeats stop and the dashboard shows the request as no longer waiting. The request stays open, and an **Approve once** given then is used by the next identical call.
+- **Hosts that stop long calls.** Some hosts end a call that waits too long. Set a `timeout`, in seconds, on the approval guard to give up sooner with a refusal. The request stays open.
 
 ## The three answers
 
@@ -28,7 +29,7 @@ The block checks run again right after an approval. An approval never overrides 
 
 The approver sees the real arguments, where each value came from, and the [influence path](/glossary) from the entry point to the call. Everywhere else the dashboard shows sensitive values masked, but an approver must see exactly what they approve. After the answer, only a hash of the arguments is kept.
 
-Admins and approvers can both answer. Every answer records who gave it.
+Anyone signed in to the dashboard can answer. Every answer records who gave it.
 
 ## If Quard's backend can't be reached
 

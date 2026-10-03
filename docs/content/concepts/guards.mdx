@@ -32,13 +32,13 @@ After an approval, the block checks run again. An approval never overrides a blo
 
 ## Block mode and observe mode
 
-Rules live in your app's code, not in the dashboard. They change through code review and roll back with a redeploy. The dashboard shows which rules ran, by name and hash, under [Rules from code](/guides/settings#rules-from-code).
+Rules live in your app's code, and optionally in a policy file your team can edit while agents run. They never live in the dashboard. Code rules change through code review and roll back with a redeploy. The dashboard shows which rules ran, by name and hash, under [Rules from code](/guides/settings#rules-from-code).
 
 - A rule your team writes blocks by default.
 - A rule in **observe** mode records what it would have done, "would block" or "would ask", and lets the call run. It never changes the final decision. Use it to try a new rule on live traffic first.
 - Approval guards have no mode. They always ask.
 - Defaults that Quard sets start in observe mode: the [run limits](/guides/summary#run-limits) and the first 7 days of the [fleet check](/guides/summary#quarantine).
-- Switching a rule's mode is a code change and a redeploy.
+- Switching a rule's mode is a code change and a redeploy, or an edit to the policy file.
 
 ## When a guard blocks
 
