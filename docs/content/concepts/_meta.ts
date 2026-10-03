@@ -5,6 +5,7 @@ const meta: MetaRecord = {
     "value-tracing": "Value tracing",
     guards: "Guards",
     approvals: "Approvals",
+    "run-limits": "Run limits",
 };
 
 export default meta;

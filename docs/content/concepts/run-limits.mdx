@@ -1,0 +1,74 @@
+# Run limits
+
+Every run has five limits. They stop teams of agents that run away: delegation chains that go too deep, an agent that starts too many helpers, two agents that hand work back and forth, and runs that make too many model calls or cost too much.
+
+| Limit   | Default per run | What it counts                                         | Rule          |
+| ------- | --------------- | ------------------------------------------------------ | ------------- |
+| Depth   | 3               | Delegation levels below the agent that started the run | `max-depth`   |
+| Fan-out | 10              | Different helpers one agent delegates to               | `max-fan-out` |
+| Loops   | 5               | Turns back and forth between the same two agents       | `max-loops`   |
+| Steps   | 200             | Model calls across all agents                          | `max-steps`   |
+| Cost    | $5              | Estimated cost, from token usage and the price table   | `max-cost`    |
+
+## Observe mode first
+
+The limits are product defaults, so they start in [observe mode](/concepts/guards#block-mode-and-observe-mode). They record "would block" but never stop a run.
+
+Watch how many runs would be stopped on the [Summary page](/guides/summary#run-limits), and how close each run comes on its [run page](/guides/runs#read-a-run). Switch the limits on once the numbers look right.
+
+## Where each limit is checked
+
+### Steps and cost
+
+The wrapped OpenAI client checks steps and cost before each model call. When a limit is on, a call over it never leaves your app, and the client gets an error that says why.
+
+- A run is over the cost limit once its estimated cost reaches the cap.
+- A model with no known price adds no cost. The step limit still caps the run.
+
+### Depth, fan-out and loops
+
+These are checked on the function that sends messages or delegates work. Give it a limit guard with `delegateTo`, the argument that names the receiving agent:
+
+```ts
+const delegate = guard(rawDelegate, { type: "limit", name: "delegate", delegateTo: "to" });
+
+await delegate({ to: "billing", brief });
+```
+
+- **Depth** counts levels below the agent that started the run. Each `quard.agent()` goes one level down, and so does each `quard.resume()` on a message.
+- **Fan-out** counts the different agents one agent delegates to. Sending to the same helper again doesn't add to it.
+- **Loops** count turns between two agents. The first handoff is turn 1, and each change of direction adds one.
+- When the `delegateTo` argument is missing or empty, only depth is checked.
+- These three follow the run limits' mode, not the guard's own `mode`.
+
+## Changing the limits
+
+Set them in code with `runLimits`. Fields you leave out keep their defaults:
+
+```ts
+quard.configure({
+    runLimits: { mode: "block", steps: 100, costUsd: 2 },
+});
+```
+
+Or set them in the policy file, named by `policyFile` in `quard.configure()`. Your team can edit it while agents run:
+
+```json
+{
+    "version": "2026-10-04.1",
+    "runLimits": { "mode": "block", "depth": 2 }
+}
+```
+
+Each field in the policy file wins over the same field in code. The order is defaults, then code, then the policy file, field by field.
+
+## Runs across processes
+
+A run spans processes once `quard.inject()` or `quard.resume()` carries it to another one. From then on, its counters live in `control`, starting from what the process counted so far:
+
+- Steps and cost.
+- The per-run counts of limit guards: `maxCallsPerRun` and `maxAmountPerRun`.
+
+So every process of the run adds to one total. When `control` can't be reached, each process counts on its own and sends its counts when `control` is back.
+
+Fan-out and loops stay per process. Each process counts the helpers and turns it sees itself. Depth goes with the message, so an agent that resumes a run sits one level below the sender.
