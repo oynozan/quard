@@ -22,21 +22,23 @@ Every piece of content gets a label that says where it came from. Guards use the
 5. [Guards](#guards)
 6. [Approvals](#approvals)
 7. [Multi-agent](#multi-agent)
-8. [Root-cause finder](#root-cause-finder)
-9. [AI inside Quard](#ai-inside-quard)
-10. [Data, storage and hosting](#data-storage-and-hosting)
-11. [Services](#services)
-12. [Dashboard](#dashboard)
-13. [Decision record](#decision-record)
-14. [Changes to the spec](#changes-to-the-spec)
-15. [Open items](#open-items)
+8. [Payments (x402)](#payments-x402)
+9. [Root-cause finder](#root-cause-finder)
+10. [AI inside Quard](#ai-inside-quard)
+11. [Data, storage and hosting](#data-storage-and-hosting)
+12. [Services](#services)
+13. [Dashboard](#dashboard)
+14. [Decision record](#decision-record)
+15. [Changes to the spec](#changes-to-the-spec)
+16. [Open items](#open-items)
 
 ## What v1 includes
 
 In v1:
 
 - A TypeScript SDK for the OpenAI Responses API.
-- `monitor`, which wraps the OpenAI client, and `guard()`, which wraps tools, with all five guard types.
+- `monitor`, which wraps the OpenAI client, and `guard()`, which wraps tools, with all six guard types.
+- Guards and records for the payments agents make over x402.
 - Labels, value matching, run limits and the fleet check.
 - Approvals on a dashboard page.
 - The root-cause finder, with replay and an AI-written explanation.
@@ -290,6 +292,7 @@ From the spec:
 | `approval` | High-stakes tools | Always asks a human before running | Run or block |
 | `egress` | Tools that send data out: email, HTTP posts, uploads | Internal data headed to a destination outside an allowlist or found in untrusted content | Allow, block or ask a human |
 | `limit` | Any tool | Calls and amounts per run, agent or day, and a new value suddenly used by many agents | Allow or block |
+| `x402` | An x402 payment client | Payment amounts per payment, run and day, paid hosts, payees first seen in untrusted content, and new payees used by many runs. Added by the **Owner**; see [Payments (x402)](#payments-x402) | Allow, block, or ask a human above a set amount |
 
 - **source** runs after the tool returns. It records the exact origin: URL, sender, server or file. It checks the domain against block and allow lists. It scans for instructions aimed at an AI, text shaped like a tool call, and invisible text. Then it passes the content, strips suspect parts, flags it so later actions face stricter rules, or blocks it. Jev scores are recorded here too.
 - **action** runs before the call. Typical rules: a value must come from a named origin, like an IBAN from supplier records. Amounts are capped. Never-seen recipients go to a human.
@@ -446,6 +449,62 @@ const receive = guard(rawReceive, { type: "source", origin: "agent", name: "rece
 - These are product defaults, so they start in observe mode. They record "would block" until a team switches them on.
 - Cost is estimated from token usage and a price table. When a price is unknown, the step limit still caps the run.
 - When a run spans processes, its counters live in `control`. (**Claude's pick**)
+
+## Payments (x402)
+
+Decided by the owner on 2026-10-04, except where marked.
+
+[x402](https://docs.x402.org) lets an agent pay for an HTTP request on the spot:
+
+1. The server answers `402` with a price in a base64 `PAYMENT-REQUIRED` header. Its `accepts` lists the payment options, each with `scheme`, `network`, `amount` (atomic units), `asset`, `payTo` and `maxTimeoutSeconds`.
+2. The agent's wallet signs one option, and the request is sent again with a `PAYMENT-SIGNATURE` header.
+3. The server settles, often through a facilitator, and answers with a `PAYMENT-RESPONSE` header (`success`, `transaction`, `network`, `payer`, `amount`).
+
+v1 used `X-PAYMENT` and `X-PAYMENT-RESPONSE`, with requirements in the body. Quard reads both. The spec leaves budgets on the paying side out of scope. Quard covers them, against these risks:
+
+- A poisoned page sends the agent to a paid endpoint, and the agent pays an attacker on every call.
+- A server asks for more than a call is worth.
+- A retry loop or many helpers pay the same endpoint hundreds of times.
+- A new payee is suddenly paid by many runs.
+- A payment settles, but the response is an error.
+
+**The `x402` guard.** A sixth guard type wraps an x402 client, the way `guard()` wraps a tool: `quard.x402(client, options)`. It runs in the client's `onBeforePaymentCreation` hook, before the payment is signed. A blocked payment is never signed, and the model reads a refusal such as "Blocked by the x402 guard: the payment is over the run limit. The x402 payment did NOT happen. Do not retry it."
+
+| Option | What it does |
+| --- | --- |
+| `maxPerPayment`, `maxPerRun`, `maxPerDay` | Set USD caps. The day total lives in `control` for the whole project, like per-day limits. |
+| `maxPaymentsPerRun` | Caps how many payments one run makes, which catches loops. |
+| `allowHosts`, `blockHosts` | List the hosts that may be paid and the hosts that never may. |
+| `untrusted` | Applies to a host or payee first seen in untrusted content. `"block"` is the default; `"allow"` turns the check off. |
+| `assetCaps` | Sets caps for tokens with no known USD value, in atomic units. |
+| `fleetCheck` | Quarantines a payee that a 5th separate run pays within 24 h of first seeing it. |
+| `approveAbove` | Asks a person above this many USD. It is off unless set. |
+| `mode`, `onBlock` | Work as on every guard. |
+
+```ts
+const client = quard.x402(new x402Client(/* schemes, signer */), { type: "x402", maxPerRun: 2, maxPerDay: 20 });
+const paidFetch = wrapFetchWithPayment(quard.x402Fetch(fetch), client);
+```
+
+- **Few human approvals.** The guard allows or blocks on its own, and asks a person only above `approveAbove`. Such an approval waits before signing, because a signed payment expires within `maxTimeoutSeconds`.
+- **Defaults** (**Claude's pick**): $1 per payment, $5 per run, $50 per day, and untrusted origins blocked. They start in observe mode like the other product defaults, and never ask a person.
+- **Every x402 response is recorded.** `quard.x402Fetch(fetch)` sits under the x402 client and records:
+    - price requests, including the ones the guard refused;
+    - signed payments;
+    - settlements, with the transaction hash;
+    - whether the paid response arrived. If it didn't, the payment is flagged "paid, not delivered".
+
+  A signed payment that no `x402` guard checked is not sent, and Quard warns once, as it does for an unguarded tool.
+- **The chain doesn't matter.** The network is recorded, but no rule depends on it. Any scheme and network the x402 client supports works.
+- **No token is blocked for what it is.** USD caps apply where the value is known: stablecoins, from a small built-in list. Other tokens are recorded as "value unknown", and the count caps and `assetCaps` still apply.
+- **Wallet addresses stay in clear,** since they are public on chain. They are still a value kind, so labels, search and the fleet check find them.
+- **Records.** New `payment` events (`challenged`, `refused`, `signed`, `settled`, `failed`) carry the run, step, agent, host, resource URL (secrets removed), network, asset, amount, USD value when known, scheme and transaction hash. Runs get `spend_usd` next to `cost_usd`.
+- **Dashboard.**
+    - The run view shows payment steps with amount, host, payee, network and a transaction link.
+    - The runs list and the overview show spend next to cost.
+    - The Summary page shows spend by day, agent, host and payee, plus new and quarantined payees.
+- **x402 over MCP.** A paid tool returns the `PaymentRequired` object as an error result, and the payment travels in `_meta["x402/payment"]`. Quard reads both through an MCP client wrapper.
+- **Tests never touch a real chain.** They use a local x402 server and a stub facilitator. The sandbox uses a test network.
 
 ## Root-cause finder
 
@@ -648,6 +707,11 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Auth | Agent keys for the SDK; Privy sign-in (email code or GitHub) for the dashboard | Owner |
 | — | SDK names | The `quard` object (`wrap`, `run`, `agent`, `configure`, `inject`, `resume`), `guard()`, `isGuardRefusal`, `GuardBlockedError` | Owner |
 | — | Blocked tool calls inside monitor | The call stays in the response, marked blocked; the guarded tool refuses it | Owner |
+| — | x402 payments | A sixth guard type, `x402`, before signing; every x402 response recorded; milestone after M4 | Owner |
+| — | x402 approvals | Rare: only above a set amount; limits decide the rest | Owner |
+| — | x402 chains and tokens | No rule depends on the chain; no token blocked for what it is | Owner |
+| — | Wallet addresses | Stored in clear, since they are public on chain | Owner |
+| — | x402 defaults | $1 per payment, $5 per run, $50 per day, untrusted origins blocked; observe mode first | Claude's pick |
 
 ## Changes to the spec
 

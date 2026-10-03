@@ -1,6 +1,6 @@
 # Quard v1 roadmap
 
-Seven milestones, in order. Each one ends with something that runs, with 100% test coverage. The details are in [PROJECT.md](PROJECT.md).
+Eight milestones, in order. Each one ends with something that runs, with 100% test coverage. The details are in [PROJECT.md](PROJECT.md).
 
 ## Start now
 
@@ -56,14 +56,25 @@ Milestones 0 and 1 need no more decisions.
 
 **Done when** an orchestrator in one process delegates to an agent in another, and a web-derived IBAN in the brief is blocked in the second agent's payment.
 
-## M5. Root-cause finder
+## M5. x402 payments
+
+- `packages/shared`: x402 header schemas (v1 and v2), wallet addresses as a value kind, a stablecoin list and the `payment` event.
+- The `x402` guard: `quard.x402(client, options)` checks every payment before it is signed, with payment limits, host lists, untrusted origins and the payee fleet check. It asks a person only above `approveAbove`.
+- `quard.x402Fetch(fetch)` reads every x402 response: price requests, payments, settlements, and whether the paid response arrived.
+- `control`: per-day spend and the payee fleet check. `webhook` and `db`: payment steps and spend per run.
+- `web`: payments in the run view, spend columns and spend on the Summary page.
+- x402 over MCP, docs and two sandbox examples.
+
+**Done when** a poisoned page sends an agent to a paid endpoint and the payment is refused before signing with a refusal the model reads. Also, ten paid calls in a loop stop at the run cap, and each one shows in the run view with amount, payee and settlement. The details are in [PROJECT.md](PROJECT.md#payments-x402).
+
+## M6. Root-cause finder
 
 - `worker` jobs on pg-boss: value tracing, the verdict, replay (rounds of 5, early stop, $5 cap) and the AI reviewer, using the team's own key.
 - `web`: the incident view with a replay button, search across runs by hashed value, and the summary view.
 
 **Done when** the M1 payment attack produces a verdict with entry point, turning point, damage and missing guard, confirmed by replay.
 
-## M6. Ship v1
+## M7. Ship v1
 
 - The Jev detector in observe mode, behind the detector interface.
 - Hosted web search (URL level, recorded as `unscanned`) and hosted MCP approval requests.
