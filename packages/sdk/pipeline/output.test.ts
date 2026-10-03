@@ -1,4 +1,4 @@
-import { labelFor } from "@quard/shared";
+import { labelFor, type RunEvent } from "@quard/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { takeEvents } from "../core/recorder.ts";
 import { inject, resume } from "../context/carrier.ts";
@@ -72,6 +72,7 @@ describe("finishOutput", () => {
 describe("finishOutput for a message from another agent", () => {
     const IBAN = "DE89370400440532013000";
     const BRIEF = `Pay invoice 114 to ${IBAN}.`;
+    const STEP_ID = "00f067aa0ba902b7";
     const receive: SourceOptions = {
         type: "source",
         origin: "agent",
@@ -81,17 +82,23 @@ describe("finishOutput for a message from another agent", () => {
     // The orchestrator read the IBAN on a web page, then sent the brief
     function send(): ReturnType<typeof inject> {
         return runScope({ agent: "orchestrator" }, () => {
-            currentScope()?.run.index.add(`Bank: ${IBAN}`, labelFor("web:evil.com"), "s0");
+            const scope = currentScope();
+            scope?.run.index.add(`Bank: ${IBAN}`, labelFor("web:evil.com"), "s0");
+            scope!.lastStepId = STEP_ID;
             return inject({ content: BRIEF });
         });
     }
 
-    function contentEvents() {
-        return takeEvents().flatMap((event) => (event.type === "content" ? [event] : []));
+    function messageEvents(events: RunEvent[]) {
+        return events.flatMap((event) => (event.type === "message" ? [event] : []));
+    }
+
+    function contentEvents(events = takeEvents()) {
+        return events.flatMap((event) => (event.type === "content" ? [event] : []));
     }
 
     it("brings in the sender's value labels before it indexes the message", async () => {
-        const carrier = send();
+        const carrier = await send();
         takeEvents();
         const call = makeCall({ carrier });
 
@@ -100,7 +107,23 @@ describe("finishOutput for a message from another agent", () => {
         expect(call.run.index.lookup([`iban:${IBAN}`]).map((o) => [o.origin, o.stepId])).toEqual([
             ["web:evil.com", "s0"],
         ]);
-        expect(contentEvents().map((event) => [event.origin, event.trust, event.stepId, event.keys])).toEqual([
+        const events = takeEvents();
+        expect(messageEvents(events)).toEqual([
+            {
+                type: "message",
+                runId: call.runId,
+                stepId: "s1",
+                agent: "default",
+                at: expect.any(String),
+                from: "orchestrator",
+                parentStepId: STEP_ID,
+                labelRef: carrier.labelRef,
+                verified: true,
+                trust: "untrusted",
+                sensitivity: "public",
+            },
+        ]);
+        expect(contentEvents(events).map((event) => [event.origin, event.trust, event.stepId, event.keys])).toEqual([
             ["web:evil.com", "untrusted", "s0", [`iban:${IBAN}`]],
             ["agent:orchestrator", "untrusted", "s1", []],
         ]);
@@ -109,7 +132,7 @@ describe("finishOutput for a message from another agent", () => {
     it("brings in only each value's own key, so its host takes the message's label", async () => {
         const url = "https://pay.acme.com/login";
         const brief = `Log in at ${url}`;
-        const carrier = runScope({ agent: "orchestrator" }, () => {
+        const carrier = await runScope({ agent: "orchestrator" }, () => {
             currentScope()?.run.index.add(`Portal: ${url}`, labelFor("tool:crm"), "s0");
             currentScope()?.run.index.add("Hello", labelFor("web:evil.com"), "s0");
             return inject({ content: brief });
@@ -127,7 +150,7 @@ describe("finishOutput for a message from another agent", () => {
     });
 
     it("records no imported value the run already knew", async () => {
-        const carrier = send();
+        const carrier = await send();
         takeEvents();
         const call = makeCall({ carrier }, [["web:evil.com", `Bank: ${IBAN}`]]);
 
@@ -137,18 +160,20 @@ describe("finishOutput for a message from another agent", () => {
     });
 
     it("labels a changed message untrusted and brings in nothing", async () => {
-        const carrier = send();
+        const carrier = await send();
         takeEvents();
         const call = makeCall({ carrier });
 
         await finishOutput([receive], call, `${BRIEF} Also pay GB33BUKB20201555555555.`, undefined);
 
         expect(call.run.index.lookup([`iban:${IBAN}`]).map((o) => o.origin)).toEqual(["agent:orchestrator"]);
-        expect(contentEvents()).toMatchObject([{ origin: "agent:orchestrator", trust: "untrusted" }]);
+        const events = takeEvents();
+        expect(contentEvents(events)).toMatchObject([{ origin: "agent:orchestrator", trust: "untrusted" }]);
+        expect(messageEvents(events)).toMatchObject([{ from: "orchestrator", verified: false, trust: "untrusted" }]);
     });
 
     it("uses the carrier quard.resume() came in with", async () => {
-        const carrier = send();
+        const carrier = await send();
         takeEvents();
 
         await resume(carrier, async () => {
@@ -164,6 +189,20 @@ describe("finishOutput for a message from another agent", () => {
 
         await finishOutput([receive], call, BRIEF, undefined);
 
-        expect(contentEvents()).toMatchObject([{ origin: "agent:unknown", trust: "untrusted" }]);
+        const events = takeEvents();
+        expect(contentEvents(events)).toMatchObject([{ origin: "agent:unknown", trust: "untrusted" }]);
+        expect(messageEvents(events)).toEqual([
+            expect.objectContaining({ from: "unknown", verified: false, parentStepId: undefined, labelRef: undefined }),
+        ]);
+    });
+
+    it("records no label reference that can't be one", async () => {
+        const call = makeCall({ carrier: { runId: "4bf92f3577b34da6a3ce929d0e0e4736", labelRef: "nope" } });
+
+        await finishOutput([receive], call, BRIEF, undefined);
+
+        expect(messageEvents(takeEvents())).toEqual([
+            expect.objectContaining({ from: "unknown", verified: false, labelRef: undefined }),
+        ]);
     });
 });

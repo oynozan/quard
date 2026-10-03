@@ -1,12 +1,15 @@
 import { randomBytes } from "node:crypto";
-import { extractValues, isRunId, isStepId } from "@quard/shared";
+import { extractValues, isRunId, isStepId, newStepId } from "@quard/shared";
+import { now, record } from "../core/recorder.ts";
 import type { ContentIndex } from "../labels/content-index.ts";
 import { printOf } from "../labels/content-index.ts";
-import { findRecord, keptRun, saveRecord, type ValueRecord } from "../labels/records.ts";
+import { findRecord, keptRun, saveRecord, type FoundRecord, type ValueRecord } from "../labels/records.ts";
 import { textOf } from "../labels/text-of.ts";
 import { exactOccurrences } from "../labels/value-labels.ts";
-import { newRun } from "./run.ts";
-import { currentScope, runScope, withScope, type Scope } from "./scope.ts";
+import { uploadsOn } from "../transport/configure.ts";
+import { storeLabels } from "../transport/labels.ts";
+import { newRun, type RunState } from "./run.ts";
+import { currentScope, narrowTools, runScope, withScope, type Scope } from "./scope.ts";
 
 // The three items that travel with a message between agents
 export type Carrier = {
@@ -24,8 +27,11 @@ export type ResumeOptions = {
     tools?: string[];
 };
 
-// The carrier each resumed scope came in with, for receive guards inside it
-const resumed = new WeakMap<Scope, Carrier>();
+// A message's carrier and the record it points to, if one was found
+export type Incoming = { carrier: Carrier; found: FoundRecord | undefined };
+
+// What each resumed scope came in with, for receive guards inside it
+const resumed = new WeakMap<Scope, Incoming>();
 
 // A carrier read from a channel, or undefined when it is missing or unreadable
 export function readCarrier(value: unknown): Carrier | undefined {
@@ -50,61 +56,100 @@ function valuesOf(text: string, index: ContentIndex): ValueRecord[] {
         const [first] = exactOccurrences({ type, value, occurrences: index.lookup(keys), modelGenerated: false });
         if (first !== undefined && !found.has(value)) {
             const { origin, trust, sensitivity, flags, stepId } = first;
-            found.set(value, { value, key: `${type}:${value}`, origin, trust, sensitivity, flags, stepId });
+            found.set(value, { type, value, key: `${type}:${value}`, origin, trust, sensitivity, flags, stepId });
         }
     }
     return [...found.values()];
 }
 
-// quard.inject(): stores the message's labels and returns what travels with it
-export function inject(options: InjectOptions): Carrier {
+// Where a run starts spanning processes: a message carries it out, or it came in from elsewhere
+function runSpansProcesses(run: RunState): void {
+    void run;
+}
+
+// quard.inject(): stores the message's labels, then returns what travels with it
+export async function inject(options: InjectOptions): Promise<Carrier> {
     const scope = currentScope();
     if (scope === undefined) {
         throw new Error("quard.inject() must be called inside quard.run()");
     }
+    const { run, agent } = scope;
     const text = textOf(options.content);
     const labelRef = randomBytes(8).toString("hex");
     const stepId = scope.lastStepId;
-    saveRecord(
+    const stored = saveRecord(
         {
             ref: labelRef,
-            runId: scope.run.runId,
+            runId: run.runId,
             stepId,
-            sender: scope.agent,
+            sender: agent,
             depth: scope.depth,
             print: printOf(text),
-            label: scope.run.index.context(),
-            values: valuesOf(text, scope.run.index),
+            label: run.index.context(),
+            values: valuesOf(text, run.index),
+            tools: scope.tools === undefined ? undefined : [...scope.tools].sort(),
         },
-        scope.run,
+        run,
     );
-    return stepId === undefined
-        ? { runId: scope.run.runId, labelRef }
-        : { runId: scope.run.runId, parentStepId: stepId, labelRef };
+    runSpansProcesses(run);
+    // Without uploads the record lives in this process only
+    if (uploadsOn() && !(await storeLabels([stored]))) {
+        // A receiver in another process will read the message as untrusted
+        record({
+            type: "warning",
+            runId: run.runId,
+            stepId: stepId ?? newStepId(),
+            agent,
+            at: now(),
+            code: "label_record_not_stored",
+        });
+    }
+    return stepId === undefined ? { runId: run.runId, labelRef } : { runId: run.runId, parentStepId: stepId, labelRef };
 }
 
 // quard.resume(): runs fn inside the run the carrier names. The run
 // started elsewhere, so its start and end are not recorded here.
-export function resume<T>(carrier: unknown, fn: () => T, options: ResumeOptions = {}): T {
+export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOptions = {}): Promise<Awaited<T>> {
     const checked = readCarrier(carrier);
     if (checked === undefined) {
         // Messages received here have nothing to vouch for them
-        return runScope({ agent: options.agent, tools: options.tools }, fn);
+        return await runScope({ agent: options.agent, tools: options.tools }, fn);
     }
-    const found = findRecord(checked.labelRef);
-    const known = found?.runId === checked.runId ? found : undefined;
+    const found = await findRecord(checked.labelRef);
+    const known = found?.record.runId === checked.runId ? found.record : undefined;
+    const kept = keptRun(checked.runId);
+    const run = kept ?? newRun(checked.runId);
+    if (kept === undefined) {
+        runSpansProcesses(run);
+    }
+    // The sender's tools cap what this agent may use
+    const granted = known?.tools === undefined ? undefined : new Set(known.tools);
     const scope: Scope = {
-        run: keptRun(checked.runId) ?? newRun(checked.runId),
+        run,
         agent: options.agent ?? "default",
         parentStepId: checked.parentStepId,
-        tools: options.tools === undefined ? undefined : new Set(options.tools),
+        tools: narrowTools(granted, options.tools),
         lastStepId: undefined,
         depth: known === undefined ? 0 : known.depth + 1,
     };
-    resumed.set(scope, checked);
-    return withScope(scope, fn);
+    resumed.set(scope, { carrier: checked, found });
+    return await withScope(scope, fn);
 }
 
-export function resumedCarrier(scope: Scope | undefined): Carrier | undefined {
-    return scope === undefined ? undefined : resumed.get(scope);
+// What a receive guard reads a message with. A message with no carrier
+// of its own has the one quard.resume() came in with.
+export async function incomingMessage(value: unknown, scope: Scope | undefined): Promise<Incoming | undefined> {
+    const kept = scope === undefined ? undefined : resumed.get(scope);
+    if (value === undefined || value === null) {
+        return kept;
+    }
+    const carrier = readCarrier(value);
+    if (carrier === undefined) {
+        return undefined;
+    }
+    // The record quard.resume() found is not looked up again
+    if (kept !== undefined && kept.carrier.labelRef === carrier.labelRef) {
+        return { carrier, found: kept.found };
+    }
+    return { carrier, found: await findRecord(carrier.labelRef) };
 }

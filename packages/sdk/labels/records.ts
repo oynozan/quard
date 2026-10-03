@@ -1,36 +1,18 @@
-import type { ContextLabel, Label } from "@quard/shared";
+import type { MessageRecord } from "@quard/shared";
 import type { RunState } from "../context/run.ts";
+import { lookupLabels } from "../transport/labels.ts";
+import { messageRecordOf, type SentMessage } from "./message-record.ts";
+import { matchValues, type ValueRecord } from "./value-records.ts";
 
-// The label one traceable value had where it first appeared in the sender's run
-export type ValueRecord = {
-    value: string;
-    // The value's own index key, such as "iban:DE89..."
-    key: string;
-    origin: string;
-    trust: Label["trust"];
-    sensitivity: Label["sensitivity"];
-    flags: string[];
-    stepId: string;
-};
+export type { SentMessage } from "./message-record.ts";
+export type { ValueRecord } from "./value-records.ts";
 
-// What a sender stores before a message leaves, so the receiver can label it
-export type LabelRecord = {
-    ref: string;
-    runId: string;
-    // The sender's latest step, if it made one
-    stepId: string | undefined;
-    sender: string;
-    depth: number;
-    // A hash of the content's normalized text
-    print: string;
-    // The sender run's context label when the message left
-    label: ContextLabel;
-    values: ValueRecord[];
-};
+// Raw values when this process made the record, else only their hashes
+export type FoundRecord = { record: MessageRecord; values: ValueRecord[] | undefined };
 
 const MAX_KEPT = 10_000;
 
-const records = new Map<string, LabelRecord>();
+const records = new Map<string, FoundRecord>();
 // Runs that sent messages, so a resume in this process rejoins them
 const runs = new Map<string, RunState>();
 
@@ -43,14 +25,32 @@ function keep<T>(map: Map<string, T>, key: string, value: T): void {
     }
 }
 
-export function saveRecord(record: LabelRecord, run: RunState): void {
-    keep(records, record.ref, record);
-    keep(runs, run.runId, run);
+export function isLabelRef(text: string): boolean {
+    return /^[0-9a-f]{16}$/.test(text);
 }
 
-// Records live in this process for now; a lookup through control can come later
-export function findRecord(ref: string): LabelRecord | undefined {
-    return records.get(ref);
+// Keeps the record here and returns it as it is stored elsewhere
+export function saveRecord(sent: SentMessage, run: RunState): MessageRecord {
+    const record = messageRecordOf(sent);
+    keep(records, sent.ref, { record, values: sent.values });
+    keep(runs, run.runId, run);
+    return record;
+}
+
+// The record made in this process, else the one control has
+export async function findRecord(ref: string): Promise<FoundRecord | undefined> {
+    const kept = records.get(ref);
+    if (kept !== undefined || !isLabelRef(ref)) {
+        return kept;
+    }
+    const found = await lookupLabels({ kind: "message", ref });
+    const record = found?.find((item): item is MessageRecord => item.kind === "message" && item.ref === ref);
+    return record === undefined ? undefined : { record, values: undefined };
+}
+
+// The values the record vouches for in the message's text
+export function recordValues(found: FoundRecord, text: string): ValueRecord[] {
+    return found.values ?? matchValues(text, found.record.values);
 }
 
 export function keptRun(runId: string): RunState | undefined {

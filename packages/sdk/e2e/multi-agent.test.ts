@@ -42,7 +42,7 @@ function makeAgents() {
     // The sender stores the labels before the message leaves
     const delegate = guard(
         async (input: { to: string; brief: string }) => {
-            outbox.push({ brief: input.brief, carrier: quard.inject({ content: input.brief }) });
+            outbox.push({ brief: input.brief, carrier: await quard.inject({ content: input.brief }) });
             return "sent";
         },
         { type: "limit", name: "delegate" },

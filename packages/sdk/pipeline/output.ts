@@ -1,13 +1,14 @@
 import { extractValues, labelFor, originKind, type Label } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
-import { resumedCarrier } from "../context/carrier.ts";
+import { incomingMessage } from "../context/carrier.ts";
 import type { RequestedCall } from "../context/registry.ts";
 import { currentScope } from "../context/scope.ts";
 import type { FailResult, GuardCall } from "../guards/call.ts";
 import type { GuardOptions, SourceOptions } from "../guards/options.ts";
 import { checkSource, originFor, receiveMessage, type Received } from "../guards/source/source.ts";
 import type { AddOptions } from "../labels/content-index.ts";
+import { isLabelRef } from "../labels/records.ts";
 import { textOf } from "../labels/text-of.ts";
 import { currentPreset } from "../policy/state.ts";
 import { recordDecision } from "./checks.ts";
@@ -100,10 +101,10 @@ function indexText(
 // A message from another agent first brings in the labels its values had
 // in the sender's run, so a web-derived IBAN stays web-derived here
 function indexOutput(call: GuardCall, output: unknown, label: Label, message?: Received): void {
-    for (const { value, key, stepId, ...rest } of message?.values ?? []) {
+    for (const { value, key, origin, trust, sensitivity, flags, stepId } of message?.values ?? []) {
         // Only the value's own key: its host and domain take the message's label
         const exclude = new Set(extractValues(value).flatMap((found) => found.keys.filter((other) => other !== key)));
-        const label = { ...rest, kind: originKind(rest.origin) };
+        const label = { origin, kind: originKind(origin), trust, sensitivity, flags };
         indexText(call, value, label, stepId, { exclude, keepEarlier: true }, true);
     }
     const options = { exclude: echoedKeys(call), keepEarlier: message !== undefined };
@@ -111,12 +112,30 @@ function indexOutput(call: GuardCall, output: unknown, label: Label, message?: R
 }
 
 // For an "agent" source: who sent the message and what the sender vouched for
-function received(source: SourceOptions, call: GuardCall, output: unknown): Received | undefined {
+async function received(source: SourceOptions, call: GuardCall, output: unknown): Promise<Received | undefined> {
     if (source.origin !== "agent") {
         return undefined;
     }
-    const carrier = source.carrierOf?.(call.input) ?? resumedCarrier(currentScope());
-    return receiveMessage(carrier, output, getConfig().origins);
+    const incoming = await incomingMessage(source.carrierOf?.(call.input), currentScope());
+    return receiveMessage(incoming, output, getConfig().origins);
+}
+
+// The edge from the sender to this agent in the run graph
+function recordMessage(call: GuardCall, message: Received, label: Label): void {
+    const { carrier } = message;
+    record({
+        type: "message",
+        runId: call.runId,
+        stepId: call.stepId,
+        agent: call.agent,
+        at: now(),
+        from: message.from,
+        parentStepId: carrier?.parentStepId,
+        labelRef: carrier !== undefined && isLabelRef(carrier.labelRef) ? carrier.labelRef : undefined,
+        verified: message.verified,
+        trust: label.trust,
+        sensitivity: label.sensitivity,
+    });
 }
 
 // Labels, scans and indexes the result before the agent sees it.
@@ -139,9 +158,12 @@ export async function finishOutput(
     }
     // The policy file's strictness sets what suspect content gets, unless the guard says
     const source = { ...found, onSuspect: found.onSuspect ?? currentPreset().onSuspect };
-    const message = received(source, call, output);
+    const message = await received(source, call, output);
     const origin = message?.origin ?? originFor(source, call.input, call.tool);
     const result = checkSource(source, origin, output, message?.overrides ?? overrides);
+    if (message !== undefined) {
+        recordMessage(call, message, result.label);
+    }
     const mode = source.mode ?? "block";
     const enforced = mode === "block";
     recordDecision(call, {

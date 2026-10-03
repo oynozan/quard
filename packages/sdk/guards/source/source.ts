@@ -8,9 +8,9 @@ import {
     type Label,
     type OriginOverrides,
 } from "@quard/shared";
-import { readCarrier } from "../../context/carrier.ts";
+import type { Carrier, Incoming } from "../../context/carrier.ts";
 import { printOf } from "../../labels/content-index.ts";
-import { findRecord, type ValueRecord } from "../../labels/records.ts";
+import { recordValues, type ValueRecord } from "../../labels/records.ts";
 import { textOf } from "../../labels/text-of.ts";
 import type { SourceOptions } from "../options.ts";
 import { scanText, type Finding } from "./scan.ts";
@@ -104,6 +104,11 @@ export function checkSource(
 // What a receive guard learns about a message from another agent
 export type Received = {
     origin: string;
+    // The sender the record names, or "unknown"
+    from: string;
+    // A record of the same run and the same content vouched for the message
+    verified: boolean;
+    carrier: Carrier | undefined;
     // The origin overrides to label the message with
     overrides: OriginOverrides;
     // Values to index first, with the labels they had in the sender's run
@@ -112,16 +117,20 @@ export type Received = {
 
 // A message is vouched for only by a record of the same run and the
 // same content. Anything else gets the agent default: untrusted.
-export function receiveMessage(carrier: unknown, output: unknown, overrides: OriginOverrides): Received {
-    const checked = readCarrier(carrier);
-    const found = checked === undefined ? undefined : findRecord(checked.labelRef);
-    const origin = `agent:${found?.sender ?? "unknown"}`;
-    if (found === undefined || found.runId !== checked?.runId || found.print !== printOf(textOf(output))) {
+export function receiveMessage(incoming: Incoming | undefined, output: unknown, overrides: OriginOverrides): Received {
+    const carrier = incoming?.carrier;
+    const found = incoming?.found;
+    const from = found?.record.sender ?? "unknown";
+    const origin = `agent:${from}`;
+    const text = textOf(output);
+    if (found === undefined || found.record.runId !== carrier?.runId || found.record.print !== printOf(text)) {
         const { trust, sensitivity } = labelFor(origin);
-        return { origin, overrides: { ...overrides, [origin]: { trust, sensitivity } }, values: [] };
+        const untrusted = { ...overrides, [origin]: { trust, sensitivity } };
+        return { origin, from, verified: false, carrier, overrides: untrusted, values: [] };
     }
     // A team's override for this exact origin still wins
     const own = Object.hasOwn(overrides, origin) ? overrides[origin] : undefined;
-    const { trust, sensitivity } = found.label;
-    return { origin, overrides: { ...overrides, [origin]: { trust, sensitivity, ...own } }, values: found.values };
+    const { trust, sensitivity } = found.record.label;
+    const vouched = { ...overrides, [origin]: { trust, sensitivity, ...own } };
+    return { origin, from, verified: true, carrier, overrides: vouched, values: recordValues(found, text) };
 }
