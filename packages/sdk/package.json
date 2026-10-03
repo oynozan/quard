@@ -21,11 +21,16 @@
         "test": "vitest run --coverage",
         "typecheck": "tsc --noEmit"
     },
+    "dependencies": {
+        "tldts": "catalog:",
+        "zod": "catalog:"
+    },
     "devDependencies": {
         "@quard/shared": "workspace:*",
-        "tsdown": "catalog:",
         "@types/node": "catalog:",
         "@vitest/coverage-v8": "catalog:",
+        "openai": "catalog:",
+        "tsdown": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }
