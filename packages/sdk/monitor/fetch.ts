@@ -9,15 +9,17 @@ import {
     registerResponse,
 } from "../context/registry.ts";
 import { currentScope, newScope, type Scope } from "../context/scope.ts";
+import { activeControl } from "../transport/link/active.ts";
 import { checkRequestedCalls } from "./check.ts";
 import { asRecord, parseJson } from "./json.ts";
 import { readResponsesRequest, type ResponsesRequest } from "./request.ts";
 import { functionCallOf, functionCallsOf, responseIdOf, usageOf, type FunctionCall } from "./response.ts";
 import { tapSse } from "./sse.ts";
+import { rememberVersion, versionOf } from "./versions.ts";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-type Step = { scope: Scope; stepId: string; request: ResponsesRequest; started: number };
+type Step = { scope: Scope; stepId: string; request: ResponsesRequest; started: number; version: string };
 
 const UNSEEN_HISTORY = "Earlier conversation history that Quard did not see.";
 
@@ -112,8 +114,18 @@ function recordModelCall(
         toolCalls: calls.map((call) => ({ callId: call.callId, name: call.name, arguments: call.arguments })),
         status,
         durationMs: Date.now() - step.started,
+        agentVersion: step.version,
         ...(usage === undefined ? {} : { usage }),
     });
+}
+
+// Control records each agent version once, the first time this process uses it
+function noteVersion(step: Step): void {
+    const { model, instructions, tools } = step.request;
+    const entry = { agent: step.scope.agent, version: step.version, model, tools, instructions };
+    if (rememberVersion(entry)) {
+        activeControl()?.sendAgent(entry);
+    }
 }
 
 function finishResponse(
@@ -182,8 +194,10 @@ export function createMonitorFetch(inner: Fetch): Fetch {
             return inner(input, init);
         }
         const scope = resolveScope(request);
-        const step: Step = { scope, stepId: newStepId(), request, started: Date.now() };
+        const version = versionOf(request.model, request.instructions, request.tools);
+        const step: Step = { scope, stepId: newStepId(), request, started: Date.now(), version };
         scope.lastStepId = step.stepId;
+        noteVersion(step);
         labelInput(step);
 
         let response: Response;

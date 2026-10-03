@@ -19,11 +19,13 @@ export type ApprovalRequest = {
 export type QuardConfig = {
     origins: OriginOverrides;
     onEvent?: (event: RunEvent) => void;
-    // Asks a human. The dashboard takes this over in M3.
+    // Asks a human in code, in place of the dashboard
     approver?: (request: ApprovalRequest) => Promise<ApprovalAnswer>;
-    // Uploads to webhook start once all three are set
+    // Uploads to webhook start once key, webhookUrl and hashKey are set
     key?: string;
     webhookUrl?: string;
+    // The live link to control starts once key, controlUrl and hashKey are set
+    controlUrl?: string;
     // The install's 64-hex hash key, the same as on the server
     hashKey?: string;
     // A JSON file with guard rules, reread while the app runs

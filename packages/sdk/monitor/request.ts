@@ -5,6 +5,9 @@ export type InputText = { role: "user" | "system"; text: string } | { role: "too
 
 export type ResponsesRequest = {
     model: string;
+    instructions: string | undefined;
+    // Function tools by name, hosted tools by type
+    tools: string[];
     stream: boolean;
     previousResponseId: string | undefined;
     conversationId: string | undefined;
@@ -54,6 +57,17 @@ function readItem(item: unknown, request: ResponsesRequest): void {
     // Assistant messages are the model's own words, so they are not indexed
 }
 
+function toolNames(tools: unknown): string[] {
+    if (!Array.isArray(tools)) {
+        return [];
+    }
+    return tools.flatMap((tool) => {
+        const item = asRecord(tool);
+        const name = item?.name ?? item?.type;
+        return typeof name === "string" ? [name] : [];
+    });
+}
+
 function conversationOf(value: unknown): string | undefined {
     const id = typeof value === "string" ? value : asRecord(value)?.id;
     return typeof id === "string" ? id : undefined;
@@ -62,14 +76,16 @@ function conversationOf(value: unknown): string | undefined {
 export function parseRequest(body: Record<string, unknown>): ResponsesRequest {
     const request: ResponsesRequest = {
         model: typeof body.model === "string" ? body.model : "unknown",
+        instructions: typeof body.instructions === "string" ? body.instructions : undefined,
+        tools: toolNames(body.tools),
         stream: body.stream === true,
         previousResponseId: typeof body.previous_response_id === "string" ? body.previous_response_id : undefined,
         conversationId: conversationOf(body.conversation),
         texts: [],
         callIds: [],
     };
-    if (typeof body.instructions === "string") {
-        request.texts.push({ role: "system", text: body.instructions });
+    if (request.instructions !== undefined) {
+        request.texts.push({ role: "system", text: request.instructions });
     }
     if (typeof body.input === "string") {
         request.texts.push({ role: "user", text: body.input });

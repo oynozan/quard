@@ -1,6 +1,6 @@
-import { extractValues, type Label, type ReasonCode } from "@quard/shared";
+import { canonicalJson, extractValues, type Label, type ReasonCode } from "@quard/shared";
+import type { GuardOptions } from "../guards/options.ts";
 import { textOf } from "../labels/text-of.ts";
-import { canonicalJson } from "./canonical.ts";
 import type { RunState } from "./run.ts";
 import type { Scope } from "./scope.ts";
 
@@ -28,7 +28,8 @@ const MAX_ENTRIES = 10_000;
 const calls = new Map<string, RequestedCall>();
 const responses = new Map<string, Scope>();
 const conversations = new Map<string, Scope>();
-const guardedTools = new Set<string>();
+const guardedTools = new Map<string, readonly GuardOptions[]>();
+let toolsRevision = 0;
 
 function remember<V>(map: Map<string, V>, key: string, value: V): void {
     map.delete(key);
@@ -100,12 +101,23 @@ export function findConversation(conversationId: string): Scope | undefined {
     return conversations.get(conversationId);
 }
 
-export function registerGuardedTool(name: string): void {
-    guardedTools.add(name);
+// guard() registers each tool with its options from code
+export function registerGuardedTool(name: string, options: readonly GuardOptions[] = []): void {
+    guardedTools.set(name, options);
+    toolsRevision += 1;
 }
 
 export function isGuardedTool(name: string): boolean {
     return guardedTools.has(name);
+}
+
+export function guardedToolOptions(): ReadonlyMap<string, readonly GuardOptions[]> {
+    return guardedTools;
+}
+
+// Changes whenever the set of guarded tools changes
+export function guardedToolsRevision(): number {
+    return toolsRevision;
 }
 
 export function clearRegistry(): void {
@@ -113,4 +125,5 @@ export function clearRegistry(): void {
     responses.clear();
     conversations.clear();
     guardedTools.clear();
+    toolsRevision += 1;
 }

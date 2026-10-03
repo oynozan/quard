@@ -1,12 +1,16 @@
-import { labelFor } from "@quard/shared";
+import { labelFor, parseHashKey } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { takeEvents } from "../core/recorder.ts";
 import { findCall, findConversation, findResponse, registerCall, registerResponse } from "../context/registry.ts";
 import { currentScope, newScope, runScope } from "../context/scope.ts";
 import { withoutRunEdges } from "../test/call.ts";
 import { fakeResponses } from "../test/fake-responses.ts";
+import { fakeSockets, sentOf } from "../test/fake-socket.ts";
 import { resetAll } from "../test/reset.ts";
+import { setActiveControl } from "../transport/link/active.ts";
+import { createControl } from "../transport/link/control.ts";
 import { createMonitorFetch } from "./fetch.ts";
+import { versionOf } from "./versions.ts";
 
 afterEach(() => {
     resetAll();
@@ -246,5 +250,38 @@ describe("createMonitorFetch", () => {
 
         expect(await response.text()).toBe(raw);
         expect(events().filter((event) => event.type !== "content")).toEqual([]);
+    });
+
+    it("records the agent version of each model call, and tells control about each new one once", async () => {
+        const fake = fakeSockets();
+        const control = createControl({
+            url: "ws://c",
+            key: "k",
+            hashKey: parseHashKey("ab".repeat(32)),
+            open: fake.open,
+        });
+        setActiveControl(control);
+        const socket = fake.connect();
+        const monitored = createMonitorFetch(ok().fetch);
+        const tools = [{ type: "function", name: "payInvoice" }];
+
+        await monitored(URL_RESPONSES, post({ model: "gpt", instructions: "Pay invoices", tools, input: "a" }));
+        await monitored(URL_RESPONSES, post({ model: "gpt", instructions: "Pay invoices", tools, input: "b" }));
+        await runScope({ agent: "billing" }, () =>
+            monitored(URL_RESPONSES, post({ model: "gpt", instructions: "Pay invoices", tools, input: "c" })),
+        );
+        control.stop();
+
+        const version = versionOf("gpt", "Pay invoices", ["payInvoice"]);
+        const calls = events().filter((event) => event.type === "model_call");
+        expect(calls.map((event) => "agentVersion" in event && event.agentVersion)).toEqual([
+            version,
+            version,
+            version,
+        ]);
+        expect(sentOf(socket, "agent").map((message) => [message.agent, message.version])).toEqual([
+            ["default", version],
+            ["billing", version],
+        ]);
     });
 });

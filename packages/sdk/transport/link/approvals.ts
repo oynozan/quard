@@ -1,0 +1,137 @@
+import { APPROVAL_BEAT_MS, type ApprovalAnswer, type AskMessage } from "@quard/shared";
+import type { Link } from "./link.ts";
+
+export type Answer =
+    | { kind: "decided"; answer: ApprovalAnswer; requestId?: string; grantId?: string }
+    | { kind: "timeout"; requestId?: string }
+    // Control could not be reached in time
+    | { kind: "down" };
+
+export type Approvals = {
+    // Waits for a human's answer, up to the approval guard's timeout
+    ask(message: AskMessage, timeoutMs: number | undefined): Promise<Answer>;
+    stop(): void;
+};
+
+type Waiter = {
+    message: AskMessage;
+    requestId: string | undefined;
+    // Runs until control takes the ask, and gives up when it ends
+    down: NodeJS.Timeout | undefined;
+    // Asks again after control failed to take the ask
+    retry: NodeJS.Timeout | undefined;
+    finish(answer: Answer): void;
+};
+
+const MAX_BEAT = 10_000;
+const RETRY_MS = 1_000;
+
+// Calls waiting for a human, with one heartbeat timer and asks resent after reconnects
+export function createApprovals(link: Link, downMs: number, beatMs: number = APPROVAL_BEAT_MS): Approvals {
+    const waiters = new Map<string, Waiter>();
+    let beat: NodeJS.Timeout | undefined;
+
+    function send(waiter: Waiter): void {
+        const { message, requestId } = waiter;
+        link.send(requestId === undefined ? message : { ...message, requestId });
+    }
+
+    function waitForLink(waiter: Waiter): void {
+        waiter.down ??= setTimeout(() => waiter.finish({ kind: "down" }), downMs);
+        waiter.down.unref();
+    }
+
+    // Control failed to take the ask, so it asks again until downMs passes
+    function askAgain(waiter: Waiter): void {
+        waitForLink(waiter);
+        clearTimeout(waiter.retry);
+        waiter.retry = setTimeout(() => {
+            if (link.ready()) {
+                send(waiter);
+            }
+        }, RETRY_MS);
+        waiter.retry.unref();
+    }
+
+    function beatAll(): void {
+        const askIds = [...waiters.keys()];
+        for (let at = 0; at < askIds.length && link.ready(); at += MAX_BEAT) {
+            link.send({ type: "beat", askIds: askIds.slice(at, at + MAX_BEAT) });
+        }
+    }
+
+    link.listen({
+        ready: () => {
+            for (const waiter of waiters.values()) {
+                clearTimeout(waiter.retry);
+                send(waiter);
+            }
+        },
+        down: () => waiters.forEach(waitForLink),
+        message: (message) => {
+            if (message.type === "asked") {
+                const waiter = waiters.get(message.askId);
+                if (waiter !== undefined) {
+                    waiter.requestId = message.requestId;
+                    // Control took the ask, so the call waits with no limit again
+                    clearTimeout(waiter.down);
+                    waiter.down = undefined;
+                }
+            } else if (message.type === "decided") {
+                const { answer, requestId, grantId } = message;
+                const waiter = waiters.get(message.askId);
+                waiter?.finish({ kind: "decided", answer, requestId: requestId ?? waiter.requestId, grantId });
+            } else if (message.type === "error" && message.id !== undefined) {
+                const waiter = waiters.get(message.id);
+                if (waiter !== undefined) {
+                    askAgain(waiter);
+                }
+            }
+        },
+    });
+
+    function ask(message: AskMessage, timeoutMs: number | undefined): Promise<Answer> {
+        return new Promise((resolve) => {
+            const release = link.hold();
+            let timer: NodeJS.Timeout | undefined;
+            const waiter: Waiter = {
+                message,
+                requestId: undefined,
+                down: undefined,
+                retry: undefined,
+                finish: (answer) => {
+                    waiters.delete(message.askId);
+                    clearTimeout(waiter.down);
+                    clearTimeout(waiter.retry);
+                    clearTimeout(timer);
+                    release();
+                    if (waiters.size === 0) {
+                        clearInterval(beat);
+                        beat = undefined;
+                    }
+                    resolve(answer);
+                },
+            };
+            waiters.set(message.askId, waiter);
+            beat ??= setInterval(beatAll, beatMs);
+            beat.unref();
+            if (timeoutMs !== undefined) {
+                timer = setTimeout(() => {
+                    link.send({ type: "cancel", askId: message.askId });
+                    waiter.finish({ kind: "timeout", requestId: waiter.requestId });
+                }, timeoutMs);
+                timer.unref();
+            }
+            // Control must take the ask in time, even on a live link
+            waitForLink(waiter);
+            if (link.ready()) {
+                send(waiter);
+            }
+        });
+    }
+
+    return {
+        ask,
+        stop: () => [...waiters.values()].forEach((waiter) => waiter.finish({ kind: "down" })),
+    };
+}

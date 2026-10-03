@@ -1,41 +1,71 @@
 import { createRedactor, parseHashKey } from "@quard/shared";
 import { configure, getConfig, type QuardConfig } from "../core/config.ts";
+import { setActiveControl } from "./link/active.ts";
+import { createControl, type Control } from "./link/control.ts";
+import { controlSocketUrl } from "./link/url.ts";
 import { createUploader, type Uploader } from "./uploader.ts";
 
-let active: { settings: string; uploader: Uploader } | undefined;
+type UploadSettings = { key: string; webhookUrl: string; hashKey: string };
+type LinkSettings = { key: string; url: string; hashKey: string };
+
+let uploads: { settings: string; uploader: Uploader } | undefined;
+let link: { settings: string; control: Control } | undefined;
 let exitHooked = false;
 
-// The settings uploads need, or undefined when none are set
-function uploadSettings(
-    config: Partial<QuardConfig>,
-): { key: string; webhookUrl: string; hashKey: string } | undefined {
-    const { key, webhookUrl, hashKey } = config;
-    if (!key && !webhookUrl && !hashKey) {
-        return undefined;
+// What to start from key, webhookUrl, controlUrl and hashKey, or throws
+function servicesFor(config: Partial<QuardConfig>): { uploads?: UploadSettings; link?: LinkSettings } {
+    const { key, webhookUrl, controlUrl, hashKey } = config;
+    if (!key && !webhookUrl && !controlUrl && !hashKey) {
+        return {};
     }
-    if (!key || !webhookUrl || !hashKey) {
-        throw new Error("Uploads need key, webhookUrl and hashKey together");
+    if (!key || !hashKey || (!webhookUrl && !controlUrl)) {
+        throw new Error("Uploads and the control link need key and hashKey together with webhookUrl or controlUrl");
     }
-    return { key, webhookUrl, hashKey };
+    parseHashKey(hashKey);
+    return {
+        uploads: webhookUrl ? { key, webhookUrl, hashKey } : undefined,
+        link: controlUrl ? { key, url: controlSocketUrl(controlUrl), hashKey } : undefined,
+    };
 }
 
-// quard.configure(): changes settings, and starts uploads to webhook
-// once key, webhookUrl and hashKey are all set
+// quard.configure() changes settings, then starts uploads and the control link once set up
 export function configureQuard(options: Partial<QuardConfig>): void {
     // Checked before anything changes, so a bad call leaves the old settings
-    const settings = uploadSettings({ ...getConfig(), ...options });
-    const redactor = settings && createRedactor(parseHashKey(settings.hashKey));
+    const services = servicesFor({ ...getConfig(), ...options });
     configure(options);
+    startUploads(services.uploads);
+    startLink(services.link);
+}
+
+function startUploads(settings: UploadSettings | undefined): void {
     const id = JSON.stringify(settings ?? null);
-    if (active?.settings === id) {
+    if (uploads?.settings === id) {
         return;
     }
     stopUploads();
-    if (settings && redactor) {
+    if (settings !== undefined) {
+        const redactor = createRedactor(parseHashKey(settings.hashKey));
         const uploader = createUploader({ webhookUrl: settings.webhookUrl, key: settings.key, redactor });
         uploader.start();
-        active = { settings: id, uploader };
+        uploads = { settings: id, uploader };
         hookExit();
+    }
+}
+
+function startLink(settings: LinkSettings | undefined): void {
+    const id = JSON.stringify(settings ?? null);
+    if (link?.settings === id) {
+        return;
+    }
+    stopLink();
+    if (settings !== undefined) {
+        const control = createControl({
+            url: settings.url,
+            key: settings.key,
+            hashKey: parseHashKey(settings.hashKey),
+        });
+        link = { settings: id, control };
+        setActiveControl(control);
     }
 }
 
@@ -44,17 +74,23 @@ function hookExit(): void {
     if (!exitHooked) {
         exitHooked = true;
         process.once("beforeExit", () => {
-            void active?.uploader.flush();
+            void uploads?.uploader.flush();
         });
     }
 }
 
 export function stopUploads(): void {
-    active?.uploader.stop();
-    active = undefined;
+    uploads?.uploader.stop();
+    uploads = undefined;
+}
+
+export function stopLink(): void {
+    link?.control.stop();
+    link = undefined;
+    setActiveControl(undefined);
 }
 
 // Sends what is buffered now, if uploads are on
 export function flushUploads(): Promise<boolean> {
-    return active?.uploader.flush() ?? Promise.resolve(true);
+    return uploads?.uploader.flush() ?? Promise.resolve(true);
 }

@@ -12,9 +12,12 @@ describe("parseRequest", () => {
                 stream: true,
                 previous_response_id: "resp_1",
                 instructions: "Be brief",
+                tools: [{ type: "function", name: "fetchPage" }, { type: "web_search" }, { name: 5 }, null],
             }),
         ).toEqual({
             model: "gpt",
+            instructions: "Be brief",
+            tools: ["fetchPage", "web_search"],
             stream: true,
             previousResponseId: "resp_1",
             conversationId: undefined,
@@ -24,6 +27,11 @@ describe("parseRequest", () => {
             ],
             callIds: [],
         });
+    });
+
+    it("reads no tools when the tools are not a list", () => {
+        expect(parseRequest({ tools: "fetchPage" }).tools).toEqual([]);
+        expect(parseRequest({}).instructions).toBeUndefined();
     });
 
     it("reads the conversation as an id or an object", () => {
