@@ -225,6 +225,57 @@ export type AgentVersionsTable = {
     last_seen_at: DefaultTimestamp;
 };
 
+export type MessageRecordsTable = {
+    project_id: string;
+    ref: string;
+    run_id: string;
+    step_id: string | null;
+    sender: string;
+    depth: number;
+    print: string;
+    label: Json;
+    value_labels: DefaultJson;
+    tools: string[] | null;
+    stored_at: DefaultTimestamp;
+};
+
+export type MemoryLabelsTable = {
+    project_id: string;
+    print: string;
+    label_hash: string;
+    store: string;
+    run_id: string;
+    agent: string;
+    trust: "trusted" | "untrusted";
+    label: Json;
+    value_labels: DefaultJson;
+    first_written_at: DefaultTimestamp;
+    last_written_at: DefaultTimestamp;
+};
+
+export type RunCountersTable = {
+    project_id: string;
+    run_id: string;
+    counter: string;
+    used: Generated<number>;
+    updated_at: DefaultTimestamp;
+};
+
+export type AgentMessagesTable = {
+    project_id: string;
+    event_id: string;
+    run_id: string;
+    step_id: string;
+    kind: "message" | "handoff" | "tool";
+    from_agent: string;
+    to_agent: string;
+    parent_step_id: string | null;
+    trust: "trusted" | "untrusted";
+    sensitivity: "internal" | "public";
+    verified: Generated<boolean>;
+    at: Timestamp;
+};
+
 export type Database = {
     projects: ProjectsTable;
     agent_keys: AgentKeysTable;
@@ -242,4 +293,8 @@ export type Database = {
     sdk_connections: SdkConnectionsTable;
     rule_sets: RuleSetsTable;
     agent_versions: AgentVersionsTable;
+    message_records: MessageRecordsTable;
+    memory_labels: MemoryLabelsTable;
+    run_counters: RunCountersTable;
+    agent_messages: AgentMessagesTable;
 };
