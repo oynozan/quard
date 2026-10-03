@@ -1,5 +1,6 @@
 import { getRun as storedRun, listRuns as storedRuns } from "@quard/db";
 import { connection } from "next/server";
+import { requireSession } from "@/lib/auth/session";
 import { database } from "./live/client";
 import { runDetailOf, runRowOf } from "./live/detail";
 import { currentProject } from "./live/project";
@@ -16,9 +17,10 @@ function matches(row: RunRow, query: string): boolean {
     return words.every((word) => row.id.startsWith(word) || fields.some((field) => field.includes(word)));
 }
 
-// Reads are per request, so nothing is cached at build time
+// Reads are per request and only for signed-in people, so nothing is cached at build time
 async function project() {
     await connection();
+    await requireSession();
     const db = database();
     return { db, project: await currentProject(db) };
 }

@@ -1199,11 +1199,13 @@ Keys the SDK sends events with, in the settings Keys tab.
 
 ### Sign-in card
 
-The one page outside the app shell.
+The one page outside the app shell, and the only page reachable without a session: every other route sends people here first and back to where they were going after.
 
 - **Page:** no sidebar. The card sits in a centered column at full viewport height with padding 48px 24px (20px 16px at 620px and below), and fades in.
-- **Card:** 520px maximum, Surface fill, no border, 6px radius. Its header strip (padding 12px 22px, hairline below, 11px Manrope 300 Muted) holds the 14px mark, "quard" in 13px Foreground at weight 500, a 1×12 Strong Hairline divider and the classifier ("Sign in"), with the project in Ubuntu Mono 11px Muted on the right. Body padding 28px 22px 26px (22px 16px at 620px and below).
-- **Form:** the Step title "Sign in to Quard", fields 22px below it, and a primary button at its natural width ("Signing in…", then "Opening overview…"). Field problems are sentences under the field, checked on blur. Wrong credentials show a neutral error box above the button, clear the password and focus it. A notice closes the card ("Single sign-on comes later.").
+- **Card:** 520px maximum, Surface fill, no border, 6px radius. Its header strip (padding 12px 22px, hairline below, 11px Manrope 300 Muted) holds the 14px mark, "quard" in 13px Foreground at weight 500, a 1×12 Strong Hairline divider and the classifier ("Sign in"). Body padding 28px 22px 26px (22px 16px at 620px and below).
+- **Ways in:** Privy, with GitHub and an emailed code only (no wallets). Under the Step title "Sign in to Quard": a full-width tall secondary button "Continue with GitHub" with the GitHub mark, an "or" divider (Faint 12px between two hairlines), then the Email field and a full-width tall primary button "Email me a code". The code step swaps the field for a 6-digit mono code field labeled "Code sent to <email>", a primary "Sign in", and two underlined text buttons: "Use another email" and "Send a new code".
+- **States:** one status line under the title announces progress ("Loading sign-in…", "Code sent to <email>.", "Signing in…", "Opening Quard…") and says "You are signed out." after a sign-out. Busy button labels end in an ellipsis ("Opening GitHub…", "Sending code…", "Checking code…"). Every problem is one neutral error box under the form, one sentence each; a bad email shows under its field, five wrong codes ask for a new one, and a Privy that never becomes ready says sign-in is not available right now. Anyone with a verified email or GitHub account may sign in; other Privy logins are refused ("Sign in with email or GitHub."). Before the server has valid settings, the card shows "Sign-in is not set up" with one mono line per missing or malformed setting (only "Sign-in is not available" in production).
+- **Sign-out:** the account row at the bottom of the sidebar ends in a sign-out icon button (hint "Sign out"); it clears the session and lands on this card.
 
 ### Iconography
 

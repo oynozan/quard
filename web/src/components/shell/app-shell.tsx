@@ -12,7 +12,6 @@ import { pageTitle } from "./nav-config";
 type AppShellProps = {
     children: ReactNode;
     openApprovals: number;
-    project: string;
     account: { email: string; role: string };
 };
 

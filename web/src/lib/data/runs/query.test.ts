@@ -3,6 +3,8 @@ import { createProject, ingestBatch } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
+vi.mock("@/lib/auth/session", () => ({ requireSession }));
 vi.mock("next/server", () => ({ connection: vi.fn(async () => {}) }));
 
 const { getRun, listRuns, requestTime } = await import("./query");
@@ -115,6 +117,7 @@ describe("runs from Postgres", () => {
         const pay = run?.steps.find((step) => step.kind === "tool_call");
         expect(pay?.args[0]).toMatchObject({ value: "GB33…5555", valueLabel: { kind: "iban", traced: true } });
         expect(pay?.args[0]?.valueLabel.appearances[0]?.label.origin).toBe("web:acme-billing.net");
+        expect(requireSession).toHaveBeenCalled();
         expect(await getRun("f".repeat(32))).toBeNull();
     });
 
