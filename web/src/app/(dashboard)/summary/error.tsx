@@ -5,10 +5,10 @@ import { PageHeading } from "@/components/kit/headings";
 import { ErrorBox } from "@/components/kit/feedback/feedback";
 import { Button } from "@/components/ui/button";
 
-export default function FleetError({ reset }: { error: Error; reset: () => void }) {
+export default function SummaryError({ reset }: { error: Error; reset: () => void }) {
     return (
         <FleetContainer>
-            <PageHeading title="Fleet" />
+            <PageHeading title="Summary" />
             <ErrorBox
                 help="Guards keep running."
                 action={

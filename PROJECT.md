@@ -588,7 +588,7 @@ From the spec, plus the approval decisions.
 
 - **Run view:** one run as a timeline colored by labels.
 - **Incident view:** the path from entry point to damage, the verdict and a replay button.
-- **Fleet view:**
+- **Summary view:**
     - which sources and tools cause the most incidents
     - what guards block
     - which agents are most often entry or turning points

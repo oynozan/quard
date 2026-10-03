@@ -1164,9 +1164,9 @@ The incident page's path from entry point to damage, read left to right.
 - **Under the path:** the replay pane and the reviewer note on the left, and a 400px verdict column on the right (28px gap; the verdict moves above the replay at 1180px and below).
 - **Verdict:** a "Verdict" section heading over a detail list opened by a hairline. It holds only what the path does not already show: Category as a badge, Missing guard in mono with an "observe only" badge (or "None, guards held" in Absent), and "Bad handoff" as a sentence when there was one. Entry point, turning point and damage are not repeated; they are the marked nodes of the path. "Agent versions" sits 16px below behind a 12px Text Link disclosure with a chevron, and opens a detail list of agent names as mono text links with their versions in mono.
 
-### Fleet panes
+### Summary panes
 
-The fleet page: what goes wrong across every agent over the last 30 days.
+The summary page: what goes wrong across every agent over the last 30 days.
 
 - **Container:** the overview's container (max-width 1740px and its gutters). The heading's action slot holds "Last 30 days" (12px Manrope 300 Muted) and the date range in Ubuntu Mono Text Secondary. Sections stack 34px apart (28px at 760px and below) and fade in at 0, 40, 80, 120 and 160ms.
 - **Tile grid:** chart sections are a section heading over terminal panes tiled with 1px gaps on a Hairline background inside a 1px Hairline border. Panes drop their own border, so every shared edge is drawn once. These are pane edges, so they stay.

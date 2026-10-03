@@ -23,7 +23,7 @@ export const PRIMARY_NAV: NavItem[] = [
     { href: "/approvals", label: "Approvals", icon: ShieldCheck },
     { href: "/incidents", label: "Incidents", icon: Siren },
     { href: "/agents", label: "Agents", icon: Waypoints },
-    { href: "/fleet", label: "Fleet", icon: ChartColumn },
+    { href: "/summary", label: "Summary", icon: ChartColumn },
     { href: "/search", label: "Search", icon: Search },
 ];
 

@@ -21,7 +21,7 @@ export function FleetView({ fleet }: { fleet: FleetData | null }) {
     return (
         <FleetContainer>
             <PageHeading
-                title="Fleet"
+                title="Summary"
                 actions={
                     <span className="inline-flex items-center gap-2 text-[12px] font-light text-ink-muted">
                         Last 30 days
