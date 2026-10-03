@@ -102,7 +102,8 @@ export function isSecret(value: string): boolean {
 export function maskSecret(value: string): string {
     const secret = value.trim();
     const shape = SECRET_SHAPES.find((s) => s.whole.test(secret));
-    const prefix = shape ? (secret.match(shape.prefix)?.[0] ?? "") : "";
+    // Each prefix is the start of its whole pattern, so it always matches
+    const prefix = shape ? secret.match(shape.prefix)![0] : "";
     const keep = prefix.length + 4;
     if (secret.length <= keep + 4) return `${secret.slice(0, Math.min(4, secret.length))}${CUT}`;
     return `${secret.slice(0, keep)}${CUT}`;

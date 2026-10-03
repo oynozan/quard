@@ -41,8 +41,8 @@ export function LiquidMetalButton({
     const [ripples, setRipples] = useState<Ripple[]>([]);
 
     useEffect(() => {
-        const node = host.current;
-        if (!node) return;
+        // The host div always renders, so its ref is set before effects run
+        const node = host.current!;
         let cancelled = false;
         const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         import("@paper-design/shaders").then(({ ShaderMount, liquidMetalFragmentShader, LiquidMetalShapes }) => {
@@ -85,8 +85,8 @@ export function LiquidMetalButton({
         if (!reducedMotion()) mount.current?.setSpeed(value);
     };
 
+    // React sends no mouse events to a disabled button, so enter and press need no check
     function enter() {
-        if (disabled) return;
         hovered.current = true;
         setState("hover");
         speed(1);
@@ -99,7 +99,6 @@ export function LiquidMetalButton({
     }
 
     function press(event: MouseEvent<HTMLElement>) {
-        if (disabled) return;
         speed(2.4);
         setTimeout(() => speed(hovered.current ? 1 : 0.6), 300);
         if (!reducedMotion()) {
