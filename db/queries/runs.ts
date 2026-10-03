@@ -1,0 +1,235 @@
+import { sql } from "kysely";
+import type { Db } from "../connect/connect.ts";
+
+export type RunSummary = {
+    runId: string;
+    agent: string;
+    startedAt: Date;
+    lastEventAt: Date;
+    // Null until the run reports how it finished
+    endedAt: Date | null;
+    outcome: "completed" | "failed" | "blocked" | null;
+    error: string | null;
+    modelCalls: number;
+    toolCalls: number;
+    blocked: number;
+    costUsd: number;
+    // False when some model call has no known price
+    costKnown: boolean;
+    influenced: boolean;
+    flagged: boolean;
+    degraded: boolean;
+};
+
+export type RunStep = {
+    stepId: string;
+    kind: "model_call" | "tool_call";
+    agent: string;
+    parentStepId: string | null;
+    name: string;
+    callId: string | null;
+    status: string;
+    influenced: boolean;
+    flagged: boolean;
+    at: Date;
+    durationMs: number;
+    detail: unknown;
+};
+
+export type RunLabel = {
+    contentId: string;
+    stepId: string;
+    agent: string;
+    origin: string;
+    trust: "trusted" | "untrusted";
+    sensitivity: "internal" | "public";
+    flags: string[];
+    keys: string[];
+    at: Date;
+};
+
+export type RunDecision = {
+    eventId: string;
+    stepId: string;
+    agent: string;
+    tool: string;
+    guard: string;
+    rule: string;
+    decision: string;
+    mode: "block" | "observe";
+    enforced: boolean;
+    reason: string | null;
+    field: string | null;
+    at: Date;
+};
+
+export type RunWarning = { eventId: string; stepId: string | null; agent: string; at: Date; body: unknown };
+
+export type RunDetail = RunSummary & {
+    origins: unknown;
+    steps: RunStep[];
+    labels: RunLabel[];
+    decisions: RunDecision[];
+    warnings: RunWarning[];
+};
+
+const SUMMARY = [
+    "run_id as runId",
+    "agent",
+    "started_at as startedAt",
+    "last_event_at as lastEventAt",
+    "ended_at as endedAt",
+    "outcome",
+    "error",
+    "model_calls as modelCalls",
+    "tool_calls as toolCalls",
+    "blocked",
+    "cost_usd as costUsd",
+    "cost_known as costKnown",
+    "influenced",
+    "flagged",
+    "degraded",
+] as const;
+
+// What the runs list shows beyond the summary. Guard decision counts leave out
+// routine permission allows; "allowed" is everything not enforced as a block or an ask.
+export type RunListItem = RunSummary & {
+    agents: string[];
+    tools: string[];
+    decisions: { allowed: number; asked: number; blocked: number };
+    lastStep: { kind: "model_call" | "tool_call"; status: string } | null;
+};
+
+const IN_RUN = "project_id = runs.project_id AND run_id = runs.run_id";
+const GUARDS = `${IN_RUN} AND (guard <> 'permission' OR decision <> 'allow')`;
+
+// Newest runs first. `before` pages back from a start time.
+export async function listRuns(
+    db: Db,
+    projectId: string,
+    options: { limit?: number; before?: Date } = {},
+): Promise<RunListItem[]> {
+    let query = db
+        .selectFrom("runs")
+        .select(SUMMARY)
+        .select([
+            sql<string[]>`array(SELECT agent FROM events WHERE ${sql.raw(IN_RUN)} GROUP BY agent ORDER BY min(at))`.as(
+                "agents",
+            ),
+            sql<
+                string[]
+            >`array(SELECT DISTINCT name FROM steps WHERE ${sql.raw(IN_RUN)} AND kind = 'tool_call' ORDER BY name)`.as(
+                "tools",
+            ),
+            sql<number>`(SELECT count(*)::int FROM decisions WHERE ${sql.raw(GUARDS)})`.as("guardTotal"),
+            sql<number>`(SELECT count(*)::int FROM decisions WHERE ${sql.raw(GUARDS)} AND enforced AND decision = 'block')`.as(
+                "guardBlocked",
+            ),
+            sql<number>`(SELECT count(*)::int FROM decisions WHERE ${sql.raw(GUARDS)} AND enforced AND decision = 'ask')`.as(
+                "guardAsked",
+            ),
+            sql<string | null>`(SELECT kind FROM steps WHERE ${sql.raw(IN_RUN)} ORDER BY at DESC LIMIT 1)`.as(
+                "lastKind",
+            ),
+            sql<string | null>`(SELECT status FROM steps WHERE ${sql.raw(IN_RUN)} ORDER BY at DESC LIMIT 1)`.as(
+                "lastStatus",
+            ),
+        ])
+        .where("project_id", "=", projectId);
+    if (options.before !== undefined) {
+        query = query.where("started_at", "<", options.before);
+    }
+    const rows = await query
+        .orderBy("started_at", "desc")
+        .limit(options.limit ?? 50)
+        .execute();
+    return rows.map(({ guardTotal, guardBlocked, guardAsked, lastKind, lastStatus, ...run }) => ({
+        ...run,
+        decisions: { allowed: guardTotal - guardBlocked - guardAsked, asked: guardAsked, blocked: guardBlocked },
+        lastStep:
+            lastKind === null || lastStatus === null
+                ? null
+                : { kind: lastKind as "model_call" | "tool_call", status: lastStatus },
+    }));
+}
+
+export async function getRun(db: Db, projectId: string, runId: string): Promise<RunDetail | undefined> {
+    const run = await db
+        .selectFrom("runs")
+        .select([...SUMMARY, "origins"])
+        .where("project_id", "=", projectId)
+        .where("run_id", "=", runId)
+        .executeTakeFirst();
+    if (run === undefined) {
+        return undefined;
+    }
+    const inRun = { project_id: projectId, run_id: runId };
+    const [steps, labels, decisions, warnings] = await Promise.all([
+        db
+            .selectFrom("steps")
+            .select([
+                "step_id as stepId",
+                "kind",
+                "agent",
+                "parent_step_id as parentStepId",
+                "name",
+                "call_id as callId",
+                "status",
+                "influenced",
+                "flagged",
+                "at",
+                "duration_ms as durationMs",
+                "detail",
+            ])
+            .where("project_id", "=", inRun.project_id)
+            .where("run_id", "=", inRun.run_id)
+            .orderBy("at")
+            .execute(),
+        db
+            .selectFrom("labels")
+            .select([
+                "content_id as contentId",
+                "step_id as stepId",
+                "agent",
+                "origin",
+                "trust",
+                "sensitivity",
+                "flags",
+                "keys",
+                "at",
+            ])
+            .where("project_id", "=", inRun.project_id)
+            .where("run_id", "=", inRun.run_id)
+            .orderBy("at")
+            .execute(),
+        db
+            .selectFrom("decisions")
+            .select([
+                "event_id as eventId",
+                "step_id as stepId",
+                "agent",
+                "tool",
+                "guard",
+                "rule",
+                "decision",
+                "mode",
+                "enforced",
+                "reason",
+                "field",
+                "at",
+            ])
+            .where("project_id", "=", inRun.project_id)
+            .where("run_id", "=", inRun.run_id)
+            .orderBy("at")
+            .execute(),
+        db
+            .selectFrom("events")
+            .select(["event_id as eventId", "step_id as stepId", "agent", "at", "body"])
+            .where("project_id", "=", inRun.project_id)
+            .where("run_id", "=", inRun.run_id)
+            .where("type", "=", "warning")
+            .orderBy("at")
+            .execute(),
+    ]);
+    return { ...run, steps, labels, decisions, warnings };
+}

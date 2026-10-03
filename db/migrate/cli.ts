@@ -14,12 +14,17 @@ export async function migrateFromEnv(
         log("DATABASE_URL is not set");
         return 1;
     }
+    const applied = await migrateDatabase(url);
+    log(applied.length > 0 ? `Applied: ${applied.join(", ")}` : "No new migrations");
+    return 0;
+}
+
+// Applies new migrations to the database at `url`
+export async function migrateDatabase(url: string): Promise<string[]> {
     const client = new pg.Client({ connectionString: url });
     await client.connect();
     try {
-        const applied = await runMigrations((sql, params) => client.query(sql, params), MIGRATIONS_DIR);
-        log(applied.length > 0 ? `Applied: ${applied.join(", ")}` : "No new migrations");
-        return 0;
+        return await runMigrations((sql, params) => client.query(sql, params), MIGRATIONS_DIR);
     } finally {
         await client.end();
     }

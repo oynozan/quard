@@ -6,16 +6,25 @@
     "scripts": {
         "migrate": "node main.ts",
         "test": "vitest run --coverage",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "create-project": "node cli/setup-main.ts"
     },
     "dependencies": {
+        "@quard/shared": "workspace:*",
+        "kysely": "catalog:",
         "pg": "catalog:"
     },
     "devDependencies": {
+        "@electric-sql/pglite": "catalog:",
+        "@electric-sql/pglite-socket": "catalog:",
         "@types/pg": "catalog:",
         "@types/node": "catalog:",
         "@vitest/coverage-v8": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"
+    },
+    "exports": {
+        ".": "./index.ts",
+        "./testing": "./test/pglite.ts"
     }
 }
