@@ -5,6 +5,13 @@ import { requestInput } from "./input.ts";
 const DANA = "dana@acme.com";
 
 describe("the stored request", () => {
+    it("keeps a card number sent as a number for the approver, and masks it in what stays after the answer", () => {
+        const input = requestInput(askMessage({ args: { card: 4111111111111111, amount: 50 } }), REDACTOR);
+
+        expect(input.args).toEqual({ card: 4111111111111111, amount: 50 });
+        expect(input.masked).toEqual({ card: "4111…1111", amount: 50 });
+    });
+
     it("keeps labels and context only redacted, since they hold paths and origins", () => {
         const message = askMessage({
             labels: [
