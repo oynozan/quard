@@ -72,6 +72,14 @@ export async function startControlServer(key = CONTROL_KEY, labels: LabelRecord[
             send(socket, { type: "counted", id: message.id, ok, used: ok ? used : (counters.get(id) ?? 0) });
         } else if (message.type === "lookup" && state.answerLookups) {
             send(socket, { type: "labels", id: message.id, records: lookupIn(labels, message) });
+        } else if (message.type === "run_count") {
+            const id = `run/${message.runId}/${message.counter}`;
+            const used = (counters.get(id) ?? 0) + message.add;
+            const ok = message.max === undefined || used <= message.max;
+            if (ok) {
+                counters.set(id, used);
+            }
+            send(socket, { type: "counted", id: message.id, ok, used: ok ? used : (counters.get(id) ?? 0) });
         } else if (message.type === "fleet") {
             const quarantined = state.quarantined.filter((entry) => message.values.some((v) => v.key === entry.key));
             send(socket, { type: "fleet_result", id: message.id, quarantined, fleetObserveUntil: null });
