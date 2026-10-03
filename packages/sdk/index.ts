@@ -16,6 +16,7 @@ export { guard } from "./pipeline/guard.ts";
 export type { RunEvent } from "@quard/shared";
 export type { ApprovalAnswer, ApprovalRequest, QuardConfig } from "./core/config.ts";
 export type { AgentOptions, RunOptions } from "./context/scope.ts";
+export { DetectorError } from "./detectors/detector.ts";
 export type { Detector, DetectorRules } from "./detectors/detector.ts";
 export { jevDetector } from "./detectors/jev/jev.ts";
 export type { JevOptions } from "./detectors/jev/jev.ts";

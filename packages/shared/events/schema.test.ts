@@ -64,6 +64,7 @@ describe("runEvent", () => {
             keys: [],
         },
         { type: "warning", ...base, code: "unwrapped_tool", tool: "t" },
+        { type: "warning", ...base, code: "detector_error", tool: "t", reason: "http_429" },
         {
             type: "decision",
             ...base,

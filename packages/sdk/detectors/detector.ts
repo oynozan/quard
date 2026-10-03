@@ -4,7 +4,8 @@ import type { DetectorAnswer } from "./labels.ts";
 // chance of each label. Detectors only tighten: they can flag or strip, never allow.
 export type Detector = {
     readonly name: string;
-    label(text: string): Promise<DetectorAnswer>;
+    // The signal fires when Quard stops waiting for the answer
+    label(text: string, options?: { signal?: AbortSignal }): Promise<DetectorAnswer>;
 };
 
 export type DetectorRules = {
@@ -17,3 +18,15 @@ export type DetectorRules = {
 };
 
 export const DEFAULT_DETECTOR_RULES: DetectorRules = { mode: "enforce", flagAt: 0.5, stripAt: 0.9 };
+
+// A detector call that failed, with a short reason the warning records,
+// such as "http_401", "timeout" or "bad_reply"
+export class DetectorError extends Error {
+    readonly reason: string;
+
+    constructor(reason: string) {
+        super(`The detector failed: ${reason}`);
+        this.name = "DetectorError";
+        this.reason = reason;
+    }
+}

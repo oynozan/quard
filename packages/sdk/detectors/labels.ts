@@ -1,3 +1,5 @@
+import { DetectorError } from "./detector.ts";
+
 // The labels a detector picks from. Jev leans toward options it reads
 // first, so risky labels come first and a close call goes to them.
 export const DETECTOR_LABELS = {
@@ -71,7 +73,7 @@ export function checkAnswer(answer: DetectorAnswer): DetectorAnswer {
     const known = Object.hasOwn(DETECTOR_LABELS, answer.label);
     const chances = Object.values(answer.probabilities);
     if (!known || !chances.every((p) => typeof p === "number" && p >= 0 && p <= 1)) {
-        throw new Error("a detector answer needs a known label and chances from 0 to 1");
+        throw new DetectorError("bad_reply");
     }
     return answer;
 }

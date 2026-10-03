@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DetectorError } from "./detector.ts";
 import { checkAnswer, LABEL_NAMES, riskOf, topRisk, type DetectorAnswer } from "./labels.ts";
 
 const answer = (probabilities: DetectorAnswer["probabilities"]): DetectorAnswer => ({
@@ -49,6 +50,6 @@ describe("checkAnswer", () => {
         ["a chance that is not a number", { label: "article", probabilities: { article: Number.NaN } }],
         ["a missing chance", { label: "article", probabilities: { article: undefined } }],
     ])("refuses %s", (_what, bad) => {
-        expect(() => checkAnswer(bad as DetectorAnswer)).toThrow("a known label and chances from 0 to 1");
+        expect(() => checkAnswer(bad as DetectorAnswer)).toThrow(new DetectorError("bad_reply"));
     });
 });

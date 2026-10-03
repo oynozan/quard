@@ -4,6 +4,7 @@ import * as sdk from "./index.ts";
 describe("quard", () => {
     it("exports its public API", () => {
         expect(Object.keys(sdk).sort()).toEqual([
+            "DetectorError",
             "GUARD_TYPES",
             "GuardBlockedError",
             "GuardRefusal",

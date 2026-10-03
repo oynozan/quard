@@ -125,6 +125,8 @@ export const warningEvent = z.object({
     ...base,
     code: z.string(),
     tool: z.string().optional(),
+    // Why it happened, such as "http_401" or "timeout" for a detector error
+    reason: z.string().max(200).optional(),
 });
 
 const labelName = z.string().regex(/^[a-z][a-z_]{0,39}$/);
