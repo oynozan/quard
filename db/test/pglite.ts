@@ -20,6 +20,8 @@ export async function startTestDb(): Promise<TestDb> {
         stop: async () => {
             await db.destroy();
             await server.stop();
+            // pglite-socket handles a closed socket one tick later, and still reads the database then
+            await new Promise((resolve) => setImmediate(resolve));
             await pglite.close();
         },
     };

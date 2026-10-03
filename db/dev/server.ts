@@ -13,6 +13,8 @@ export async function startDevServer(options: { dataDir?: string; port: number }
         url: `postgres://postgres@${server.getServerConn()}/postgres`,
         stop: async () => {
             await server.stop();
+            // pglite-socket handles a closed socket one tick later, and still reads the database then
+            await new Promise((resolve) => setImmediate(resolve));
             await db.close();
         },
     };
