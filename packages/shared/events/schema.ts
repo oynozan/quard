@@ -48,6 +48,11 @@ export const modelCallEvent = z.object({
     toolCalls: z.array(z.object({ callId: z.string(), name: z.string(), arguments: z.string() })),
     // Token counts the API reported. Cached tokens are part of the input count.
     usage: z.object({ inputTokens: tokens, cachedTokens: tokens, outputTokens: tokens }).optional(),
+    // The agent's model, instructions and tools, as a hash control knows
+    agentVersion: z
+        .string()
+        .regex(/^[0-9a-f]{16}$/)
+        .optional(),
     status: z.enum(["ok", "error"]),
     durationMs,
 });
@@ -84,6 +89,16 @@ export const decisionEvent = z.object({
     policy: z.string().optional(),
     // A detector's risk score, from 0 to 1
     score: z.number().min(0).max(1).optional(),
+    // The hash of the active rules, as sent to control
+    rules: z
+        .string()
+        .regex(/^[0-9a-f]{16}$/)
+        .optional(),
+    // The approval request that answered this call
+    request: z
+        .string()
+        .regex(/^apr_[0-9a-f]{16}$/)
+        .optional(),
 });
 
 // A policy file or signature feed that failed to load. The last good one stays.

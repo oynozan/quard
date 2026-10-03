@@ -18,6 +18,10 @@ const ALL: ReasonCode[] = [
     "signature_matched",
     "sensitive_data",
     "signatures_unavailable",
+    "backend_unavailable",
+    "approval_timed_out",
+    "daily_limit_reached",
+    "value_quarantined",
 ];
 
 describe("refusalText", () => {

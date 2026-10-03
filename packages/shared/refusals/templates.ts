@@ -17,7 +17,11 @@ export type ReasonCode =
     | "rule_failed"
     | "signature_matched"
     | "sensitive_data"
-    | "signatures_unavailable";
+    | "signatures_unavailable"
+    | "backend_unavailable"
+    | "approval_timed_out"
+    | "daily_limit_reached"
+    | "value_quarantined";
 
 const REASONS: Record<ReasonCode, (field: string) => string> = {
     permission_denied: () => "this agent is not allowed to use this tool",
@@ -38,6 +42,11 @@ const REASONS: Record<ReasonCode, (field: string) => string> = {
     // field is the kind of data found: secret, card number or IBAN
     sensitive_data: (field) => `the data to send holds a sensitive value (${field})`,
     signatures_unavailable: () => "the attack signature feed could not be loaded",
+    backend_unavailable: () => "it needs the Quard backend, which could not be reached",
+    approval_timed_out: () => "no one answered the approval request in time",
+    daily_limit_reached: () => "a daily limit for this tool was reached",
+    value_quarantined: (field) =>
+        `the ${field} value is new and many runs used it at once, so it is blocked everywhere`,
 };
 
 export type RefusalInput = {

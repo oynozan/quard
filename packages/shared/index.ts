@@ -22,6 +22,54 @@ export type {
     WarningEvent,
 } from "./events/schema.ts";
 export { MAX_BATCH, uploadBatch, uploadItem } from "./events/upload.ts";
+export { APPROVAL_BEAT_MS, APPROVAL_STALE_MS, FLEET_CHECK } from "./control/constants.ts";
+export {
+    agentMessage,
+    approvalAnswer,
+    argumentLabel,
+    askMessage,
+    askReason,
+    beatMessage,
+    cancelMessage,
+    clientMessage,
+    CLOSE_CODES,
+    CONTROL_PATH,
+    countedMessage,
+    countMessage,
+    decidedMessage,
+    errorMessage,
+    fleetMessage,
+    fleetResultMessage,
+    fleetValue,
+    grantId,
+    helloMessage,
+    quarantineEntry,
+    quarantineMessage,
+    readyMessage,
+    requestId,
+    ruleEntry,
+    rulesMessage,
+    rulesSnapshot,
+    serverMessage,
+    askedMessage,
+} from "./control/protocol.ts";
+export type {
+    ApprovalAnswer,
+    ArgumentLabelMessage,
+    AskMessage,
+    AskReason,
+    ClientMessage,
+    CountMessage,
+    DecidedMessage,
+    FleetMessage,
+    FleetValue,
+    HelloMessage,
+    QuarantineEntry,
+    ReadyMessage,
+    RuleEntry,
+    RulesSnapshot,
+    ServerMessage,
+} from "./control/protocol.ts";
 export type { UploadBatch, UploadItem } from "./events/upload.ts";
 export { isRunId, isStepId, newEventId, newRunId, newStepId } from "./ids/ids.ts";
 export { combineLabels } from "./labels/combine.ts";
@@ -49,12 +97,14 @@ export { CUT, maskCard, maskEmail, maskIban } from "./redact/masks.ts";
 export { createRedactor, redactText } from "./redact/redactor.ts";
 export type { Redactor } from "./redact/redactor.ts";
 export { removeSecrets, SECRET_FIELD } from "./redact/secrets.ts";
+export { stripSecrets, tooDeepToStrip } from "./redact/strip.ts";
 export { costOf, priceOf } from "./prices/models.ts";
 export type { ModelPrice, TokenUsage } from "./prices/models.ts";
 export { findSensitive, maskSensitive } from "./redact/sensitive.ts";
 export type { Sensitive, SensitiveKind } from "./redact/sensitive.ts";
 export { refusalText } from "./refusals/templates.ts";
 export type { ReasonCode, RefusalInput } from "./refusals/templates.ts";
+export { canonicalJson, plainJson } from "./values/canonical.ts";
 export { extractValues } from "./values/extract.ts";
 export type { ExtractedValue, ValueType } from "./values/extract.ts";
 export { flattenArgs, valueAtPath } from "./values/flatten.ts";

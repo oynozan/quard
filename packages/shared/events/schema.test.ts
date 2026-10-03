@@ -12,6 +12,7 @@ describe("runEvent", () => {
             model: "gpt",
             toolCalls: [{ callId: "c", name: "t", arguments: "{}" }],
             usage: { inputTokens: 10, cachedTokens: 2, outputTokens: 5 },
+            agentVersion: "f".repeat(16),
             status: "ok",
             durationMs: 3,
         },
@@ -49,6 +50,8 @@ describe("runEvent", () => {
             decision: "block",
             mode: "block",
             enforced: true,
+            rules: "e".repeat(16),
+            request: `apr_${"1".repeat(16)}`,
         },
         {
             type: "content",
