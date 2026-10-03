@@ -1,4 +1,4 @@
-import { createRedactor, MAX_BATCH, parseHashKey, uploadBatch, type RunEvent } from "@quard/shared";
+import { createRedactor, MAX_BATCH, MAX_BATCH_BYTES, parseHashKey, uploadBatch, type RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { record, takeDropped, takeEvents } from "../core/recorder.ts";
 import { createUploader, type Send } from "./uploader.ts";
@@ -6,7 +6,7 @@ import { createUploader, type Send } from "./uploader.ts";
 const redactor = createRedactor(parseHashKey("ab".repeat(32)));
 const IBAN = "DE89370400440532013000";
 
-function toolCall(at = new Date().toISOString()): RunEvent {
+function toolCall(at = new Date().toISOString()): Extract<RunEvent, { type: "tool_call" }> {
     return {
         type: "tool_call",
         runId: "1".repeat(32),
@@ -87,6 +87,20 @@ describe("uploader", () => {
         await uploader(hook.send).flush();
 
         expect(hook.sent.map((batch) => batch.body.events.length)).toEqual([MAX_BATCH, 1]);
+    });
+
+    it("keeps each batch under the webhook's body limit", async () => {
+        const hook = webhook(202);
+        const big = (): RunEvent => ({ ...toolCall(), arguments: { text: "x".repeat(MAX_BATCH_BYTES / 3) } });
+        record(big());
+        record(big());
+        record(big());
+
+        await uploader(hook.send).flush();
+
+        expect(hook.sent.map((batch) => batch.body.events.length)).toEqual([2, 1]);
+        expect(hook.sent.every((batch) => JSON.stringify(batch.body).length < MAX_BATCH_BYTES + 1024)).toBe(true);
+        expect(hook.sent[1]?.body.dropped).toBeUndefined();
     });
 
     it.each([[500], [429], ["down" as const]])(

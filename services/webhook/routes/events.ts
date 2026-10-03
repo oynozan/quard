@@ -1,12 +1,13 @@
 import { ingestBatch, projectForKey, type Db } from "@quard/db";
-import { redactEvent, uploadBatch, type Redactor } from "@quard/shared";
+import { MAX_BATCH_BYTES, redactEvent, uploadBatch, type Redactor } from "@quard/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
 export type EventDeps = { db: Db; redactor: Redactor };
 
-// A full batch of 500 events fits well inside this
-const MAX_BODY = 4 * 1024 * 1024;
+// The SDK keeps each batch's events under MAX_BATCH_BYTES; the rest is
+// room for the envelope
+const MAX_BODY = MAX_BATCH_BYTES + 1024 * 1024;
 
 function bearer(header: string | undefined): string | undefined {
     return /^Bearer\s+(\S+)$/i.exec(header ?? "")?.[1];

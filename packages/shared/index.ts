@@ -21,7 +21,7 @@ export type {
     ToolCallEvent,
     WarningEvent,
 } from "./events/schema.ts";
-export { MAX_BATCH, uploadBatch, uploadItem } from "./events/upload.ts";
+export { MAX_BATCH, MAX_BATCH_BYTES, uploadBatch, uploadItem } from "./events/upload.ts";
 export { APPROVAL_BEAT_MS, APPROVAL_STALE_MS, FLEET_CHECK } from "./control/constants.ts";
 export {
     agentMessage,

@@ -1,4 +1,4 @@
-import { MAX_BATCH, newEventId, type Redactor, type UploadItem } from "@quard/shared";
+import { MAX_BATCH, MAX_BATCH_BYTES, newEventId, type Redactor, type UploadItem } from "@quard/shared";
 import { takeDropped, takeEvents } from "../core/recorder.ts";
 import { prepareEvent } from "./prepare.ts";
 
@@ -32,29 +32,58 @@ function worthRetrying(status: number): boolean {
     return status >= 500 || status === 408 || status === 429;
 }
 
+const encoder = new TextEncoder();
+
+// Splits items into batches under the webhook's body limit. An item
+// bigger than the limit goes alone.
+function bySize(items: UploadItem[]): UploadItem[][] {
+    const batches: UploadItem[][] = [];
+    let size = 0;
+    for (const item of items) {
+        const bytes = encoder.encode(JSON.stringify(item)).length;
+        const last = batches.at(-1);
+        if (last === undefined || size + bytes > MAX_BATCH_BYTES) {
+            batches.push([item]);
+            size = bytes;
+        } else {
+            last.push(item);
+            size += bytes;
+        }
+    }
+    return batches;
+}
+
 export function createUploader(options: UploaderOptions): Uploader {
     const send = options.send ?? fetch;
     const warn = options.warn ?? console.warn;
     const url = `${options.webhookUrl.replace(/\/+$/, "")}/v1/events`;
     const warned = new Set<number>();
     let pending: Batch | undefined;
+    // Batches taken from the buffer that wait for their turn
+    let ready: Batch[] = [];
     let running: Promise<boolean> | undefined;
     let started = false;
     let delay = FIRST_DELAY;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     function nextBatch(): Batch | undefined {
-        const events = takeEvents(MAX_BATCH);
-        if (events.length === 0) {
-            return undefined;
+        if (ready.length === 0) {
+            const events = takeEvents(MAX_BATCH);
+            if (events.length === 0) {
+                return undefined;
+            }
+            const now = Date.now();
+            const items = events.map((event) => ({
+                id: newEventId(),
+                event: prepareEvent(event, options.redactor),
+                ...(now - Date.parse(event.at) > LATE_MS ? { degraded: true } : {}),
+            }));
+            const dropped = takeDropped();
+            ready = bySize(items).map((part, index) => ({ items: part, dropped: index === 0 ? dropped : 0 }));
         }
-        const now = Date.now();
-        const items = events.map((event) => ({
-            id: newEventId(),
-            event: prepareEvent(event, options.redactor),
-            ...(now - Date.parse(event.at) > LATE_MS ? { degraded: true } : {}),
-        }));
-        return { items, dropped: takeDropped() };
+        const [next, ...rest] = ready;
+        ready = rest;
+        return next;
     }
 
     // True when the batch is done with: stored, or refused for good

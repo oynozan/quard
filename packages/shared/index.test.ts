@@ -12,6 +12,7 @@ describe("@quard/shared", () => {
             "FLEET_CHECK",
             "INVISIBLE",
             "MAX_BATCH",
+            "MAX_BATCH_BYTES",
             "SECRET_FIELD",
             "agentMessage",
             "approvalAnswer",
