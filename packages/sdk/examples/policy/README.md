@@ -67,7 +67,7 @@ The feed is a JSON list of known attack patterns. [signatures.json](../signature
 - `url` is downloaded in the background at startup and then every `refreshSeconds` (300 by default), with an ETag. Guarded calls wait for the first download.
 - Quard fails closed: until one download of a `url` feed works, every guarded call is blocked with the reason `signatures_unavailable`, and a `config_error` event says why. While calls come in, Quard tries the download again at most every 5 seconds. In `observe` mode the missing feed is only recorded.
 - `file`, `url` and `refreshSeconds` are read at startup. `mode` applies live: `block` acts on matches, and `observe` only records them.
-- A failed or invalid update keeps the last good feed and records a `config_error` event.
+- Once a version has loaded, a failed or invalid update keeps that version in use, so calls are still checked against it, and records a `config_error` event.
 
 Each signature has an `id`, a `title`, a `category`, `where` (`input` for tool arguments, `content` for what a source tool returns), optional `tools`, the strings to look for and an `action`:
 
