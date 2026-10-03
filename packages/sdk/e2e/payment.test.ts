@@ -97,7 +97,7 @@ describe("an IBAN taken from a web page", () => {
         await runAgent(client(attack.fetch), tools, PROMPT);
 
         expect(rawPay).not.toHaveBeenCalled();
-        const runIds = new Set(events.map((event) => event.runId));
+        const runIds = new Set(events.flatMap((event) => ("runId" in event ? [event.runId] : [])));
         expect(runIds.size).toBe(1);
     });
 });

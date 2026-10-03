@@ -1,0 +1,462 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "version": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "minLength": 1
+                },
+                {
+                    "type": "number"
+                }
+            ]
+        },
+        "strictness": {
+            "type": "string",
+            "enum": [
+                "lenient",
+                "balanced",
+                "strict"
+            ]
+        },
+        "origins": {
+            "type": "object",
+            "propertyNames": {
+                "type": "string"
+            },
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "trust": {
+                        "type": "string",
+                        "enum": [
+                            "trusted",
+                            "untrusted"
+                        ]
+                    },
+                    "sensitivity": {
+                        "type": "string",
+                        "enum": [
+                            "internal",
+                            "public"
+                        ]
+                    }
+                },
+                "additionalProperties": false
+            }
+        },
+        "signatures": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "url": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "refreshSeconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "block",
+                        "observe"
+                    ]
+                }
+            },
+            "additionalProperties": false
+        },
+        "detector": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "observe",
+                        "enforce"
+                    ]
+                },
+                "flagAt": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "stripAt": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                }
+            },
+            "additionalProperties": false
+        },
+        "guards": {
+            "type": "object",
+            "propertyNames": {
+                "type": "string",
+                "minLength": 1
+            },
+            "additionalProperties": {
+                "type": "array",
+                "items": {
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "const": "source"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                        "block",
+                                        "observe"
+                                    ]
+                                },
+                                "onBlock": {
+                                    "type": "string",
+                                    "enum": [
+                                        "return",
+                                        "throw"
+                                    ]
+                                },
+                                "origin": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "blockDomains": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "allowDomains": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "onSuspect": {
+                                    "type": "string",
+                                    "enum": [
+                                        "flag",
+                                        "strip",
+                                        "block"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "type",
+                                "origin"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "const": "action"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                        "block",
+                                        "observe"
+                                    ]
+                                },
+                                "onBlock": {
+                                    "type": "string",
+                                    "enum": [
+                                        "return",
+                                        "throw"
+                                    ]
+                                },
+                                "rules": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                        "anyOf": [
+                                            {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    },
+                                                    "from": {
+                                                        "minItems": 1,
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                        }
+                                                    },
+                                                    "onFail": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "block",
+                                                            "ask"
+                                                        ]
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "from"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    },
+                                                    "max": {
+                                                        "type": "number"
+                                                    },
+                                                    "onFail": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "block",
+                                                            "ask"
+                                                        ]
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "max"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    },
+                                                    "neverSeen": {
+                                                        "type": "boolean",
+                                                        "const": true
+                                                    },
+                                                    "onFail": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "block",
+                                                            "ask"
+                                                        ]
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "neverSeen"
+                                                ],
+                                                "additionalProperties": false
+                                            }
+                                        ]
+                                    }
+                                }
+                            },
+                            "required": [
+                                "type",
+                                "rules"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "const": "approval"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "onBlock": {
+                                    "type": "string",
+                                    "enum": [
+                                        "return",
+                                        "throw"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "type"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "const": "egress"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                        "block",
+                                        "observe"
+                                    ]
+                                },
+                                "onBlock": {
+                                    "type": "string",
+                                    "enum": [
+                                        "return",
+                                        "throw"
+                                    ]
+                                },
+                                "allow": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "onFail": {
+                                    "type": "string",
+                                    "enum": [
+                                        "block",
+                                        "ask"
+                                    ]
+                                },
+                                "payload": {
+                                    "type": "object",
+                                    "properties": {
+                                        "secrets": {
+                                            "type": "string",
+                                            "enum": [
+                                                "allow",
+                                                "mask",
+                                                "block"
+                                            ]
+                                        },
+                                        "cards": {
+                                            "type": "string",
+                                            "enum": [
+                                                "allow",
+                                                "mask",
+                                                "block"
+                                            ]
+                                        },
+                                        "ibans": {
+                                            "type": "string",
+                                            "enum": [
+                                                "allow",
+                                                "mask",
+                                                "block"
+                                            ]
+                                        }
+                                    },
+                                    "additionalProperties": false
+                                }
+                            },
+                            "required": [
+                                "type"
+                            ],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "const": "limit"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                        "block",
+                                        "observe"
+                                    ]
+                                },
+                                "onBlock": {
+                                    "type": "string",
+                                    "enum": [
+                                        "return",
+                                        "throw"
+                                    ]
+                                },
+                                "maxCallsPerRun": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                },
+                                "maxAmountPerRun": {
+                                    "type": "object",
+                                    "properties": {
+                                        "field": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "max": {
+                                            "type": "number",
+                                            "minimum": 0
+                                        }
+                                    },
+                                    "required": [
+                                        "field",
+                                        "max"
+                                    ],
+                                    "additionalProperties": false
+                                }
+                            },
+                            "required": [
+                                "type"
+                            ],
+                            "additionalProperties": false
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "required": [
+        "version"
+    ],
+    "additionalProperties": false
+}

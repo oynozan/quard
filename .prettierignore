@@ -6,3 +6,5 @@ pnpm-lock.yaml
 web/.next
 web/out
 web/next-env.d.ts
+# Written by a test from the zod schemas
+packages/sdk/examples/**/*.schema.json

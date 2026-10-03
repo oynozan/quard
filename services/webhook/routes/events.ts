@@ -43,6 +43,12 @@ export function eventRoutes(deps: EventDeps): Hono {
                     `webhook: an SDK in project ${projectId} dropped ${batch.data.dropped} events from a full buffer`,
                 );
             }
+            // Config errors belong to no run; they are logged until the dashboard shows them
+            for (const { event } of batch.data.events) {
+                if (event.type === "config_error") {
+                    console.warn(`webhook: project ${projectId}: the ${event.source} file failed to load`);
+                }
+            }
             // Redacted again here, so an old or broken SDK never stores a raw value
             const items = batch.data.events.map((item) => ({ ...item, event: redactEvent(deps.redactor, item.event) }));
             const stored = await ingestBatch(deps.db, projectId, items);

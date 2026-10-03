@@ -39,11 +39,16 @@ export type ApprovalOptions = {
     onBlock?: "return" | "throw";
 };
 
+// What an egress guard does with sensitive data in what it sends
+export type DataAction = "allow" | "mask" | "block";
+
 export type EgressOptions = Common & {
     type: "egress";
     allow?: string[];
     destinations?: (input: unknown) => string[];
     onFail?: "block" | "ask";
+    // Kinds left out follow the policy file's strictness preset
+    payload?: { secrets?: DataAction; cards?: DataAction; ibans?: DataAction };
 };
 
 export type LimitOptions = Common & {

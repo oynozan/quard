@@ -15,6 +15,9 @@ const ALL: ReasonCode[] = [
     "approval_denied",
     "content_blocked",
     "rule_failed",
+    "signature_matched",
+    "sensitive_data",
+    "signatures_unavailable",
 ];
 
 describe("refusalText", () => {
@@ -42,5 +45,14 @@ describe("refusalText", () => {
 
         expect(text).toMatch(/^Blocked by the action guard: .+\. The t (call did NOT run|result was withheld)\./);
         expect(text).not.toContain("undefined");
+    });
+
+    it("names the signature and the kind of sensitive data", () => {
+        expect(
+            refusalText({ guard: "signature", tool: "runCode", reason: "signature_matched", field: "QS-1" }),
+        ).toContain("it matched the known attack signature QS-1.");
+        expect(
+            refusalText({ guard: "egress", tool: "sendEmail", reason: "sensitive_data", field: "secret" }),
+        ).toContain("the data to send holds a sensitive value (secret).");
     });
 });

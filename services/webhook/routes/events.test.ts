@@ -100,6 +100,17 @@ describe("POST /v1/events", () => {
         warn.mockRestore();
     });
 
+    it("logs a config error and stores nothing for it", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const event = { type: "config_error", at: AT, source: "signatures", message: "feed unreachable" };
+
+        const res = await post({ events: [{ id: id(), event }] });
+
+        expect(await res.json()).toEqual({ received: 1, stored: 0 });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("the signatures file failed to load"));
+        warn.mockRestore();
+    });
+
     it("stores a resent batch once", async () => {
         const batch = rawBatch("4".repeat(32));
         await post(batch);

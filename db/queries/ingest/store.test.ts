@@ -103,6 +103,22 @@ describe("ingestBatch", () => {
         expect(await getRun(test.db, projectId, RUN)).toMatchObject({ costUsd: 0, costKnown: false });
     });
 
+    it("skips events that belong to no run, such as a config error", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const configError = {
+            id: "b".repeat(16),
+            event: {
+                type: "config_error" as const,
+                at: "2026-10-03T12:00:00.000Z",
+                source: "policy" as const,
+                message: "bad JSON",
+            },
+        };
+
+        expect(await ingestBatch(test.db, projectId, [configError])).toBe(0);
+        expect(await ingestBatch(test.db, projectId, [configError, item(started())])).toBe(1);
+    });
+
     it("keeps runs apart per project", async () => {
         const one = await createProject(test.db, "One");
         const two = await createProject(test.db, "Two");

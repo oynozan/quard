@@ -1,5 +1,6 @@
 export { readPort } from "./config/port.ts";
 export {
+    configErrorEvent,
     contentEvent,
     decisionEvent,
     modelCallEvent,
@@ -10,6 +11,7 @@ export {
     warningEvent,
 } from "./events/schema.ts";
 export type {
+    ConfigErrorEvent,
     ContentEvent,
     DecisionEvent,
     ModelCallEvent,
@@ -49,6 +51,8 @@ export type { Redactor } from "./redact/redactor.ts";
 export { removeSecrets, SECRET_FIELD } from "./redact/secrets.ts";
 export { costOf, priceOf } from "./prices/models.ts";
 export type { ModelPrice, TokenUsage } from "./prices/models.ts";
+export { findSensitive, maskSensitive } from "./redact/sensitive.ts";
+export type { Sensitive, SensitiveKind } from "./redact/sensitive.ts";
 export { refusalText } from "./refusals/templates.ts";
 export type { ReasonCode, RefusalInput } from "./refusals/templates.ts";
 export { extractValues } from "./values/extract.ts";

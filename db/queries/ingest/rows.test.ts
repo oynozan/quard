@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RunEvent } from "@quard/shared";
+import type { RunItem } from "./rows.ts";
 import { content, decision, finished, item, modelCall, RUN, started, toolCall, warning } from "../../test/events.ts";
 import { decisionRows, eventRows, labelRows, runRows, stepRows } from "./rows.ts";
 
@@ -50,8 +50,8 @@ describe("stepRows", () => {
     });
 
     it("fills gaps when optional fields are missing", () => {
-        const model = { ...modelCall(), parentStepId: "4".repeat(16), usage: undefined } as RunEvent;
-        const bare = { ...toolCall("ok"), callId: undefined, keys: undefined } as RunEvent;
+        const model = { ...modelCall(), parentStepId: "4".repeat(16), usage: undefined } as RunItem["event"];
+        const bare = { ...toolCall("ok"), callId: undefined, keys: undefined } as RunItem["event"];
         const [withParent, tool] = stepRows(PROJECT, [item(model), item(bare)]);
 
         expect(withParent?.parent_step_id).toBe("4".repeat(16));
@@ -74,7 +74,7 @@ describe("labelRows and decisionRows", () => {
     });
 
     it("store missing reasons and fields as null", () => {
-        const bare = { ...decision(), reason: undefined, field: undefined } as RunEvent;
+        const bare = { ...decision(), reason: undefined, field: undefined } as RunItem["event"];
 
         expect(decisionRows(PROJECT, [item(bare)])[0]).toMatchObject({ reason: null, field: null });
     });

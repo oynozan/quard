@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { RunEvent } from "@quard/shared";
+import type { RunItem } from "./ingest/rows.ts";
 import { content, decision, item, modelCall, RUN, started, toolCall } from "../test/events.ts";
 import { startTestDb, type TestDb } from "../test/pglite.ts";
 import { createProject } from "./projects.ts";
@@ -16,7 +16,7 @@ afterAll(async () => {
     await test.stop();
 });
 
-const startedAt = (runId: string, at: string): RunEvent => ({
+const startedAt = (runId: string, at: string): RunItem["event"] => ({
     type: "run_started",
     runId,
     agent: "billing",

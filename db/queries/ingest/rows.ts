@@ -1,12 +1,20 @@
-import { costOf, type UploadItem } from "@quard/shared";
+import { costOf, type RunEvent, type UploadItem } from "@quard/shared";
 import type { Insertable } from "kysely";
 import type { DecisionsTable, EventsTable, LabelsTable, RunsTable, StepsTable } from "../../schema/database.ts";
+
+// An event that belongs to a run. Config errors from a policy file or a
+// signature feed belong to none, so they are not stored with runs.
+export type RunItem = UploadItem & { event: Extract<RunEvent, { runId: string }> };
+
+export function isRunItem(item: UploadItem): item is RunItem {
+    return "runId" in item.event;
+}
 
 type Span = { agent: string; start: number; end: number; degraded: boolean };
 
 // One row per run in the batch: its time span and first agent.
 // The agent and origins from run_started are set separately.
-export function runRows(projectId: string, items: UploadItem[]): Insertable<RunsTable>[] {
+export function runRows(projectId: string, items: RunItem[]): Insertable<RunsTable>[] {
     const spans = new Map<string, Span>();
     for (const { event, degraded } of items) {
         const at = Date.parse(event.at);
@@ -26,7 +34,7 @@ export function runRows(projectId: string, items: UploadItem[]): Insertable<Runs
     }));
 }
 
-export function eventRows(projectId: string, items: UploadItem[]): Insertable<EventsTable>[] {
+export function eventRows(projectId: string, items: RunItem[]): Insertable<EventsTable>[] {
     return items.map(({ id, degraded, event }) => ({
         project_id: projectId,
         event_id: id,
@@ -40,7 +48,7 @@ export function eventRows(projectId: string, items: UploadItem[]): Insertable<Ev
     }));
 }
 
-export function stepRows(projectId: string, items: UploadItem[]): Insertable<StepsTable>[] {
+export function stepRows(projectId: string, items: RunItem[]): Insertable<StepsTable>[] {
     return items.flatMap(({ event }): Insertable<StepsTable>[] => {
         if (event.type === "model_call") {
             return [
@@ -90,7 +98,7 @@ export function stepRows(projectId: string, items: UploadItem[]): Insertable<Ste
     });
 }
 
-export function labelRows(projectId: string, items: UploadItem[]): Insertable<LabelsTable>[] {
+export function labelRows(projectId: string, items: RunItem[]): Insertable<LabelsTable>[] {
     return items.flatMap(({ event }): Insertable<LabelsTable>[] =>
         event.type === "content"
             ? [
@@ -112,7 +120,7 @@ export function labelRows(projectId: string, items: UploadItem[]): Insertable<La
     );
 }
 
-export function decisionRows(projectId: string, items: UploadItem[]): Insertable<DecisionsTable>[] {
+export function decisionRows(projectId: string, items: RunItem[]): Insertable<DecisionsTable>[] {
     return items.flatMap(({ id, event }): Insertable<DecisionsTable>[] =>
         event.type === "decision"
             ? [

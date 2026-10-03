@@ -80,6 +80,18 @@ export const decisionEvent = z.object({
     enforced: z.boolean(),
     reason: z.string().optional(),
     field: z.string().optional(),
+    // The version of the policy file in force, when one is set
+    policy: z.string().optional(),
+    // A detector's risk score, from 0 to 1
+    score: z.number().min(0).max(1).optional(),
+});
+
+// A policy file or signature feed that failed to load. The last good one stays.
+export const configErrorEvent = z.object({
+    type: z.literal("config_error"),
+    at: z.string(),
+    source: z.enum(["policy", "signatures"]),
+    message: z.string(),
 });
 
 export const contentEvent = z.object({
@@ -108,6 +120,7 @@ export const runEvent = z.discriminatedUnion("type", [
     decisionEvent,
     contentEvent,
     warningEvent,
+    configErrorEvent,
 ]);
 
 export type RunEvent = z.infer<typeof runEvent>;
@@ -118,3 +131,4 @@ export type ToolCallEvent = z.infer<typeof toolCallEvent>;
 export type DecisionEvent = z.infer<typeof decisionEvent>;
 export type ContentEvent = z.infer<typeof contentEvent>;
 export type WarningEvent = z.infer<typeof warningEvent>;
+export type ConfigErrorEvent = z.infer<typeof configErrorEvent>;

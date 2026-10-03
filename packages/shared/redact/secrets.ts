@@ -1,21 +1,38 @@
 import { CUT } from "./masks.ts";
+import type { Span } from "./spans.ts";
 
-// Key shapes in the style of gitleaks. Group 1 is a known prefix that
-// stays visible, so people can tell keys apart; the rest is removed.
-const KEYS: RegExp[] = [
-    /\b(qk_(?:live|test)_)[a-z0-9]{16,}/gi,
-    /\b(sk-ant-)[\w-]{20,}/g,
-    /\b(sk-(?:proj-|svcacct-|admin-)?)[\w-]{20,}/g,
-    /\b((?:sk|rk)_(?:live|test)_)\w{16,}/g,
-    /\b(gh[pousr]_)[A-Za-z0-9]{30,}/g,
-    /\b(github_pat_)\w{22,}/g,
-    /\b(xox[abprs]-)[\w-]{10,}/g,
-    /\b(AKIA|ASIA)[A-Z0-9]{16}\b/g,
-    /\b(AIza)[\w-]{35}/g,
-    /\b(eyJ)[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}/g,
+export type SecretSpan = Span & { name: string };
+
+// Gitleaks-style patterns for common keys and tokens. Each starts
+// with a fixed prefix, so the scan stays linear.
+const PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
+    ["quard-agent-key", /\bqk_(?:live|test)_[A-Za-z0-9]{16,}/g],
+    ["sk-api-key", /\bsk-(?:proj-|svcacct-|admin-|ant-)?[A-Za-z0-9_-]{20,}/g],
+    ["aws-access-key", /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g],
+    ["github-token", /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})/g],
+    ["slack-token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/g],
+    ["google-api-key", /\bAIza[0-9A-Za-z_-]{35}/g],
+    ["stripe-key", /\b(?:sk|rk)_(?:live|test)_[0-9A-Za-z]{16,}/g],
+    ["private-key", /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z]+ )*PRIVATE KEY-----|$)/g],
+    ["jwt", /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g],
 ];
 
-const PRIVATE_KEY = /-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----[\s\S]*?-----END [A-Z ]{0,40}PRIVATE KEY-----/g;
+export const SECRET_MASK = "[secret removed by Quard]";
+
+export function findSecrets(text: string): SecretSpan[] {
+    return PATTERNS.flatMap(([name, pattern]) =>
+        [...text.matchAll(pattern)].map((match) => ({
+            name,
+            start: match.index,
+            end: match.index + match[0].length,
+            value: match[0],
+        })),
+    );
+}
+
+// A key's known prefix stays visible, so people can tell keys apart
+const PREFIX =
+    /^((?:qk_(?:live|test)_|sk-(?:proj-|svcacct-|admin-|ant-)?|(?:sk|rk)_(?:live|test)_|gh[pousr]_|github_pat_|xox[abprs]-|AKIA|ASIA|AIza|eyJ)?)[\s\S]*$/;
 const BEARER = /\b(Bearer\s+)[\w.~+/-]{12,}=*/gi;
 
 // password=..., "api_key": "..." and the like. The name stays.
@@ -26,10 +43,19 @@ const ASSIGNED =
 export const SECRET_FIELD =
     /^(password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|authorization|cookie)$/i;
 
+// Removes secrets before text is stored. A key keeps only its known
+// prefix ("sk-proj-…"); a private key becomes "[private key]".
 export function removeSecrets(text: string): string {
-    let out = text.replace(PRIVATE_KEY, "[private key]");
-    for (const pattern of KEYS) {
-        out = out.replace(pattern, `$1${CUT}`);
+    let out = "";
+    let last = 0;
+    for (const span of findSecrets(text).sort((a, b) => a.start - b.start)) {
+        // When finds overlap, the one that starts first is removed whole
+        if (span.start < last) {
+            continue;
+        }
+        const shown = span.name === "private-key" ? "[private key]" : span.value.replace(PREFIX, `$1${CUT}`);
+        out += text.slice(last, span.start) + shown;
+        last = span.end;
     }
-    return out.replace(BEARER, `$1${CUT}`).replace(ASSIGNED, `$1$2${CUT}`);
+    return (out + text.slice(last)).replace(BEARER, `$1${CUT}`).replace(ASSIGNED, `$1$2${CUT}`);
 }

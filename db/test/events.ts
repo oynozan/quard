@@ -1,4 +1,8 @@
-import type { DecisionEvent, ModelCallEvent, RunEvent, UploadItem } from "@quard/shared";
+import type { DecisionEvent, ModelCallEvent } from "@quard/shared";
+import type { RunItem } from "../queries/ingest/rows.ts";
+
+// Events that belong to a run
+type RunEvent = RunItem["event"];
 
 export const RUN = "1".repeat(32);
 export const STEP = "2".repeat(16);
@@ -7,7 +11,7 @@ export const TOOL_STEP = "3".repeat(16);
 let next = 0;
 
 // Each event in its upload envelope, with a fresh event id
-export function item(event: RunEvent, degraded?: boolean): UploadItem {
+export function item(event: RunItem["event"], degraded?: boolean): RunItem {
     next += 1;
     return { id: next.toString(16).padStart(16, "a"), event, ...(degraded === undefined ? {} : { degraded }) };
 }

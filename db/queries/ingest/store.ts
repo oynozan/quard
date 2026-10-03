@@ -2,11 +2,11 @@ import type { UploadItem } from "@quard/shared";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import type { Database } from "../../schema/database.ts";
-import { decisionRows, eventRows, labelRows, runRows, stepRows } from "./rows.ts";
+import { decisionRows, eventRows, isRunItem, labelRows, runRows, stepRows, type RunItem } from "./rows.ts";
 
 type Trx = Transaction<Database>;
 
-async function upsertRuns(trx: Trx, projectId: string, items: UploadItem[]): Promise<void> {
+async function upsertRuns(trx: Trx, projectId: string, items: RunItem[]): Promise<void> {
     await trx
         .insertInto("runs")
         .values(runRows(projectId, items))
@@ -58,7 +58,11 @@ async function refreshRuns(trx: Trx, projectId: string, runIds: string[]): Promi
 
 // Stores a batch in one transaction. Events already stored are skipped,
 // so a resent batch changes nothing. Returns how many events were new.
-export async function ingestBatch(db: Db, projectId: string, items: UploadItem[]): Promise<number> {
+export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]): Promise<number> {
+    const items = batch.filter(isRunItem);
+    if (items.length === 0) {
+        return 0;
+    }
     return db.transaction().execute(async (trx) => {
         await upsertRuns(trx, projectId, items);
         const inserted = await trx
