@@ -1,4 +1,4 @@
-import type { CountMessage } from "@quard/shared";
+import type { CountMessage, LookupMessage, RunCountMessage } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeLink } from "../../test/fake-socket.ts";
 import { createRequests } from "./requests.ts";
@@ -13,6 +13,18 @@ const count = (id: string): CountMessage => ({
     max: 5,
 });
 const ID = "1".repeat(16);
+const lookup = (id: string): LookupMessage => ({
+    type: "lookup",
+    id,
+    target: { kind: "message", ref: "a".repeat(16) },
+});
+const runCount = (id: string, counter = "steps"): RunCountMessage => ({
+    type: "run_count",
+    id,
+    runId: "b".repeat(32),
+    counter,
+    add: 1,
+});
 
 function setup() {
     const { fake, link } = fakeLink();
@@ -124,5 +136,62 @@ describe("requests to control", () => {
         await Promise.all(replies);
 
         expect(late.mock.calls).toEqual([[undefined]]);
+    });
+
+    it("matches label lookups and run counts to their answers", async () => {
+        const { fake, requests } = setup();
+        const socket = fake.connect();
+        const records = { type: "labels" as const, id: ID, records: [] };
+
+        const found = requests.request(lookup(ID), { ms: 5000 });
+        const counted = requests.request(runCount("2".repeat(16)), { ms: 5000 });
+        socket.reply(records);
+        socket.reply({ type: "counted", id: "2".repeat(16), ok: true, used: 4 });
+
+        expect(await found).toEqual(records);
+        expect(await counted).toMatchObject({ type: "counted", used: 4 });
+        expect(socket.sent.map((message) => message.type)).toEqual(["hello", "lookup", "run_count"]);
+    });
+
+    it("waits for the first connect when asked to, and holds the process meanwhile", async () => {
+        const { fake, requests } = setup();
+        const socket = fake.last();
+
+        const reply = requests.request(lookup(ID), { ms: 5000, waitForStart: true });
+        expect(socket.sent).toEqual([]);
+        expect(socket.held).toBe(true);
+        fake.connect();
+        expect(socket.sent.at(-1)).toEqual(lookup(ID));
+        socket.reply({ type: "labels", id: ID, records: [] });
+
+        expect(await reply).toEqual({ type: "labels", id: ID, records: [] });
+        expect(socket.held).toBe(false);
+    });
+
+    it("sends nothing once the wait for the first connect is over", async () => {
+        const { fake, requests } = setup();
+
+        const reply = requests.request(lookup(ID), { ms: 5000, waitForStart: true });
+        vi.advanceTimersByTime(5000);
+        expect(await reply).toBeUndefined();
+        const socket = fake.connect();
+
+        expect(socket.sent.map((message) => message.type)).toEqual(["hello"]);
+    });
+
+    it("answers at once while control is away after the first connect", async () => {
+        const { fake, requests } = setup();
+        fake.connect().drop();
+
+        expect(await requests.request(lookup(ID), { ms: 5000, waitForStart: true })).toBeUndefined();
+    });
+
+    it("answers undefined when a waiting request can't go out on connect", async () => {
+        const { fake, requests } = setup();
+
+        const reply = requests.request(runCount(ID, "x".repeat(1_100_000)), { ms: 5000, waitForStart: true });
+        fake.connect();
+
+        expect(await reply).toBeUndefined();
     });
 });

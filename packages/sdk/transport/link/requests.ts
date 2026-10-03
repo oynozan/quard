@@ -1,7 +1,10 @@
-import type { CountMessage, FleetMessage, ServerMessage } from "@quard/shared";
+import type { CountMessage, FleetMessage, LookupMessage, RunCountMessage, ServerMessage } from "@quard/shared";
 import type { Link } from "./link.ts";
 
-export type Reply = Extract<ServerMessage, { type: "counted" | "fleet_result" }>;
+// What the SDK asks control. Each answer carries the request's id.
+export type Request = CountMessage | RunCountMessage | FleetMessage | LookupMessage;
+
+export type Reply = Extract<ServerMessage, { type: "counted" | "fleet_result" | "labels" }>;
 
 export type RequestOptions = {
     ms: number;
@@ -9,20 +12,29 @@ export type RequestOptions = {
     hold?: boolean;
     // Gets a reply that came after the wait, or undefined once none can come
     late?: (reply: Reply | undefined) => void;
+    // Before the first connect, waits up to ms for it instead of giving up at once
+    waitForStart?: boolean;
 };
 
 export type Requests = {
     // The reply, or undefined when control could not answer in time
-    request(message: CountMessage | FleetMessage, options: RequestOptions): Promise<Reply | undefined>;
+    request(message: Request, options: RequestOptions): Promise<Reply | undefined>;
     stop(): void;
 };
 
 const MAX_LATE = 1000;
 
-// Matches control's answers to the counts and fleet reports sent, by id
+function isReply(message: ServerMessage): message is Reply {
+    return message.type === "counted" || message.type === "fleet_result" || message.type === "labels";
+}
+
+// Matches control's answers to the requests sent, by id
 export function createRequests(link: Link): Requests {
     const pending = new Map<string, (reply: Reply | undefined) => void>();
     const late = new Map<string, (reply: Reply | undefined) => void>();
+    // Requests made before the first connect, sent once it is up
+    const starting = new Map<string, Request>();
+    let started = false;
 
     function answer(id: string, reply: Reply | undefined): void {
         const done = pending.get(id) ?? late.get(id);
@@ -37,8 +49,17 @@ export function createRequests(link: Link): Requests {
     }
 
     link.listen({
+        ready: () => {
+            started = true;
+            for (const [id, message] of [...starting]) {
+                starting.delete(id);
+                if (!link.send(message)) {
+                    answer(id, undefined);
+                }
+            }
+        },
         message: (message) => {
-            if (message.type === "counted" || message.type === "fleet_result") {
+            if (isReply(message)) {
                 answer(message.id, message);
             } else if (message.type === "error" && message.id !== undefined) {
                 answer(message.id, undefined);
@@ -47,14 +68,16 @@ export function createRequests(link: Link): Requests {
         down: dropAll,
     });
 
-    function request(message: CountMessage | FleetMessage, options: RequestOptions): Promise<Reply | undefined> {
-        if (!link.send(message)) {
+    function request(message: Request, options: RequestOptions): Promise<Reply | undefined> {
+        const wait = options.waitForStart === true && !started && !link.ready();
+        if (!wait && !link.send(message)) {
             return Promise.resolve(undefined);
         }
         return new Promise((resolve) => {
             const release = options.hold === false ? undefined : link.hold();
             const finish = (reply: Reply | undefined) => {
                 pending.delete(message.id);
+                starting.delete(message.id);
                 clearTimeout(timer);
                 release?.();
                 resolve(reply);
@@ -70,6 +93,9 @@ export function createRequests(link: Link): Requests {
             }, options.ms);
             timer.unref();
             pending.set(message.id, finish);
+            if (wait) {
+                starting.set(message.id, message);
+            }
         });
     }
 
