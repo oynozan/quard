@@ -1,27 +1,40 @@
 import type { AgentEdge } from "@/lib/data/agents";
 
-// A node's place in the layered layout: its layer (delegation depth) and its slot across that layer
+// A node's place in the layered layout: its layer (how deep work was passed) and its slot across that layer
 export type LayoutNode = { name: string; layer: number; slot: number };
 
 export type GraphLayout = { nodes: LayoutNode[]; layers: number; slots: number };
 
-// Layers come from delegations only, so handoffs and replies never push an agent deeper
+// Delegations and messages set the layers. A delegation across processes counts
+// as a message, so it still does. Handoffs never push an agent deeper. Busiest
+// links go first, and one that would close a loop, such as a reply, is left out.
 function layersOf(names: string[], edges: AgentEdge[]): Map<string, number> {
-    const layer = new Map(names.map((name) => [name, 0]));
-    const delegations = edges.filter((edge) => edge.delegations > 0 && edge.from !== edge.to);
-    // Longest path, capped so a delegation loop cannot run forever
-    for (let pass = 0; pass < names.length; pass++) {
-        let changed = false;
-        for (const edge of delegations) {
-            const next = (layer.get(edge.from) ?? 0) + 1;
-            if (layer.has(edge.to) && next > layer.get(edge.to)! && next < names.length) {
-                layer.set(edge.to, next);
-                changed = true;
-            }
-        }
-        if (!changed) break;
+    const into = new Map<string, string[]>();
+    const outOf = new Map<string, string[]>();
+    const reaches = (from: string, to: string, seen: Set<string>): boolean => {
+        if (from === to) return true;
+        if (seen.has(from)) return false;
+        seen.add(from);
+        return (outOf.get(from) ?? []).some((next) => reaches(next, to, seen));
+    };
+    const ranked = edges
+        .filter((edge) => edge.delegations + edge.messages > 0 && edge.from !== edge.to)
+        .sort((a, b) => b.delegations - a.delegations || b.messages - a.messages);
+    for (const edge of ranked) {
+        if (reaches(edge.to, edge.from, new Set())) continue;
+        outOf.set(edge.from, [...(outOf.get(edge.from) ?? []), edge.to]);
+        into.set(edge.to, [...(into.get(edge.to) ?? []), edge.from]);
     }
-    return layer;
+    // The longest path from an agent nothing leads into
+    const layer = new Map<string, number>();
+    const depth = (name: string): number => {
+        const known = layer.get(name);
+        if (known !== undefined) return known;
+        const value = Math.max(0, ...(into.get(name) ?? []).map((from) => depth(from) + 1));
+        layer.set(name, value);
+        return value;
+    };
+    return new Map(names.map((name) => [name, depth(name)]));
 }
 
 function mean(values: number[]): number | null {
@@ -41,7 +54,7 @@ function spread(wanted: { name: string; at: number }[]): Map<string, number> {
     return out;
 }
 
-// Places agents in delegation layers and orders each layer to keep links short
+// Places agents in layers and orders each layer to keep links short
 export function layoutGraph(names: string[], edges: AgentEdge[]): GraphLayout {
     if (names.length === 0) return { nodes: [], layers: 0, slots: 0 };
     const layerOf = layersOf(names, edges);

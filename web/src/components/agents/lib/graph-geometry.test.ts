@@ -64,7 +64,7 @@ describe("placeGraph across", () => {
         const edges = [
             edge("a", "b", { delegations: 1 }),
             edge("a", "c", { delegations: 1 }),
-            edge("b", "c", { messages: 1 }),
+            edge("b", "c", { handoffs: 1 }),
         ];
         const link = placed(["a", "b", "c"], edges).edges[2];
         expect(link.d.startsWith("M641 39C")).toBe(true);

@@ -65,7 +65,7 @@ describe("AgentGraph", () => {
         expect(rows.map((row) => [...row.children].map((cell) => cell.textContent))).toEqual([
             ["planner", "researcher", "Delegation", "300", "9", "3%", "3 Oct 12:00"],
             ["planner", "writer", "Delegation", "40", "8", "20%", "3 Oct 12:00"],
-            ["researcher", "writer", "Message", "12", "9", "75%", "3 Oct 12:00"],
+            ["researcher", "writer", "Handoff", "12", "9", "75%", "3 Oct 12:00"],
         ]);
     });
 

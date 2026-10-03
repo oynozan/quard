@@ -22,7 +22,8 @@ export function agentEdge(from: string, to: string, overrides: Partial<AgentEdge
     };
 }
 
-// A planner that delegates to two agents in the second layer, plus one agent with no links
+// A planner that delegates to two agents in the second layer, which hand off between them,
+// plus one agent with no links
 export const NODES: AgentNode[] = [
     agentNode("planner", { state: "running", runs24h: 12 }),
     agentNode("researcher", { runs24h: 1 }),
@@ -34,7 +35,7 @@ export const NODES: AgentNode[] = [
 export const EDGES: AgentEdge[] = [
     agentEdge("planner", "researcher", { delegations: 300, total: 300, untrusted: 9, untrustedShare: 0.03 }),
     agentEdge("planner", "writer", { delegations: 40, total: 40, untrusted: 8, untrustedShare: 0.2 }),
-    agentEdge("researcher", "writer", { messages: 12, total: 12, untrusted: 9, untrustedShare: 0.75 }),
+    agentEdge("researcher", "writer", { handoffs: 12, total: 12, untrusted: 9, untrustedShare: 0.75 }),
 ];
 
 export function agentCall(stepId: string, overrides: Partial<AgentCall> = {}): AgentCall {

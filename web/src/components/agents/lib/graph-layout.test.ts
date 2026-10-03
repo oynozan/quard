@@ -13,8 +13,8 @@ describe("layoutGraph", () => {
         expect(layoutGraph([], [])).toEqual({ nodes: [], layers: 0, slots: 0 });
     });
 
-    it("keeps agents in one layer, in the given order, when nobody delegates", () => {
-        const layout = layoutGraph(["a", "b", "c"], [edge("a", "b", { handoffs: 4 }), edge("b", "c", { messages: 2 })]);
+    it("keeps agents in one layer, in the given order, when they only hand off", () => {
+        const layout = layoutGraph(["a", "b", "c"], [edge("a", "b", { handoffs: 4 }), edge("b", "c", { handoffs: 2 })]);
         expect(layout).toEqual({
             nodes: [
                 { name: "a", layer: 0, slot: 0 },
@@ -62,7 +62,7 @@ describe("layoutGraph", () => {
         expect(placeOf(layout, "x")).toEqual([1, 1]);
     });
 
-    it("stops a delegation loop instead of pushing agents deeper forever", () => {
+    it("leaves out the link that would close a delegation loop", () => {
         const edges = [
             edge("a", "b", { delegations: 1 }),
             edge("b", "c", { delegations: 1 }),
@@ -70,14 +70,50 @@ describe("layoutGraph", () => {
         ];
         const layout = layoutGraph(["a", "b", "c", "d"], edges);
         expect(layout.nodes.map((item) => [item.name, item.layer])).toEqual([
-            ["a", 3],
+            ["a", 0],
             ["b", 1],
             ["c", 2],
             ["d", 0],
         ]);
-        // b has no link to d, the only agent in the layer before it
-        expect(placeOf(layout, "b")).toEqual([1, 0]);
-        expect(layout.slots).toBe(1);
+        expect(layout.slots).toBe(2);
+    });
+
+    it("puts the receiver of messages one layer deeper and leaves the quieter reply out", () => {
+        const edges = [
+            edge("billing", "orchestrator", { messages: 2 }),
+            edge("orchestrator", "billing", { messages: 5 }),
+            edge("orchestrator", "support", { handoffs: 9 }),
+        ];
+        const layout = layoutGraph(["billing", "orchestrator", "support"], edges);
+        expect(layout.nodes.map((item) => [item.name, item.layer])).toEqual([
+            ["billing", 1],
+            ["orchestrator", 0],
+            ["support", 0],
+        ]);
+    });
+
+    it("ranks delegations before messages when both would set the layers", () => {
+        const edges = [edge("b", "a", { messages: 50 }), edge("a", "b", { delegations: 1 })];
+        expect(placeOf(layoutGraph(["a", "b"], edges), "b")).toEqual([1, 0]);
+    });
+
+    it("follows every path once while looking for a loop", () => {
+        // a reaches d two ways; e leads into a, which closes no loop
+        const edges = [
+            edge("a", "b", { delegations: 4 }),
+            edge("a", "c", { delegations: 4 }),
+            edge("b", "d", { delegations: 4 }),
+            edge("c", "d", { delegations: 4 }),
+            edge("e", "a", { delegations: 1 }),
+        ];
+        const layout = layoutGraph(["a", "b", "c", "d", "e"], edges);
+        expect(layout.nodes.map((item) => [item.name, item.layer])).toEqual([
+            ["a", 1],
+            ["b", 2],
+            ["c", 2],
+            ["d", 3],
+            ["e", 0],
+        ]);
     });
 
     it("ignores self delegations and links to agents off the graph", () => {
