@@ -10,7 +10,7 @@ import { placeGraph, type PlacedEdge, type PlacedNode } from "../lib/graph-geome
 import { layoutGraph } from "../lib/graph-layout";
 import { SHARE_STYLES, shareStyle } from "../lib/tones";
 import { plural, STATE_WORD } from "../lib/words";
-import { GraphNode } from "./graph-node";
+import { GraphNode, OutsideNode } from "./graph-node";
 
 type Hover = { kind: "edge"; index: number } | { kind: "node"; name: string } | null;
 
@@ -65,14 +65,11 @@ export function GraphField({ nodes, edges, summary }: { nodes: AgentNode[]; edge
     const [pointer, setPointer] = useState<Hover>(null);
     const id = useId().replace(/:/g, "");
     const agents = useMemo(() => new Map(nodes.map((node) => [node.name, node])), [nodes]);
-    const layout = useMemo(
-        () =>
-            layoutGraph(
-                nodes.map((node) => node.name),
-                edges,
-            ),
-        [nodes, edges],
-    );
+    // Link ends with no events in the window, such as "unknown" senders, are drawn too
+    const layout = useMemo(() => {
+        const ends = edges.flatMap((edge) => [edge.from, edge.to]).filter((name) => !agents.has(name));
+        return layoutGraph([...agents.keys(), ...new Set(ends)], edges);
+    }, [agents, edges]);
     const graph = useMemo(() => placeGraph(layout, edges, width), [layout, edges, width]);
     const cursor = useCursor(graph.edges.length, "first");
 
@@ -165,8 +162,19 @@ export function GraphField({ nodes, edges, summary }: { nodes: AgentNode[]; edge
             </div>
             <ul aria-label="Agents">
                 {graph.nodes.map((node) => {
-                    // The layout places exactly the agents it was given
-                    const agent = agents.get(node.name)!;
+                    const agent = agents.get(node.name);
+                    if (!agent) {
+                        return (
+                            <OutsideNode
+                                key={node.name}
+                                node={node}
+                                orientation={graph.orientation}
+                                width={graph.width}
+                                height={graph.height}
+                                dim={!near(node.name)}
+                            />
+                        );
+                    }
                     return (
                         <GraphNode
                             key={node.name}

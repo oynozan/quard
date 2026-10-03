@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentNode } from "@/lib/data/agents";
 import type { Orientation, PlacedNode } from "../lib/graph-geometry";
 import { agentNode } from "../../../../test/agents-graph-timeline/fixtures";
-import { GraphNode } from "./graph-node";
+import { GraphNode, OutsideNode } from "./graph-node";
 
 const PLANNER = agentNode("planner", { state: "running", model: "claude-x" });
 
@@ -105,5 +105,40 @@ describe("GraphNode", () => {
         fireEvent.blur(link);
         expect(onFocus).toHaveBeenCalledTimes(2);
         expect(onBlur).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe("OutsideNode", () => {
+    function renderOutside(orientation: Orientation, side: PlacedNode["side"], dim = false) {
+        const node: PlacedNode = { name: "unknown", layer: 0, slot: 0, x: 250, y: 60, side };
+        render(
+            <ul>
+                <OutsideNode node={node} orientation={orientation} width={900} height={300} dim={dim} />
+            </ul>,
+        );
+        return screen.getByRole("listitem");
+    }
+
+    it("draws a hollow square and the name, with no link", () => {
+        const item = renderOutside("across", "after");
+        expect(screen.queryByRole("link")).toBeNull();
+        expect(item.textContent).toBe("unknown");
+        expect(item.firstElementChild?.className).toContain("border-line-strong");
+        expect(screen.getByText("unknown").className).toContain("text-ink-subtle");
+        expect(item.style.left).toBe("243px");
+        expect(item.className).not.toContain("opacity-35");
+    });
+
+    it("sits where a linked node would, and fades with the rest of the graph", () => {
+        const before = renderOutside("across", "before", true);
+        expect(before.style.right).toBe("643px");
+        expect(before.className).toContain("flex-row-reverse");
+        expect(before.className).toContain("opacity-35");
+    });
+
+    it("centers its name under the square when laid down", () => {
+        const item = renderOutside("down", "after");
+        expect(item.style.width).toBe("104px");
+        expect(item.className).toContain("flex-col");
     });
 });

@@ -22,6 +22,19 @@ function placement(node: PlacedNode, orientation: Orientation, width: number, he
         : { left, width: LABEL_WIDTH, top: node.y - half };
 }
 
+// How a node's square and label sit against each other
+function frame(orientation: Orientation, side: PlacedNode["side"], dim: boolean): string {
+    const across = orientation === "across";
+    const before = side === "before";
+    return cn(
+        "absolute z-[1] flex items-center transition-opacity duration-150",
+        across ? "h-[34px] gap-[9px]" : "gap-[6px] text-center",
+        across && before && "flex-row-reverse text-right",
+        !across && (before ? "flex-col-reverse" : "flex-col"),
+        dim && "opacity-35",
+    );
+}
+
 // The resting cue that a node opens a page. It sits on the shorter line when space is tight.
 function Chevron() {
     return (
@@ -60,11 +73,8 @@ export function GraphNode({ node, agent, orientation, width, height, dim, onFocu
                 onBlur={onBlur}
                 style={placement(node, orientation, width, height)}
                 className={cn(
-                    "group absolute z-[1] flex cursor-pointer items-center rounded-[2px] outline-none transition-opacity duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-signal",
-                    across ? "h-[34px] gap-[9px]" : "gap-[6px] text-center",
-                    across && before && "flex-row-reverse text-right",
-                    !across && (before ? "flex-col-reverse" : "flex-col"),
-                    dim && "opacity-35",
+                    "group cursor-pointer rounded-[2px] outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-signal",
+                    frame(orientation, node.side, dim),
                 )}
             >
                 <span
@@ -97,6 +107,25 @@ export function GraphNode({ node, agent, orientation, width, height, dim, onFocu
                     </span>
                 </span>
             </Link>
+        </li>
+    );
+}
+
+type OutsideNodeProps = { node: PlacedNode; orientation: Orientation; width: number; height: number; dim: boolean };
+
+// A link's end that is not on the roster, such as "unknown" for a message no
+// record vouched for. It has no page, so it is a hollow square and no link.
+export function OutsideNode({ node, orientation, width, height, dim }: OutsideNodeProps) {
+    return (
+        <li style={placement(node, orientation, width, height)} className={frame(orientation, node.side, dim)}>
+            <span
+                aria-hidden
+                className="shrink-0 border border-line-strong"
+                style={{ width: SQUARE, height: SQUARE }}
+            />
+            <span className="mono max-w-full min-w-0 truncate text-[12px] leading-[1.35] text-ink-subtle">
+                {node.name}
+            </span>
         </li>
     );
 }

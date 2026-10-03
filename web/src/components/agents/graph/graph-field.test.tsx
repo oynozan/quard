@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentEdge, AgentNode } from "@/lib/data/agents";
-import { EDGES, NODES } from "../../../../test/agents-graph-timeline/fixtures";
+import { agentEdge, EDGES, NODES } from "../../../../test/agents-graph-timeline/fixtures";
 import { resizeAll, stubResizeObserver } from "../../../../test/agents-graph-timeline/resize";
 import { GraphField } from "./graph-field";
 
@@ -164,5 +164,25 @@ describe("GraphField agents", () => {
         expect(announced()).toBe("");
         expect(groups().map((group) => group.getAttribute("opacity"))).toEqual(["1", "1", "1"]);
         for (const node of NODES.slice(0, 3)) expect(link(node.name).className).not.toContain("opacity-35");
+    });
+});
+
+describe("GraphField senders off the roster", () => {
+    // A message no record vouched for, from a sender with no events
+    const vouchless = agentEdge("unknown", "writer", { messages: 3, total: 3, untrusted: 3, untrustedShare: 1 });
+
+    it("draws the sender as a node with no link, and its line", () => {
+        const { groups, link } = renderField(NODES, [...EDGES, vouchless]);
+        const items = [...screen.getByRole("list", { name: "Agents" }).children];
+        expect(items).toHaveLength(5);
+        const outside = items.find((item) => item.textContent === "unknown");
+        expect(outside?.querySelector("a")).toBeNull();
+        expect(groups()).toHaveLength(4);
+        fireEvent.mouseEnter(groups()[3].lastElementChild as Element);
+        expect(outside?.className).not.toContain("opacity-35");
+        expect(link("planner").className).toContain("opacity-35");
+        fireEvent.mouseLeave(groups()[3].lastElementChild as Element);
+        fireEvent.mouseEnter(link("planner"));
+        expect(outside?.className).toContain("opacity-35");
     });
 });
