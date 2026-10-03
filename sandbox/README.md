@@ -88,6 +88,7 @@ These need the local backend (see "See runs in the dashboard"):
 | `11-daily-limits.ts`               | Per-day limits shared by every process; run it twice and the count goes on                                      |
 | `12-fleet-check.ts`                | A new IBAN paid in 5 separate runs is quarantined (only observed for the first 7 days)                          |
 | `15-everything.ts`                 | All of it in one go: every guard type, several agents, an approval to click, completed, failed and blocked runs |
+| `22-agents-in-two-processes.ts` | A billing agent in a second process gets the run and its labels in a baggage header; the web IBAN is blocked there |
 
 These run with or without it:
 
@@ -101,10 +102,13 @@ These run with or without it:
 | `19-ai-detector.ts`               | An AI detector catches a reworded attack the built-in checks miss: observe, enforce, tuning            |
 | `20-signature-feeds.ts`           | Known-bad patterns from a file or URL: block, observe, updates without a restart                       |
 | `21-streaming-and-model-calls.ts` | Streamed answers and tool calls, tokens and cost, agent versions, unrecorded Chat Completions          |
+| `23-shared-memory.ts` | `quard.memory()`: a web IBAN in a saved note is blocked in a later run, and so is a note edited behind its back |
+| `24-openai-agents-sdk.ts` | The OpenAI Agents SDK with `quardRunner()` and `guardedTool()`; the web IBAN is blocked after a handoff |
+| `25-run-limits.ts` | Run limits on turns between two agents and on model calls, first observed, then enforced |
 
 ## How it fits together
 
-- `import { guard, quard } from "quard"` is the same line an app would use. `pnpm install` links `node_modules/quard` to `lib/quard`, which re-exports the SDK source in `packages/sdk`, so SDK changes show up right away.
+- `import { guard, quard } from "quard"` is the same line an app would use. `pnpm install` links `node_modules/quard` to `lib/quard`, which re-exports the SDK source in `packages/sdk`, so SDK changes show up right away. `quard/openai-agents` works the same way.
 - The sandbox is a workspace package (`@quard/sandbox`), so CI type-checks the examples.
 - `lib/agent.ts` is a plain agent loop on the Responses API, and `lib/tools.ts` holds the tool definitions the model sees.
 - `dashboard.ts` and `lib/backend/` start the local backend.
