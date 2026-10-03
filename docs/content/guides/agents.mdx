@@ -2,13 +2,11 @@
 
 The Agents page shows how your agents talk to each other. Each agent has its own page with its recent calls, versions, incidents and permissions.
 
-Until your agents send their first events, the page shows only **No agents yet**.
-
 ## Agent graph
 
 ![The agent graph](/images/guides/agents.webp)
 
-1. **Agent graph.** Agents as squares and their messages as arrows, over the last 30 days. A square is green while the agent is running and grey when it is idle. The line under each name is the model it last used. An arrow's color shows how much of what it carried was untrusted: grey under 10%, copper from 10% to 59%, and a dashed light line at 60% or more. Thicker arrows carry more messages. Hover an agent to see its runs in the last 24 hours and its state, or an arrow to read its numbers, and click an agent to open its page. Until one agent has delegated to another, the graph shows **No links between agents yet**.
+1. **Agent graph.** Agents as squares and their messages as arrows, over the last 30 days. A square is green while the agent is running, grey when it is idle and hollow when it is offline. An arrow's color shows how much of what it carried was untrusted: grey under 10%, copper from 10% to 59%, and a dashed light line at 60% or more. Thicker arrows carry more messages. Hover an agent or an arrow to read its numbers, and click an agent to open its page.
 2. **Table.** Lists every link with its sender, receiver, message count and untrusted share.
 3. **Agents.** Every agent with its state and its runs in the last 24 hours.
 
@@ -16,10 +14,10 @@ Until your agents send their first events, the page shows only **No agents yet**
 
 ![An agent page](/images/guides/agent.webp)
 
-1. **Agent.** Its name, state, model and when it was last seen. Below are its calls that asked a person, its blocked calls, the share of calls it made after reading untrusted content and its estimated cost, all for the last 24 hours. A dash means there is nothing to work it out from yet: no model calls, or a model without a known price.
+1. **Agent.** Its name, state, version, model, the app it runs in, the hash of its active rules and when it was last seen. Below are its calls that asked a person, its blocked calls, the share of calls it made after reading untrusted content and its estimated cost, all for the last 24 hours.
 2. **View runs.** Opens the run list for this agent.
-3. **Recent calls.** The agent's last 60 calls, with one lane for each kind of call it made, such as model calls, tool calls and guard decisions. Colors and marks work like the [run timeline](/guides/runs#read-a-run). An agent that has made no calls shows **No calls yet**.
-4. **Versions.** Each version of the agent, with its model, a hash of its instructions and when it was live. An incident ties to the version that caused it. Until a version is recorded, this reads **No versions yet**.
-5. **Incidents.** The incidents where this agent was the entry point or the turning point. If it only did the damage, one line says in how many incidents. With no incidents at all, this reads **No incidents yet**.
-6. **Permissions.** Over the last 30 days: the agents it delegated to, the agents it worked for, and any handoffs, with how much of that traffic was untrusted. A delegated agent can only use what its parent granted. With no delegations in either direction, it shows **No delegations in the last 30 days**.
-7. **Model calls per hour.** The agent's model calls over the last 24 hours, or **No model calls in the last 24 hours**.
+3. **Recent calls.** The agent's last 60 calls, with one lane for each kind: model calls, tool calls, approvals, messages and memory. Colors and marks work like the [run timeline](/guides/runs#read-a-run).
+4. **Versions.** Each version of the agent, with its model, a hash of its instructions and when it was live. An incident ties to the version that caused it.
+5. **Incidents.** The incidents this agent took part in, with its role in each: entry point, turning point or damage.
+6. **Permissions.** The tools it may call, the agents it may delegate to, the agents it works for and the agents that hand off to it, with how much of that traffic was untrusted. A delegated agent can only use what its parent granted.
+7. **Model calls per hour.** The agent's model calls over the last 24 hours.

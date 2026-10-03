@@ -2,17 +2,15 @@
 
 The Summary page is the monthly report for all your agents together. Every other page looks at one thing: one run, one incident or one agent. Summary looks across every agent over the last 30 days and shows where problems keep coming from, so you can decide what to fix.
 
-Use it for a regular review, for example once a week. It answers five questions:
+Use it for a regular review, for example once a week. It answers four questions, and holds one to-do list:
 
 | Section               | What it answers                                                     |
 | --------------------- | ------------------------------------------------------------------- |
 | Where incidents start | Which sources and tools keep causing incidents?                     |
 | What guards block     | What gets blocked, and when?                                        |
-| Agents and links      | Which agents let untrusted content in, and which links carry it?    |
+| Agents and links      | Which agents let untrusted content in, and which handoffs carry it? |
 | Run limits            | How many runs would the default limits stop?                        |
-| Quarantine            | Which new values are blocked everywhere, and which are close?       |
-
-Until there is something to report, the page shows only **Nothing to summarize yet**. After that, a section with nothing in the last 30 days says so in one line, such as **No blocks in the last 30 days**.
+| Quarantine            | Which new values are blocked everywhere and wait for a person?      |
 
 ## Where incidents start
 
@@ -25,7 +23,7 @@ Until there is something to report, the page shows only **Nothing to summarize y
 
 ![What guards block](/images/guides/summary-blocks.webp)
 
-1. **Guard filter.** Show every guard, or one guard that blocked something, with how many blocks each one made.
+1. **Guard filter.** Show every guard or one kind, with how many calls each one blocked.
 2. **Blocks per day.** Blocks per day over 30 days. Hover a column to read its day.
 3. **Blocks by hour.** Blocks by weekday and hour, in UTC. Brighter cells mean more blocks, and **Busiest hour** names the peak.
 
@@ -35,7 +33,7 @@ Until there is something to report, the page shows only **Nothing to summarize y
 
 1. **Entry points.** The agents that most often let untrusted content in.
 2. **Turning points.** The agents whose model calls most often decided to act on it.
-3. **Untrusted links.** The links between agents that carried untrusted content, with how many of their delegations did, ranked by that share.
+3. **Untrusted links.** The links between agents, ranked by how much untrusted content they carried, with the share of all their messages.
 
 ## Run limits
 
@@ -62,8 +60,9 @@ The fleet check watches recipients, bank accounts and domains that are new to yo
 ![Quarantine](/images/guides/summary-quarantine.webp)
 
 1. **A quarantined value.** The masked value and its field, the agents that used it, when it was quarantined, how many attempts were blocked and the last attempt.
-2. **Watching.** New values on their way to the limit, with how many runs used them out of 5.
-3. **More at 1 run.** Values seen in only one run, folded away. Click to show them.
+2. **Mark as known.** Opens the value so you can release it.
+3. **Watching.** New values on their way to the limit, with how many runs used them out of 5.
+4. **More at 1 run.** Values seen in only one run, folded away. Click to show them.
 
 ## Release a value
 

@@ -469,7 +469,6 @@ This is a dense, desktop-first tool surface (Operate mode): 14px body text, 13px
 - Square, zero-gap terminal panes for summaries, with cell meters and cell sparklines.
 - One texture: a dot grid behind banners that answers the pointer.
 - Loading shows grey bars sized like the value. A value that can never be known shows an em dash.
-- No data means no chart and no table. A page or section with nothing to show is its heading and one short Muted line, like a brand-new dashboard.
 - Errors are quiet neutral boxes. Amber means "a task is waiting", not "something broke".
 
 ## Colors
@@ -640,7 +639,7 @@ Load all three with `next/font/google` (`Manrope` with `variable: "--font-manrop
 - **Body** (Manrope 400, 14px, line-height 1.55): Default text, form labels, inputs and nav items.
 - **Body small** (Manrope 400, 13px): Table text on the overview, text buttons, toasts, menus, detail lists, notices and error boxes.
 - **Caption** (Manrope 400, 12px): Table headers, secondary cells, chips and help text. Help text uses line-height 1.8.
-- **Micro** (Manrope 400, 11px): Card-header meta and row errors.
+- **Micro** (Manrope 400, 11px): Card-header meta, row errors and empty chart text.
 - **Button** (Manrope 450, 14px; 500 on the primary button; 450 at 13px on small buttons).
 - **Mono counter** (Ubuntu Mono 400, 32px, line-height 1): The big number in a terminal card, zero-padded to two digits ("05").
 - **Mono split** (Ubuntu Mono 400, 28px, line-height 1.4): Two counts side by side in one card.
@@ -662,8 +661,7 @@ These titles and classifiers were drawn in a wide face at weight 200. Manrope is
 
 - Sentence case everywhere. Only the sidebar caption and the mono eyebrow are uppercase, and they get it from CSS.
 - A button that is working replaces its label with the step in progress, ending in a single ellipsis character ("Encrypting…", "Waiting for confirmation…"). Never three dots.
-- Loading is a grey bar. A value that cannot be known is an em dash (—). An absent value is a plain word in the Absent color ("Only you", "Not set", "None", "None yet").
-- A page or section with no data says so in one short line with no trailing period: "No runs yet" when nothing has ever existed, "No runs in the last 24 hours" for a windowed view. It never explains setup. See Empty pages.
+- Loading is a grey bar. A value that cannot be known is an em dash (—). An absent value is a plain word in the Absent color ("Only you", "Not set", "None").
 - Counters in terminal cards are zero-padded to two digits. Fractions are written with spaces, "12 / 30". Step counters are "1 / 4" in a wizard and "01 / 05" in a tour.
 - A figure always carries its unit. Dates are short en-GB in UTC ("3 Oct 2026"), with the long form ("3 October 2026 at 14:05") in a title tooltip.
 - Errors are full sentences: what happened, then what to do. The fallback is "Something went wrong. Try again."
@@ -686,7 +684,7 @@ These titles and classifiers were drawn in a wide face at weight 200. Manrope is
 - Single-card flows (the wizard): the content column becomes a flex column with `justify-content: center`, so the card sits in the vertical middle and can still grow.
 - Page heading row: flex, space-between, centered, gap 24px, margin-bottom 26px. At 760px and below it stacks with gap 14px. An actions slot whose children all render nothing is hidden.
 
-**Overview composition, top to bottom.** The hero chart (full content width: a heading row, the cell field and time labels, about 272px), then the gate banner when needed (28px below), then the terminal overview grid (28px below; 22px on mobile), then the body grid (30px below; 25px on mobile). The body grid is the main column (`minmax(0, 1fr)`) plus a 268px summary rail, gap 28px, `align-items: start`. The rail is sticky at top 24px. At 1180px and below the rail is 232px with a 22px gap. At 980px and below the rail moves under the main column as a static three-column strip (1fr 1.4fr 1fr). At 760px and below its sections stack. Before the project's first run, none of this is drawn: the page is the greeting and one line, "No activity yet".
+**Overview composition, top to bottom.** The hero chart (full content width: a heading row, the cell field and time labels, about 272px), then the gate banner when needed (28px below), then the terminal overview grid (28px below; 22px on mobile), then the body grid (30px below; 25px on mobile). The body grid is the main column (`minmax(0, 1fr)`) plus a 268px summary rail, gap 28px, `align-items: start`. The rail is sticky at top 24px. At 1180px and below the rail is 232px with a 22px gap. At 980px and below the rail moves under the main column as a static three-column strip (1fr 1.4fr 1fr). At 760px and below its sections stack.
 
 **Main column of the overview.** A grid with 28px row gaps (25px on mobile) that is also a size container (`container-type: inline-size`). Order: list one (section heading plus a compact table), then a row with list two and a 300px side banner (gap 24px, `align-items: stretch`, so the banner ends level with the table), then list three with two stacked sub-tables (gap 22px; 20px on mobile). The banner row collapses to one column when its banner is absent or when the column is 1004px or narrower.
 
@@ -731,7 +729,7 @@ These titles and classifiers were drawn in a wide face at weight 200. Manrope is
 
 The system is flat. Depth comes from tonal steps (#161616 for the page, #181818 for the rail, #191919 for the drawer, #1c1c1c for surfaces, #242424 for hover fills, #2a2a2a for selection) and from 1px hairlines. No card, menu, toast, drawer or modal has a shadow, including third-party ones, which get `box-shadow: none` and a 1px Strong Hairline instead.
 
-Overlays darken instead of lifting: the drawer and the mobile sidebar sit over a Scrim (black at 60%), and the product tour dims the page with black at 65% opacity. Nothing is frosted or blurred to hide it: a page shows what it has, or its heading and one line (see Empty pages).
+Overlays darken instead of lifting: the drawer and the mobile sidebar sit over a Scrim (black at 60%), and the product tour dims the page with black at 65% opacity. A signed-out page is "frosted": every panel separately gets `filter: blur(5px)` and opacity 0.66, while headings stay sharp.
 
 ### Shadow Vocabulary
 
@@ -862,44 +860,41 @@ Every chart is a field of square cells with one fixed 2px gap, like a terminal s
 - **Value rule:** a column lights floor(value ÷ unit) full cells, then lights the next cell from its bottom by the remainder, snapped to whole device pixels. Any value above zero shows at least one device pixel. Zero shows nothing. Gridlines sit on unit boundaries, so reading against the ticks stays exact.
 - **Field:** unlit cells are Chart Field (#1c1c1c). They are the grid, never data. Gridlines are 1px Chart Grid (#292929) lines drawn inside the row gaps at each tick.
 - **Labels:** y ticks are Mono axis in Muted, right-aligned in a 34px column and centered on their gridlines. The hero is the exception: its ticks hang in the page gutter. X labels sit 6px to 8px below the field. A label inside the field (a percentile or a breach, never a peak value) knocks out its cells: its text box plus one pitch, snapped to whole cells, usually inside a top band of rows that data never enters.
-- **Pane chrome:** charts live in terminal panes. The 38px Recess header holds the title (Label, Text Link) on the left, and a mono tag ("24H", "30D"), a 1×12 hairline divider and a "Table" toggle (Manrope 12px, Text Link, underlined in Hover Hairline at a 3px offset; Text Bright with a Text Secondary underline on hover) on the right. An optional readout row sits under the header, 12px above the field: Meta label pairs in Muted with Ubuntu Mono 12px values in Foreground, 7px apart, 20px between pairs.
+- **Pane chrome:** charts live in terminal panes. The 38px Recess header holds the title (Label, Text Link) on the left, and a mono tag ("24H", "7D"), a 1×12 hairline divider and a "Table" toggle (Manrope 12px, Text Link, underlined in Hover Hairline at a 3px offset; Text Bright with a Text Secondary underline on hover) on the right. An optional readout row sits under the header, 12px above the field: Meta label pairs in Muted with Ubuntu Mono 12px values in Foreground, 7px apart, 20px between pairs.
 - **Color:** see Chart colors in the Colors section. The main series is Signal Green, history and comparison are Context Gray, magnitude uses five heat steps, and status uses amber and red with a glyph and a word.
 - **Hover and focus:** bars, columns and heat cells are their own hit targets. Time series snap to the nearest column across the full plot height. The hovered column's unlit cells turn Highlight (#333333) and its lit cells Soft Mint. Its x label turns Foreground, and fixed labels nearby hide. A readout opens 8px to 14px beside the mark, on the side with more room: Control Hover fill (#2b2b2b), no border, 4px radius, padding 6px 9px 7px, no shadow and no arrow. Inside it: a 4px key cell in the mark's color, the value in Ubuntu Mono 13px Foreground and the unit in Manrope 300 12px Muted on one line (6px gaps), and the time or bucket below in Ubuntu Mono 11px Muted, indented 10px to clear the key cell. It fades in over 160ms. The field is focusable: Left and Right (plus Up and Down in heatmaps) move the hover, Home and End jump, and Escape clears. The readout is repeated in a polite live region.
 - **Table view:** every chart pane has the "Table" toggle (`aria-pressed`). It swaps the field for a compact table in the same pane body: a 30px sticky Recess header (11px Muted), 28px rows, Ubuntu Mono 12px, padding 0 12px, values right-aligned. The toggle then reads "Chart".
 - **Loading:** the field stays and a sweep crosses it from left to right. Unlit cells step from #1c1c1c to #222222, #2b2b2b and #2f2f2f as the sweep's center comes within 7, 4 and 2 columns, over 1.4s ease-in-out, repeating. Readouts and ticks become skeleton bars, and fixed x labels stay. Never green while loading. The pane gets `aria-busy`.
-- **Empty:** a chart is drawn only when its data sums to more than 0, and the page or section decides that, never the shared chart component. With nothing to show, the pane keeps its title and shows one inset Empty line ("No model calls in the last 24 hours"). No field, axes, ticks, legend, readouts, Table toggle, Live mark or cursor is drawn. Only panes in the overview's terminal grid also keep their tag, so the grid holds its shape.
-- **Error:** a read that fails is never drawn inside a field. The page shows its heading and a neutral error box with "Try again" (see Feedback blocks).
+- **Empty and error:** the field stays, and a centered knockout sentence explains it (Manrope 11px Muted, "No runs in the last 24 hours"). Ticks and readouts become em dashes. Empty and error look the same.
 - **Refetch:** the previous frame stays at 45% opacity with a 13px spinner before the tag. No skeleton flash and no layout jump.
 - **Live updates:** new data redraws in place. A new column appears at the right and the window shifts by redrawing. No slide, tween or draw-in.
 - **Reduced motion:** the hero cursor holds steady and the loading sweep stops. Everything else is already static.
-- **Accessibility:** every field is `role="img"` with a one-sentence summary ("Model calls per 10 min over the last 24 hours. Peak 144 at 14:40, now 13."). A status also has a glyph and a word. The table view is the full equivalent of the chart.
+- **Accessibility:** every field is `role="img"` with a one-sentence summary ("Events per 10 minutes over the last 24 hours. Peak 144 at 14:40, now 13."). A status also has a glyph and a word. The table view is the full equivalent of the chart.
 - **Implementation:** SVG at device size with `shape-rendering: crispEdges` and integer coordinates. Use one `<path>` per color and append one rectangle subpath per cell, so thousands of cells cost a handful of DOM nodes. Build the path strings in `useMemo` from the data, the pitch and the hover. A ResizeObserver recomputes the pitch. Labels and readouts are HTML positioned over the SVG. Hover is arithmetic (column = floor((x − left) ÷ pitch)), with no listener per cell. Do not use SVG `transform` attributes. Above about 10,000 cells, or for 60fps streams, draw the same geometry on a 2D canvas scaled to the device pixel ratio.
 
 #### Hero chart
 
-The first block of the overview and the product's signature: the last 24 hours of model calls as green cell columns.
+The first block of the overview and the product's signature: the last 24 hours of activity as green cell columns.
 
-- **Heading row:** the greeting in Display (Text Bright) on the left. It is the page's title, and it says how many agents are running ("Good evening. 2 agents are running."). On the right, aligned to the field's right edge: "Model calls per 10 min" (Meta label in Muted), the 24-hour total in Ubuntu Mono 13px Foreground followed by "in 24h", the Live mark (a 6px Signal Green square and "Live"), a hairline divider and the Table toggle. The row sits 18px above the field.
-- **Window:** 144 ten-minute buckets that end at the next 10-minute mark after the request (a request at 18:40 sharp gives 18:50), so every column covers a whole 10 minutes.
+- **Heading row:** the greeting in Display (Text Bright) on the left. On the right, aligned to the field's right edge: "Events per 10 min" (Meta label in Muted), the 24-hour total in Ubuntu Mono 13px Foreground followed by "in 24h", a 6px Signal Green live square, a hairline divider and the Table toggle. The row sits 18px above the field.
 - **Field:** flush with the content edge on both sides, so it lines up with the greeting and the panes below. 163 columns × 34 rows of 4px cells (pitch 6), 978 × 202px at a 1280px window. Columns 0 to 143 are the 144 ten-minute buckets, column 144 is the live cursor, and columns 145 to 162 are margin. The spare pixels left after whole pitches (always fewer than one pitch) widen the last margin columns by 1px each, so the field ends exactly on the right edge. Rows 0 to 29 plot data, and rows 30 to 33 are headroom that data never enters. The scale uses three nice steps. At other widths the pitch is floor((width − 66) ÷ 145), with a minimum of 5. At 1650px and up the field is 282px tall and gains rows.
 - **Corners:** the field keeps the system's 32px curve as stepped corners. A cell is drawn only when its center lies inside a rectangle with a 32px radius on the top-left, top-right and bottom-right corners. The bottom-left corner stays square because it is the chart's origin.
 - **Color:** lit columns in Signal Green, the field in Chart Field, and gridlines at each tick in the row gaps. No value is printed inside the field: the peak reads from the y ticks and the hover readout.
 - **Cursor:** two cells fused with no gap (4 × 10px) in Signal Green at column 144, blinking by opacity (1 then 0, `steps(1)`, every 1.06s). It is steady under reduced motion and while paused. When the feed is offline it disappears and the live square turns hollow.
-- **Axes:** y ticks in Mono axis Muted hang in the page gutter, right-aligned 8px left of the field (4px at 1250px and below, where the gutter is 22px), so nothing indents the field. They stay hidden at rest and fade in over 160ms while the chart is hovered, scrubbed or keyboard-focused. At 760px and below they stay hidden, and the readout and the Table view carry the values. Ticks of 1,000 and up use compact figures ("1.2K"). X labels 8px below the field mark the start of each quarter of the window, so they land on 10-minute marks ("18:50", "00:50", "06:50", "12:50"), and "now" sits under the cursor. The whole block is about 272px tall.
-- **Hover:** the nearest column, as in Foundations, with the readout "144 calls / 14:40–14:50". "Now" hides when the hovered time label comes near.
-- **Empty:** with no model calls in the window, the hero is the greeting and one Empty line, "No model calls in the last 24 hours". No field, total, Live mark or Table toggle. Before the project's first run the whole overview is the greeting and "No activity yet".
+- **Axes:** y ticks in Mono axis Muted hang in the page gutter, right-aligned 8px left of the field (4px at 1250px and below, where the gutter is 22px), so nothing indents the field. They stay hidden at rest and fade in over 160ms while the chart is hovered, scrubbed or keyboard-focused. At 760px and below they stay hidden, and the readout and the Table view carry the values. Ticks of 1,000 and up use compact figures ("1.2K"). X labels 8px below the field: "00:00", "06:00", "12:00", "18:00", and "now" under the cursor. The whole block is about 272px tall.
+- **Hover:** the nearest column, as in Foundations, with the readout "144 events / 14:40–14:50". "Now" hides when the hovered time label comes near.
+- **Signed out or empty:** the field stays and the knockout sentence says there is no activity yet. The hero is never frosted.
 
 #### Terminal overview
 
 Square panes tiled with no gaps under the hero chart, like a terminal split into windows.
 
-- **Grid:** four equal columns, rows 150px and 106px, areas "a b c c" / "d d c c". Pane a is a stat tile (Runs, tag "24H"), pane b a meter tile (Guarded tools, "24H"), pane c a cell trace (Block rate, "30D"), and pane d a status split (Guard decisions, "24H"). Each touching edge is drawn once by dropping one side's border, so the block reads as one 1px frame with inner rules. Square corners and page-colored fills.
+- **Grid:** four equal columns, rows 150px and 106px, areas "a b c c" / "d d c c". Pane a is a stat tile, pane b a meter tile, pane c a cell trace, and pane d a status split. Each touching edge is drawn once by dropping one side's border, so the block reads as one 1px frame with inner rules. Square corners and page-colored fills.
 - **Pane:** a flex column with a 1px Hairline border. A header strip at the top: 38px, Recess fill, padding 0 12px, hairline below, title in Label (Text Link) on the left and an optional mono tag on the right. One 12px inner gutter aligns everything inside.
 - **Stat tile:** the counter (Mono counter, Foreground) is centered in the space above a fixed 54px lower block. The block holds a meta row (a Meta label on the left, a mono value on the right) 9px above a 24-column × 2-row cell sparkline (cells 7px tall, row pitch 9, 16px in total), with 12px of padding below. History columns are Context Gray and the newest column is Signal Green.
-- **Meter tile:** the counter, then the same 54px lower block with a meta row ("Guarded / seen", "4 / 6") above a 24-cell meter. Because both tiles share the block height, their counters, meta rows and strips line up.
-- **Status split:** two cells divided by a vertical hairline, each padded 12px 16px: a 14px glyph and a Meta label on the left (a red cross with "Blocked", an amber triangle with "Asked a human") and a Mono split count on the right.
+- **Meter tile:** the counter, then the same 54px lower block with a meta row ("Concurrency", "22 / 50") above a 24-cell meter. Because both tiles share the block height, their counters, meta rows and strips line up.
+- **Status split:** two cells divided by a vertical hairline, each padded 12px 16px: a 14px glyph and a Meta label on the left (an amber triangle with "Warnings", a red cross with "Failures") and a Mono split count on the right.
 - **States:** while loading, values become skeletons sized like them (52×30 for a counter, 40×10 for a meta value, 44×26 for a split count), sparklines show only their field, and the grid has `aria-busy`. Unavailable values become em dashes.
-- **Empty:** a pane with nothing in its window keeps its header and tag and shows one inset Empty line instead of its counter, meter, trace or split: "No runs in the last 24 hours", "No tool calls in the last 24 hours", "No guarded tool calls in the last 30 days" and "No blocks or asks in the last 24 hours". Guard decisions counts as empty when nothing was blocked or asked. A block rate of 0% on a day with guarded calls is a real value and is drawn.
 - **Mobile (760px and below):** two columns, areas "a b" / "d d" / "c c", rows 150px 96px 258px, an 8px gap, and every pane keeps all four borders.
 
 #### Cell meter
@@ -935,7 +930,6 @@ Square panes tiled with no gaps under the hero chart, like a terminal split into
 
 - Part to whole in a table row, such as ok, warning and failed runs per agent. One row of 34 cells of 5px (pitch 7, 236px) in a fixed order: ok, warning, failed. Cells are allocated by largest remainder, and any share above zero gets at least one cell.
 - Ok is Context Gray (healthy stays quiet), warning is Amber and failed is Red. The section heading carries the legend (6px squares with words). The row prints the failure share in text colors ("4.8%" over "19 of 397"). Each bar is `role="img"` ("356 ok, 22 warnings, 19 failed").
-- A row with nothing to count draws no bar. The runs list and the overview's Recent runs show "None yet" in Absent (12px) for a run with no guard decisions.
 
 #### Row sparkline
 
@@ -945,9 +939,7 @@ Square panes tiled with no gaps under the hero chart, like a terminal split into
 
 #### Live event log
 
-- A pane that tails events like terminal output. On the overview it is the "Decision log": the latest 12 guard decisions of the last 24 hours, oldest first, leaving out the routine allows of permission and limit guards. The header carries the Live mark.
-- Each line is Ubuntu Mono 11px: the time with seconds in Muted, a 6px square for the outcome (Context Gray for allow and pass, Amber for ask, flag and strip, Red for block), the guard and its decision in Foreground ("egress block"), the agent in Text Secondary, and the tool and the reason in Muted. A rule in observe mode adds what it would have done before the reason ("would block · …"). The newest line is at the bottom, followed by the blinking cursor cell.
-- **Empty:** the pane title and one inset Empty line, "No guard decisions in the last 24 hours". No Live mark and no cursor.
+- A pane that tails events like terminal output. Each line is Ubuntu Mono 11px: the time in Muted, a 6px status square (Signal Green while running, Context Gray when done, Amber when waiting, Red when failed), the event name in Foreground, the agent in Text Secondary, and the id and detail in Muted. The newest line is at the bottom, followed by the blinking cursor cell. It scrolls by itself only while the reader is already at the bottom.
 
 #### Run timeline
 
@@ -960,24 +952,22 @@ The run page's main chart: one lane per agent, one cell per step in time order, 
 - **Links:** a handoff or message to another agent is a 1px vertical line from the cell's center to the target lane, in Caution Text when it carries untrusted content and Subtle otherwise.
 - **Axis:** offsets from the run start in Mono axis Muted ("0.42 s", "4 min 15 s"), 10px under the field, at least 64px apart, always with the first and last. Labels within 56px of the active step hide, and the active step's offset shows in Foreground.
 - **Hover and keys:** the hovered or selected cell gets a 1px Foreground ring outside its edge. The readout names the step, its kind, and "agent · context · decision", with a key cell in the context color. Left and Right move along steps, Up and Down jump to the nearest step in the next lane, Home and End jump, Enter, Space or a click opens the step in the drawer, and Escape clears.
-- **Pane:** title "Timeline" and one readout, Untrusted context ("3 steps"). The Table view is the step table. The summary names the step where context first turned untrusted.
-- **Empty:** a run with no steps yet is the pane title and one inset Empty line, "No steps yet". No field, readout, legend, Table toggle or drawer.
+- **Pane:** title "Timeline", tag "12 steps", readouts Agents, Untrusted context and Guard decisions. The Table view is the step table. The summary names the step where context first turned untrusted.
 - **Legend:** under a hairline 18px below the field (12px top padding), Manrope 300 11px Muted with 18px gaps: four 10px context swatches (untrusted ones with their 2px hole), then a 1×12 hairline divider and 10×5 mark swatches for only the marks this run has.
-- **Call timeline** (agent page, "Recent calls"): the same cells, colors, marks and legend, but the lanes are call kinds (Model calls, Tool calls, Guard decisions, Approvals, Messages, Memory), only the ones in use, with short names ("Model") under 560px. The tag counts the calls ("LAST 60"), and the readouts are Untrusted context, Asked and Blocked. An agent with no calls yet gets the pane title and one inset Empty line, "No calls yet".
+- **Call timeline** (agent page, "Recent calls"): the same cells, colors, marks and legend, but the lanes are call kinds (Model calls, Tool calls, Guard decisions, Approvals, Messages, Memory), only the ones in use, with short names ("Model") under 560px. Readouts are Calls, Untrusted context, Asked and Blocked.
 
 #### Agent graph
 
-How agents talk to each other over the last 30 days (tag "30D"), with the share of untrusted content on each link.
+How agents talk to each other over a window (tag "7D"), with the share of untrusted content on each link.
 
 - **Layout:** layers run left to right ("across") at 600px and wider, with 150px of label room on each side and a 78px row pitch. Below 600px they run top to bottom ("down"), 190px apart with 54px end margins.
-- **Nodes:** a 14px square: Signal Green running, Context Gray idle. There is no offline state. The label is the name in Ubuntu Mono 12px Foreground and a second line with only the model in Ubuntu Mono 11px Muted, empty when the model is not known. The first layer's labels sit before the square, right-aligned. In the down layout the label is centered in 104px. A 12px Faint chevron ends the label, because the whole node links to the agent page.
+- **Nodes:** a 14px square: Signal Green running, Context Gray idle, hollow with a Strong Hairline when offline. The label is the name in Ubuntu Mono 12px Foreground (Subtle when offline) and a second line in Ubuntu Mono 11px Muted ("v12 · model"). The first layer's labels sit before the square, right-aligned. In the down layout the label is centered in 104px. A 12px Faint chevron ends the label, because the whole node links to the agent page.
 - **Node hover and focus:** a 1px Text Bright outline 2px off the square, the label on a Nav Hover fill, and the name and chevron in Text Bright. Keyboard focus is the green outline at a 4px offset.
 - **Edges:** cubic curves ending in a 7px arrowhead. Color by untrusted share: under 10% Context Gray, 10% to 59% chart-cat-3, 60% and up Caution Text and dashed (3 + 2w on, 2 + w off). Width by message count: 1px under 100, 1.5px from 100, 2px from 1,000, 3px from 5,000. Two opposite edges sit 5px apart, and edges inside one layer bow toward the middle. Each has a 14px invisible hit stroke.
-- **Hover:** the hovered edge, or every edge of a hovered node, turns Soft Mint with a mint arrowhead. Other edges drop to opacity 0.22 and unrelated nodes to 0.35 over 150ms. The readout gives messages and "from to · 64% untrusted", or for a node its runs in 24h and only its state ("Running", "Idle").
+- **Hover:** the hovered edge, or every edge of a hovered node, turns Soft Mint with a mint arrowhead. Other edges drop to opacity 0.22 and unrelated nodes to 0.35 over 150ms. The readout gives messages and "from to · 64% untrusted", or for a node its runs in 24h and "state · app · roles".
 - **Keys:** the drawing is focusable. Arrow keys step through the edges, busiest first, and Tab moves on to the nodes.
-- **Legend:** under a hairline (16px above, 12px top padding), two groups 28px apart, each led by a Faint word: Agents (two 10px node swatches, Running and Idle, with no Offline swatch) and Untrusted (three 22px line swatches with "<10%", "10–59%", "60%+").
-- **Pane:** readouts Links, Messages and Untrusted. The Table view lists every link: From, To, Mostly, Messages, Untrusted, Share and Last seen.
-- **Empty:** with agents but no links between them, the pane is its title and one inset Empty line, "No links between agents yet", while the Agents roster still lists them. With no agents at all, the page is its heading and "No agents yet".
+- **Legend:** under a hairline (16px above, 12px top padding), three groups 28px apart, each led by a Faint word: Agents (three 10px node swatches), Untrusted (three 22px line swatches with "<10%", "10–59%", "60%+") and Messages (four line widths).
+- **Pane:** readouts Agents, Links, Messages and Untrusted. The Table view lists every link: From, To, Mostly, Messages, Untrusted, Share and Last seen. Empty is a 240px Chart Field with a knockout sentence.
 
 #### Replay rounds
 
@@ -990,8 +980,7 @@ Each replay round reruns the turning-point call 5 times with the suspect content
 - **Status line** above the rows, 16px above them: a status square and a 13px word (Confirmed is the red square, Not confirmed and Could not reproduce are Context Gray), or a spinner with "Replaying round 3…". It is a polite live region.
 - **Cost:** under a hairline (20px above, 16px top padding): "Cost $0.0123 / $0.50 cap" in 12px Muted with the spend in Ubuntu Mono 13px Foreground, and a 20-cell meter 196px wide on the right. A reached cap is a warning rule; a limited replay is a notice.
 - **Pane:** "Replay results", tag "3 × 5 + 5", readouts With, Without and p. A "Setup" disclosure (12px Text Link with a chevron, 16px below) opens a detail list naming the model, the call that counts as harmful and the content left out. The Table view lists round, with, without, p and cost.
-- **No button:** there is no "Replay round" action, so "Open run" is the incident page's only action.
-- **Empty:** with no rounds and none running, the Replay section is its heading and one Empty line, "No replay rounds yet". While the first round runs, the pane shows the status line and the pending row but no readouts, and its Table view shows "No finished rounds yet" instead of a header-only table.
+- **Main action:** "Replay round" is the page's liquid-metal button, in the heading row beside an outline "Open run" button raised to 46px. While a round runs it becomes a busy 46px primary button ("Replaying…"). When a replay is not allowed it is disabled with the reason in its title.
 
 #### Where charts depart from common chart defaults
 
@@ -1034,25 +1023,18 @@ Open-sided and line-only: no outer border, no radius, no zebra stripes, no verti
 - **Toolbar:** one 32px row, gap 8px, 14px below: the search field (flex 1), compact selects for filter and order, and a ghost 32px refresh icon button (pushed right on full pages). At 760px and below it wraps and search takes the first row.
 - **Selection:** the header checkbox selects visible rows and shows the indeterminate state for a partial selection. Shift-click selects a range. Escape clears the selection and returns focus to the header checkbox. When rows are selected, the filters and refresh are replaced in place by "N selected" (12px Muted), a small action button and a ghost clear icon button, all at 32px. Searching, filtering or refreshing clears the selection.
 - **Loading:** skeleton rows at the real row height: an empty selection cell, a 150×12 bar for the name, and 72×12 bars for the other cells. 5 rows on full tables and 4 on compact ones, with `aria-busy` and a screen-reader status line.
-- **Empty:** a table with no rows is never drawn, not even its header row. With no data, the section shows its heading (with no count chip) and one Empty line, and no toolbar or filter.
-- **No match:** a filter that matches nothing keeps its toolbar and, in place of the table, shows a centered block (minimum height 190px, padding 25px 18px, gap 12px) with a 14px heading at weight 450 ("No runs match"), an optional 13px Muted paragraph (44ch maximum) and at most one small button ("Clear filters"). It has no header row.
-- **Error:** a read that fails replaces the page body with the page heading and a neutral error box holding one sentence and "Try again". No icon, no illustration, no red.
-- **Embedded tables** on the overview show their first 4 or 5 rows and a "View all" text button in their section heading. An empty one shows neither. There is no pagination and no "load more".
+- **Empty and error:** below the header, a centered block (minimum height 190px, 320px on full pages, padding 25px 18px, gap 12px) with a 14px heading at weight 450, an optional 13px Muted paragraph (44ch maximum), and at most one small button ("Clear filters", "Try again"). Compact tables use a single quiet line: 84px tall, 12px Muted, centered, hairline below. Errors look exactly like empties: no icon, no illustration, no red.
+- **Embedded tables** on the overview show their first 4 or 5 rows and a "View all" text button in their section heading. There is no pagination and no "load more".
 
 ### Section headings and chips
 
 - **Section heading:** flex, space-between, centered, gap 14px, 16px above the table. The title is a Section title. A count chip follows it 8px away: Ubuntu Mono 12px in Note on a Tile fill, no border, 4px radius, padding 0 5px, line-height 18px. It shows an em dash while unknown. A "View all" text button sits on the right.
-- **Counts above 0 only:** a count chip shows only when its count is above 0. That holds for section headings, page titles, segment and tab counts and the sidebar's Approvals count. An empty section has no chip and no "View all".
-- **Page count:** the Runs page title carries the same chip for the runs it lists, with the tooltip "Runs", or "Runs that match the filters" while filters are set. A skeleton chip stands in while the list loads. With no runs at all, the title is just "Runs".
 - **Sub-heading:** Label in Muted, 10px above its table.
 - **Removable chip:** Ubuntu Mono 12px in Text Secondary on a Tile fill, no border, 4px radius, padding 2px 2px 2px 9px, gap 2px, ending in a 20×20 icon button with a 13px close glyph. Chips wrap with 6px gaps.
 
 ### Summary rail and status squares
 
 - **Rail:** the 268px column of the overview, sticky at top 24px. A Panel Black fill and 6px radius, with no border. Sections are padded 18px (15px at 1180px and below) and divided by hairlines. Each has a Rail title (13px Manrope 300, 16px below it). Identifiers are Ubuntu Mono 12px in Muted and wrap anywhere, never truncated. Rows are 12px Muted label and value pairs with a 10px gap, values in mono. The rail's meter is a cell meter with 22 square cells.
-- **Agents:** a "Running" row ("2 / 5") over the 22-cell meter, then every agent seen in the last 30 days, running first: a status square, the name in mono and its state word ("Running", "Idle") in Subtle. The rail shows no version.
-- **Guards:** each guard's decisions in the last 24 hours as label and value rows, in a fixed order (source, action, egress, limit, approval, permission, signature), then any others.
-- **Empty:** a section with nothing to list is its Rail title and one Empty line: "No agents in the last 30 days", "No guard decisions in the last 24 hours".
 - **Status squares:** a list with 12px gaps. Each item is 12px text with a 9px gap after a 6×6 square with no radius. Off: hollow, 1px Strong Hairline (a status glyph, so it keeps its edge), item text in Subtle. On: filled Signal Green, item text in Muted. Never check icons, never pills.
 - **Entrance:** the rail fades in over 280ms and its sections over 360ms at delays of 0, 80 and 160ms.
 
@@ -1118,29 +1100,14 @@ A single centered card that walks through a short setup, one step at a time.
 - **Placement:** 16px to the right of the target and vertically centered when it fits, otherwise below, otherwise above, always kept 16px inside the viewport.
 - **Spotlight:** a full-screen SVG mask dims the page with black at 65% opacity, cuts out the target grown by 5px with 6px corners, and draws a 1px Signal Green ring around the cutout. It jumps between targets without easing. The card's copy fades in over 160ms on each step.
 - **Behavior:** starts 800ms after the page's data settles, only once. Escape, Skip and Done all finish it and remember that. Focus is trapped in the card and returns to where it was afterward. The rest of the app is inert while it runs.
-- **Restart button:** a 44px circle fixed at the bottom-right, `max(24px, safe-area inset)` from the edges (16px at 760px and below). Control Hover fill, no border, a 24px wand glyph in Foreground. Hover gives a Highlight fill. It is hidden while the tour runs. It shares the bottom-right corner with toasts, so keep them from overlapping.
+- **Restart button:** a 44px circle fixed at the bottom-right, `max(24px, safe-area inset)` from the edges (16px at 760px and below). Control Hover fill, no border, a 24px wand glyph in Foreground. Hover gives a Highlight fill. It is hidden while the tour runs and while the page is locked. It shares the bottom-right corner with toasts, so keep them from overlapping.
 
-### Empty line
+### Locked page
 
-The one line a page or section shows in place of its charts and tables (`kit/empty.tsx`).
+When the visitor is signed out, the page keeps its shape behind frosted glass instead of hiding behind a modal.
 
-- **Text:** Manrope 300, 13px, line-height 1.6, Muted. It is a status (`role="status"`), so screen readers announce it.
-- **Placement:** directly under a page title or a section heading. Inside a pane it takes the inset padding (14px 12px, 14px 9px at 760px and below), so it starts on the pane's 12px gutter.
-- Never inside a box, a table, a chart field or a tile, and never with an icon or an illustration.
-
-### Empty pages
-
-A new install has no data, and every page looks like a brand-new dashboard: it says so plainly instead of drawing empty charts and tables.
-
-- **The rule:** with no data, a page or section shows its heading and one Empty line, and nothing else. Not drawn: chart fields, axes, ticks, legends, readouts, "Table" toggles, Live marks, blinking cursors, toolbars, filters, table header rows, tile grids, meters, and count chips at 0.
-- **Who decides:** the page or section decides it is empty, never the shared chart or table component. A chart is drawn only when its data sums to more than 0.
-- **Pages:** before a project's first run, the overview is the greeting and "No activity yet". The other pages show their title and one line: "No runs yet" on Runs and on Search (with no search field), "No agents yet", "No approval requests yet", "No incidents yet", and "Nothing to summarize yet" on Summary, without its date range. Settings keeps its tabs, and each tab carries its own line.
-- **Sections and panes:** a section keeps its heading, with no count chip and no "View all". A pane keeps its title. Panes in the overview's terminal grid also keep their tag, so the grid holds its shape.
-- **Copy:** one short line in plain words, with no trailing period, as Text conventions describes. "No X yet" when nothing has ever existed, "No X in the last 24 hours" or "No X in the last 30 days" for a windowed view.
-- **Real values stay:** a counter that belongs to something that exists is not empty. A run with no steps still shows its summary tiles, the agent page always shows its four stat tiles, and an Asked or Blocked of 0 is a real count.
-- **Filters:** a filter that matches nothing is not an empty page. It keeps its toolbar and shows its message and "Clear filters", with no header row (see Tables).
-- **Loading:** sections with a real source keep their skeletons. A page or section with no source yet shows only its heading and one small skeleton bar while it loads, never a table or chart skeleton. Nothing is called empty while it is still loading.
-- **Signed out:** every dashboard page needs a session, so there is no signed-out or frosted version of a page. Visitors land on the sign-in card first.
+- Each panel is frosted on its own: `filter: blur(5px)` and opacity 0.66. Headings stay sharp. The controls beside headings dim to 0.35 without blurring, because a blurred button next to a sharp title looks like a rendering fault. The content is inert. The hero chart is never blurred; it shows its empty field. The gate banner explains what is missing.
+- Never show the gate before the sign-in state is known. When something is merely missing (for example, nothing has been created yet), keep the page sharp and honestly empty instead of locking it.
 
 ### Origin label chips
 
@@ -1156,7 +1123,7 @@ Where a piece of content came from. Every step, message and search match carries
 
 One open request on the approvals page: what will run, what needs a second look, and the three answers.
 
-- **Card:** a Panel Black fill (#191919) with a 6px radius and no border. It is focusable (`tabIndex -1`), and when it is the URL target its fill steps up to Surface. Scroll margin 24px. Cards stack 24px apart under the "Waiting for an answer" section heading and its count chip (above 0), live processes first and the longest wait on top.
+- **Card:** a Panel Black fill (#191919) with a 6px radius and no border. It is focusable (`tabIndex -1`), and when it is the URL target its fill steps up to Surface. Scroll margin 24px. Cards stack 24px apart under the "Waiting for an answer" section heading and its count chip, live processes first and the longest wait on top.
 - **Body:** two columns (1.2fr and 1fr) with a 40px gap and no rule between them, padded 18px 18px 0 (14px sides at 760px and below). At 1180px and below they become one column, with the influence path 24px below.
 - **Title row:** the tool name in Ubuntu Mono 17px Text Bright at line-height 1.3, wrapping anywhere, and the status on the right (it wraps under the name when there is no room). The status is 12px Text Secondary: an amber status square, "Waiting 4 min" and, in Muted, "· alive 3 s ago". Once the process has stopped: a hollow square, "Stopped 18:29:40 UTC" and, in Muted, "· open 2 h". There is no separate heartbeat strip.
 - **Meta line:** 6px below, 12px Muted at line-height 1.7: the agent in mono Text Secondary, "run" and the short run id as a mono text link, "asked 18:31:02 UTC", and the request id in mono Faint at the end.
@@ -1166,8 +1133,7 @@ One open request on the approvals page: what will run, what needs a second look,
 - **Identical calls:** 16px below, one 12px Muted line, "Also covers 2 identical calls", followed by their runs as mono text links 8px apart.
 - **Answers:** a footer with no rule, padded 24px 18px 18px, buttons 8px apart: "Approve once" (primary), "Always approve" (secondary) and "Deny" (danger). "Always approve" carries the Hint "Same agent, tool and exact arguments, in any run, until revoked." When the process has stopped, "Approve once" carries the Hint "The process stopped. The next identical call uses this approval." At 560px and below the buttons stack.
 - **Deny confirm:** inline, in place of the buttons, at most 560px wide: a caution box ("Deny pay_invoice? billing-agent gets a refusal. This cannot be undone."), then "Deny call" (danger) and a ghost Cancel, 12px apart. Focus moves to the confirm and returns to Deny on cancel.
-- **After an answer:** the card leaves the list, a toast and a polite announcement confirm it, and focus moves to the next card or to the heading. With nothing open, the section is its heading, with no chip, and one Empty line, "Nothing waits for an answer". Standing grants ("Always approve") and past answers ("Decided") follow as tables, each left out while it has no rows. A segment that shows nothing keeps the segments and its message ("Nothing revoked" with "Show active grants"), with no header row.
-- **Empty page:** with no requests, grants or answers at all, the Approvals page is its title and "No approval requests yet". While it loads it shows the title and one small skeleton bar.
+- **After an answer:** the button shows the step ("Approving…", "Saving grant…", "Denying…"), the card leaves the list, a toast and a polite announcement confirm it, and focus moves to the next card or to the heading. With nothing open, the section shows a table state between hairlines ("Nothing waits for an answer"). Standing grants and past answers follow as tables.
 
 ### Influence path
 
@@ -1184,27 +1150,14 @@ Who delegated to whom in one run. Every message between them is one click away.
 - **Pane:** "Run graph" with no tag, body padding 12px 12px 16px.
 - **Tree:** the orchestrator at the root. Children sit 14px in and 14px below, behind a Strong Hairline left rule with 18px padding, 14px apart, each joined by an 18px Strong Hairline elbow 21px from its top.
 - **Incoming line:** 6px above each child, Manrope 300 11px Muted: "Delegation · 1.2 s", and the untrusted marker when the handoff carried untrusted content. The title gives kind, sender and channel.
-- **Node:** a square Panel Black fill (#191919), no border, padding 10px 12px. Left: the agent name as a mono 13px text link to its page, the version in Ubuntu Mono 11px Muted and the model in Ubuntu Mono 11px Faint, each left out when it is not known. Right: the step count ("4 steps") and cost in Ubuntu Mono 11px Text Secondary, and the untrusted marker when untrusted content reached that agent.
+- **Node:** a square Panel Black fill (#191919), no border, padding 10px 12px. Left: the agent name as a mono 13px text link to its page, the version in Ubuntu Mono 11px Muted and the model in Ubuntu Mono 11px Faint. Right: the step count ("4 steps") and cost in Ubuntu Mono 11px Text Secondary, and the untrusted marker when untrusted content reached that agent.
 - **Messages:** 20px below the tree, a 12px Text Link toggle, "7 messages", with a 14px chevron at 0.6 (`aria-expanded`). It opens the list 8px below, in place: rows opened by a hairline, a 68px column with the offset (Ubuntu Mono 11px Muted), then the kind in Text Secondary, "from › to" in Ubuntu Mono Foreground with an 11px chevron glyph at 0.6, the channel in Ubuntu Mono 11px Muted, and the carried origin chips. The summary follows in 12px Note, at most two lines, with the full text in its title. Padding 10px 0, hairline below. A run without messages shows "No messages" in 12px Absent.
-- **Run limits:** a "Run limits" pane in a 268px column beside the graph (232px at 1180px and below, under the graph at 980px and below), with one 18-cell meter per limit the run reported, limits it passed first, and the mode in words ("Observe", "Enforced", "Would stop", "Stopped"). It is left out when the run reports no limits, and the graph then takes the full width.
-
-### Agent page
-
-One agent: its last 24 hours, its recent calls, versions and incidents, with its permissions and hourly model calls beside them.
-
-- **Heading:** a breadcrumb ("Agents ›" and the name), then the name as the title in Ubuntu Mono 24px Text Bright with its state as a square and a word (Signal Green "Running", Context Gray "Idle"). One 12px Muted line follows: the model in mono, left out when it is not known, and "seen 4 min ago". "View runs ›" sits on the right.
-- **Stat tiles:** "LAST 24H" in Ubuntu Mono 11px Faint over four Panel Black tiles 8px apart (two columns at 760px and below): Asked, Blocked, Calls after untrusted and Est. cost, each a 26px mono counter under an 11px Muted label. Asked and Blocked add their amber or red glyph only above 0. Calls after untrusted shows an em dash when there were no model calls, and Est. cost when a price is not known. The tiles always render: they are counts for an agent that exists.
-- **Layout:** Recent calls (the call timeline), Versions and Incidents stack in the main column. A 360px side column holds Permissions and "Model calls per hour" (24 hourly columns, tag "24H"). At 1180px and below the side column moves under the main one.
-- **Permissions:** a pane with the "30D" tag. "Delegates to" and "Works for" list the linked agents as mono text links, each with its delegations and its untrusted share (Caution Text when mostly untrusted). One empty side reads "None", or "None · starts its own runs", in Absent. A "Handoffs" block appears only when there are handoffs. There is no list of held tools.
-- **Versions and Incidents:** section headings over tables. Incidents lists only those where the agent was the entry or the turning point; an agent that only took damage gets one line ("Damage only, in 2 incidents").
-- **Empty:** Recent calls says "No calls yet", Model calls per hour "No model calls in the last 24 hours", and Permissions with no delegations or handoffs either way "No delegations in the last 30 days", each a pane title over one inset Empty line with no tag. Versions and Incidents show their heading with no count chip or "View all", and "No versions yet" or "No incidents yet". An unknown name opens the not-found screen ("Agent not found").
 
 ### Incident path
 
 The incident page's path from entry point to damage, read left to right.
 
-- **Page head:** a "‹ Incidents" back link (13px Text Link), the incident title, and one action, "Open run" (secondary, raised to 46px). There is no "Replay round" button. Under the title, one 12px Muted line: "Opened 2 h ago · Run" and the run's status square and word.
-- **Loading and not found:** while it loads, the page is a title bar and one small skeleton bar. An unknown id opens "Incident not found" with one state block ("No incident with this id") and an "All incidents" button. The incident list with nothing in it is its title and "No incidents yet", with no toolbar or table, and it loads as the title and one small skeleton bar.
+- **Page head:** a "‹ Incidents" back link (13px Text Link), the incident title, and the actions: "Open run" (secondary, raised to 46px) and the liquid-metal "Replay round". Under the title, one 12px Muted line: "Opened 2 h ago · Run" and the run's status square and word.
 - **Pane:** "Path from entry point to damage", tag "5 steps". The nodes are equal columns at least 150px wide with 34px gaps, padding 12px, scrolling sideways inside the pane. At 760px and below they stack with 26px gaps.
 - **Link:** four 4px Context Gray cells with 2px gaps, centered in the gap between two nodes, vertical when stacked, like a trace in the field.
 - **Node:** a square fill with no border, padding 12px and an 8px gap. A node with a role (Entry point, Handoff, Turning point, Damage) is Nav Hover (#202020); other nodes are Panel Black (#191919). Top row (11px): the index "01" in Ubuntu Mono Faint, then the role or kind in Manrope 300 (Foreground when it has a role, Muted otherwise), and the time in Ubuntu Mono Muted on the right. Then the title in 13px Foreground at line-height 1.4 with the detail in its title. The bottom row holds the agent in Ubuntu Mono 11px Text Secondary (left out when the title already names it) and the origin chip.
@@ -1216,17 +1169,14 @@ The incident page's path from entry point to damage, read left to right.
 The summary page: what goes wrong across every agent over the last 30 days.
 
 - **Container:** the overview's container (max-width 1740px and its gutters). The heading's action slot holds "Last 30 days" (12px Manrope 300 Muted) and the date range in Ubuntu Mono Text Secondary. Sections stack 34px apart (28px at 760px and below) and fade in at 0, 40, 80, 120 and 160ms.
-- **Nothing at all:** when every section is empty, the page is its heading and one Empty line, "Nothing to summarize yet", with no "Last 30 days" range.
-- **Empty sections:** a section with nothing to show is its heading and one Empty line, with no tile grid, chart, table, filter or count chip: "No incidents in the last 30 days", "No blocks in the last 30 days", "No untrusted links in the last 30 days", "No runs over a limit in the last 30 days" and "Nothing in quarantine".
-- **Tile grid:** chart sections are a section heading over terminal panes tiled with 1px gaps on a Hairline background inside a 1px Hairline border. Panes drop their own border, so every shared edge is drawn once. These are pane edges, so they stay. Each pane is drawn only when it has data, and a pane left on its own spans the full width.
+- **Tile grid:** chart sections are a section heading over terminal panes tiled with 1px gaps on a Hairline background inside a 1px Hairline border. Panes drop their own border, so every shared edge is drawn once. These are pane edges, so they stay.
 - **Cell bars:** ranked lists in 28px rows of 8px cells. The label column takes 32% of the width (96px to 200px) in Ubuntu Mono 12px. The value is printed past the bar end in Ubuntu Mono 12px Foreground with its share in Muted. The pane that is the section's main signal is Signal Green; its partner is Context Gray.
-- **Where incidents start:** by entry source (green, with an "Untrusted" readout) and by damaging tool (grey), side by side, one column at 900px and below. The heading's count chip is the total, shown above 0.
-- **What guards block:** a segmented guard filter in the toolbar that offers "All guards" and only the guards that blocked something, then daily cell columns (24 rows, readout "Today") and a weekday-by-hour heatmap (tag "UTC", readout "Busiest hour"), one column at 1180px and below. It counts enforced block decisions.
-- **Agents and links:** entry points (green) and turning points (grey), then a full-width "Untrusted links" table pane with the links that carried untrusted content, highest share first: Link ("from → to" with a 14px lucide arrow), Untrusted and Delegations in Ubuntu Mono, and Untrusted share as a 16-cell, 132px meter with the share beside it.
-- **Run limits:** five 136px tiles (depth, fan-out, loops, steps, cost) 8px apart in 5 columns, 3 at 1180px and below and 2 at 760px and below, with the last tile spanning two columns at 1180px and below. Each tile is a Panel Black fill with no border and no tag: the name (12px Manrope 300 Text Link) at a 12px inset, a Mono counter (32px) with "would stop" (observe mode) or "stopped" (block mode) in Manrope 300 11px Muted beside it, and a 54px lower block with the limit value in Ubuntu Mono 11px Muted ("Limit: 6 levels" in its title) above a 24-cell meter scaled to the largest count. The section is empty when every count is 0; a 0 tile still shows beside tiles that have counts.
-- **Quarantine:** a section title with a count chip (above 0), a segmented kind filter only when more than 6 values are held (offering only the kinds held), then a read-only table of masked values: a name cell with a kind icon, the masked value and its field, then agents, quarantined, blocked attempts and last attempt. There is no row action. A "Watching" table follows (value, agents, first seen, runs to block) and is left out when nothing is watched. It leads with values seen in more than one run; the rest fold into one muted, underlined count ("4 more at 1 run", `aria-expanded`) that opens in place. When no value has more than one run, it lists them all. With values watched but none held, "Nothing in quarantine" sits above the Watching table.
-- **Loading:** sections with no source yet (Where incidents start, Run limits, Quarantine) show their heading and one small skeleton bar. What guards block keeps its toolbar and chart skeletons, and Agents and links keeps only the Untrusted links table skeleton.
-- **Segmented filter** (also the settings tabs): items 32px tall (37px for tabs), padding 0 10px, 13px Text Secondary, 6px radius, 4px apart, no border. Hover gives Nav Hover and Text Bright. The selected item is a fill like the selected nav item: Selected fill (#2a2a2a) and a Signal Green label (Soft Mint on hover), with no border. A count is a neutral mono chip (12px Note on Tile, 4px radius, padding 0 5px, no border) that never takes the green and shows only above 0.
+- **Where incidents start:** by entry source (green, with an "Untrusted" readout) and by damaging tool (grey), side by side, one column at 900px and below. The heading's count chip is the total.
+- **What guards block:** a segmented guard filter in the toolbar, then daily cell columns (24 rows, readout "Today") and a weekday-by-hour heatmap (tag "UTC", readout "Busiest hour"), one column at 1180px and below.
+- **Agents and links:** entry points (green) and turning points (grey), then a full-width "Untrusted links" table pane: "from → to" with a 14px lucide arrow, counts in Ubuntu Mono, and a 16-cell, 132px meter with the share beside it.
+- **Run limits:** five 136px tiles (depth, fan-out, loops, steps, cost) 8px apart in 5 columns, 3 at 1180px and below and 2 at 760px and below, with the last tile spanning two columns at 1180px and below. Each tile is a Panel Black fill with no border and no tag: the name (12px Manrope 300 Text Link) at a 12px inset, a Mono counter (32px) with "would stop" (observe mode) or "stopped" (block mode) in Manrope 300 11px Muted beside it, and a 54px lower block with the limit value in Ubuntu Mono 11px Muted ("Limit: 6 levels" in its title) above a 24-cell meter scaled to the largest count.
+- **Quarantine:** a section title with a count chip, a segmented kind filter only when more than 6 values are held, then a table of masked values (name cell with a kind icon, the field and a short hash) whose row action opens the drawer to mark a value as known. A "Watching" table follows (value, agents, first seen, runs to block). It leads with values seen in more than one run; the rest fold into one muted, underlined count ("4 more at 1 run", `aria-expanded`) that opens in place.
+- **Segmented filter** (also the settings tabs): items 32px tall (37px for tabs), padding 0 10px, 13px Text Secondary, 6px radius, 4px apart, no border. Hover gives Nav Hover and Text Bright. The selected item is a fill like the selected nav item: Selected fill (#2a2a2a) and a Signal Green label (Soft Mint on hover), with no border. A count is a neutral mono chip (12px Note on Tile, 4px radius, padding 0 5px, no border) that never takes the green.
 
 ### Search results
 
@@ -1240,24 +1190,12 @@ Search finds a value anywhere in any run and lists every step it touched, groupe
 
 ### Agent keys
 
-Keys the SDK sends events with, in the settings "Agent keys" tab.
+Keys the SDK sends events with, in the settings Keys tab.
 
 - **Panel intro:** one 13px Muted line, "Keys the SDK uses to send events.", on the left and "Create key" (secondary, with a 16px plus) on the right, 22px above the table.
-- **Columns:** Key, Created, Last used, Status, and the row action. The Key cell is a name cell with a 20px key icon, the name, and the prefix in mono ending in "…" ("qk_live_7f31…"). Last used reads "Not used yet" in Absent until the key is used. Status is a square and a word: Active is on; Revoked is hollow, with "2 h ago" (or "Just now") in 11px Note under it and the exact time in its title. A revoked row's text dims to Muted, and active keys come first.
-- **Empty:** with no keys, the intro and "Create key" stay and one Empty line, "No agent keys yet", takes the table's place.
-- **Revoke:** a small "Revoke" button (Hint "Agents using this key are refused within seconds.") that swaps in place for a text-button Cancel and a small danger "Revoke" confirm. Escape cancels and focus returns to the opener. While busy the confirm reads "Revoking…". A revoke the server refuses shows a neutral error box above the table.
-- **Create:** the drawer "Create key" holds one field, Name (mono, placeholder "billing-service"), because a key stores only its name. The name is checked on blur and again by the server: required, at most 48 characters, and not the name of another active key. The primary button reads "Creating key…" while busy, and the drawer cannot be closed until it is done. A refusal shows as a neutral error box under the field.
-- **Shown once:** after "Create key", the drawer switches to "Key created". It opens with a warning rule, "Copy this key now. It is shown only once.", whose identifier row holds the full secret with a Copy button. A detail list (name and prefix) and a "Use it" snippet follow. The snippet is the SDK's real setup, `quard.configure({ key, webhookUrl, hashKey })`, with each value read from `QUARD_AGENT_KEY`, `QUARD_WEBHOOK_URL` and `QUARD_HASH_KEY` (Ubuntu Mono 12px Text Soft on a Recess fill, no border, 6px radius, padding 10px 12px). The only action is the primary "I saved the key". The secret is forgotten once the drawer has closed; afterwards only the prefix is shown.
-
-### Settings tabs
-
-The Settings page's tab bar and the tabs after Agent keys. The bar is the segmented filter at 37px: "Agent keys", "Accounts", "Retention" and "Rules from code". The choice lives in the URL (`?tab=`), and "Agent keys" counts the active keys above 0.
-
-- **Accounts:** one Empty line, "Anyone who signs in with email or GitHub can use Quard". There are no accounts, roles or invites to manage.
-- **Retention:** a two-column table (Data, Kept for): Runs, kept for the project's own number of days, then Runs tied to an incident (1 year), Memory labels (Kept), Fleet first-seen index (1 year) and Approval arguments (Until decided), with figures in mono. Under it, a "Redaction" detail list with two rows: Sensitive values (IBANs, cards, emails and secrets) and Stored as (HMAC-SHA-256, in mono). There is no detector section. Before the install has a project, the tab is one Empty line, "No project yet".
-- **Rules from code:** the intro line reads "Read-only. Set in code and reported by the SDK." Three sections follow, each a heading with a count chip above 0: "Connected apps", "Rules" (with a search field and guard and mode filters) and "Origin overrides". Then the "To change a rule, edit the code and redeploy." notice with its code example.
-- **Origin overrides:** four columns: Override (the origin chip with its new label), Default (the "trust · sensitivity" it replaces, in Muted), Agents (mono) and Last seen.
-- **Code tab empty states:** an empty section is its heading and one line: "No SDK connected yet", "No rules reported yet" or "No origin overrides yet". Rules that match no filter keep the toolbar and show "No rules match" with a small "Clear filters" button. With nothing reported at all, the tab is "Nothing reported yet" and the notice, with no intro.
+- **Rows:** a name cell with a 20px key icon, the name and the prefix in mono; scope as a badge plus the agents in mono; owner; created; last used ("Not used yet" in Absent); status as a square and a word (Active is on, Revoked is hollow, with "2 h ago" in 11px Note under it). A revoked row's text dims to Muted.
+- **Revoke:** a small "Revoke" button that swaps in place for a text-button Cancel and a small danger "Revoke" confirm. Escape cancels and focus returns to the opener. While busy the confirm reads "Revoking…".
+- **Shown once:** after "Create key", the drawer switches to "Key created". It opens with a warning rule, "Copy this key now. It is shown only once.", whose identifier row holds the full secret with a Copy button. A detail list (name, prefix, scope, agents) and a "Use it" snippet (Ubuntu Mono 12px Text Soft on a Recess fill, no border, 6px radius, padding 10px 12px) follow, and the only action is the primary "I saved the key". The secret is forgotten once the drawer has closed; afterwards only the prefix is shown.
 
 ### Sign-in card
 
@@ -1347,9 +1285,6 @@ Vendor modals, tours and toasts are pulled onto this system rather than left in 
 - **Do** check for no horizontal page overflow at 390×844, 900×1000, 1512×1100 and 1920×1200, and keep menus and the tour card inside the viewport at 1440px and 390px.
 - **Do** keep text off chart cells: labels knock their cells out, and values and labels use text colors, never the series color.
 - **Do** give every chart a "Table" toggle, a one-sentence summary for screen readers, and the same readout on keyboard focus as on hover.
-- **Do** show a page or section with no data as its heading and one Empty line, and decide that in the page or section, not in the shared chart or table.
-- **Do** show a count chip only when its count is above 0.
-- **Do** keep a filter's toolbar when it matches nothing, with the message and "Clear filters" in place of the table.
 
 ### Don't:
 
@@ -1369,7 +1304,4 @@ Vendor modals, tours and toasts are pulled onto this system rather than left in 
 - **Don't** add pagination or "load more". Show the first rows and a "View all" link.
 - **Don't** open anything on top of the drawer. Confirm and edit inline.
 - **Don't** use Lexend Deca or Geist, and don't use Akt inside the dashboard.
-- **Don't** call something empty while it is still loading.
-- **Don't** draw an empty chart field, a table with only its header row, a legend, a Table toggle or a Live mark for a section with no data, and don't draw a table or chart skeleton for a section that has no source yet.
-- **Don't** explain setup in an empty state. One short line, with no trailing period, is enough.
-- **Don't** frost, blur or lock a page. Every dashboard page needs a session, and a page with nothing to show says so in one line.
+- **Don't** show the sign-in gate before the sign-in state is known, and never call something empty while it is still loading.
