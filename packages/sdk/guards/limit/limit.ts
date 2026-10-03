@@ -6,14 +6,7 @@ import { checkDaily } from "./daily.ts";
 import { checkDelegation, countDelegation } from "./delegation.ts";
 import { checkFleet, type FleetView } from "./fleet.ts";
 import { limitResult } from "./result.ts";
-
-function callsKey(tool: string): string {
-    return `calls:${tool}`;
-}
-
-function amountKey(tool: string, field: string): string {
-    return `amount:${tool}:${field}`;
-}
+import { amountKey, callsKey } from "./run-counts.ts";
 
 // Delegation limits follow the run limits' mode, not the guard's
 function checkRun(call: GuardCall, options: LimitOptions, mode: Mode): RuleResult[] {
