@@ -87,6 +87,7 @@ These need the local backend (see "See runs in the dashboard"):
 | `10-approvals-in-the-dashboard.ts` | Approvals answered in the dashboard: always approve, an amount rule that asks, a timeout                        |
 | `11-daily-limits.ts`               | Per-day limits shared by every process; run it twice and the count goes on                                      |
 | `12-fleet-check.ts`                | A new IBAN paid in 5 separate runs is quarantined (only observed for the first 7 days)                          |
+| `15-everything.ts`                 | All of it in one go: every guard type, several agents, an approval to click, completed, failed and blocked runs |
 
 These run with or without it:
 
