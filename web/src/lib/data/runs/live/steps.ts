@@ -1,4 +1,4 @@
-import type { RunDecision, RunDecisionDetail, RunLabel, RunStep } from "@quard/db";
+import type { RunDecision, RunDecisionDetail, RunLabel, RunStep, RunWaiter } from "@quard/db";
 import { contextOf, isInfluenced } from "../../labels/context";
 import type { GuardType, Label, Outcome, StepKind } from "../../types";
 import type { Step } from "../types";
@@ -190,8 +190,36 @@ function guardStep(decision: StoredDecision, labels: RunLabel[]): Step {
     };
 }
 
-// Model calls, tool calls and guard decisions in time order. A call comes before its own checks.
-export function buildSteps(source: StepSource): Step[] {
+// The approval a call waits on, as a step under the call from its first check until now
+function waitingStep(waiter: RunWaiter, labels: RunLabel[], firstCheck: Map<string, number>, now: number): Step {
+    const startedAt = firstCheck.get(waiter.stepId) ?? ms(waiter.since);
+    const context = contextOf(readBefore(labels, startedAt).map(labelOf));
+    return {
+        ...base,
+        id: waiter.askId,
+        parentId: waiter.stepId,
+        agent: waiter.agent,
+        kind: "approval",
+        name: waiter.tool,
+        startedAt,
+        durationMs: Math.max(0, now - startedAt),
+        status: "waiting",
+        context,
+        influenced: isInfluenced(context),
+        detail: "",
+        approval: {
+            requestId: waiter.requestId,
+            state: "waiting",
+            by: null,
+            decidedAt: null,
+            argsHash: waiter.argsHash,
+        },
+        error: null,
+    };
+}
+
+// Calls, checks and waiting approvals in time order, each call before its own checks
+export function buildSteps(source: StepSource, waiting: RunWaiter[] = [], now = 0): Step[] {
     const firstCheck = new Map<string, number>();
     for (const decision of source.decisions) {
         if (!firstCheck.has(decision.stepId)) firstCheck.set(decision.stepId, ms(decision.at));
@@ -205,6 +233,7 @@ export function buildSteps(source: StepSource): Step[] {
             step.kind === "model_call" ? modelStep(step, source.labels) : toolStep(step, source, firstCheck, owner),
         ),
         ...source.decisions.filter(shown).map((d) => guardStep(d, source.labels)),
+        ...waiting.map((waiter) => waitingStep(waiter, source.labels, firstCheck, now)),
     ];
     return steps.sort((a, b) => a.startedAt - b.startedAt || rank(a.kind) - rank(b.kind));
 }

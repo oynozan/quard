@@ -1,4 +1,4 @@
-import type { RunDecisionDetail, RunDetail, RunLabel, RunStep } from "@quard/db";
+import type { RunDecisionDetail, RunDetail, RunLabel, RunStep, RunWaiter } from "@quard/db";
 
 // A stored run, as @quard/db returns it: the poisoned-invoice attack, already redacted.
 // The model reads a web page, then tries to pay the IBAN on it, and the action guard blocks it.
@@ -212,5 +212,37 @@ export function storedRun(): RunDetail {
             }),
         ],
         warnings: [],
+    };
+}
+
+export const ASK = "a".repeat(16);
+export const REQUEST = "apr_0123456789abcdef";
+
+// The same run while payInvoice waits for a person, with its checks stored but not its tool call
+export function storedWaitingRun(): RunDetail {
+    const run = storedRun();
+    // Neither the waiting call nor the model call after it is stored yet
+    const stored = (stepId: string) => stepId !== T2 && stepId !== M3;
+    return {
+        ...run,
+        steps: run.steps.filter((step) => stored(step.stepId)),
+        labels: run.labels.filter((label) => stored(label.stepId)),
+    };
+}
+
+// The payInvoice call, waiting on its open request, as @quard/db lists it
+export function runWaiter(fields: Partial<RunWaiter> = {}): RunWaiter {
+    return {
+        askId: ASK,
+        requestId: REQUEST,
+        runId: RUN,
+        stepId: T2,
+        agent: "billing",
+        tool: "payInvoice",
+        argsHash: "c".repeat(32),
+        since: at(6.5),
+        lastBeatAt: at(20),
+        doneAt: null,
+        ...fields,
     };
 }
