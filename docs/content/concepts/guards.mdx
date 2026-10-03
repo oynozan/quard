@@ -10,7 +10,7 @@ A guard wraps a tool and checks every call to it. When the check fails, the tool
 | Action   | Tools that change something: payments, emails, deletes, deploys           | Rules on the arguments and their labels, such as "the IBAN must come from supplier records"                                                                                       | Allow, block or ask a person |
 | Approval | High-stakes tools                                                         | Nothing: it always asks a person first                                                                                                                                            | Run or block                 |
 | Egress   | Tools that send data out: email, HTTP posts, uploads                      | Where the data goes and how sensitive it is. Internal data may only go to allowed destinations, never to one that first appeared in untrusted content                             | Allow, block or ask a person |
-| Limit    | Any tool                                                                  | Calls, amounts and cost per run, agent or day, and a new value suddenly used by many agents                                                                                       | Allow or block               |
+| Limit    | Any tool                                                                  | Calls, amounts and cost per run, agent or day, and a new value suddenly used by many agents. On a send or delegate tool, also delegation depth, fan-out and loops                 | Allow or block               |
 
 A source guard runs after its tool returns, before the agent sees the output. The others run before the call.
 
@@ -37,7 +37,7 @@ Rules live in your app's code, and optionally in a policy file your team can edi
 - A rule your team writes blocks by default.
 - A rule in **observe** mode records what it would have done, "would block" or "would ask", and lets the call run. It never changes the final decision. Use it to try a new rule on live traffic first.
 - Approval guards have no mode. They always ask.
-- Defaults that Quard sets start in observe mode: the [run limits](/guides/summary#run-limits) and the first 7 days of the [fleet check](/guides/summary#quarantine).
+- Defaults that Quard sets start in observe mode: the [run limits](/concepts/run-limits) and the first 7 days of the [fleet check](/guides/summary#quarantine).
 - Switching a rule's mode is a code change and a redeploy, or an edit to the policy file.
 
 ## When a guard blocks

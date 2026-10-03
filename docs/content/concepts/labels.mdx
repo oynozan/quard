@@ -47,8 +47,8 @@ In the dashboard, the [run timeline](/guides/runs#read-a-run) colors every step 
 
 Content keeps its labels when it moves between agents. A brief from another agent that arrives as a user message still carries the web label of the page it came from, because Quard labels content by matching it against what the run has already read, not by the role of the message.
 
-- **Across processes**, a message carries only the run id, the step that sent it and a reference to its labels. The receiving side looks the labels up. A missing or broken reference counts as untrusted.
-- **Shared memory** keeps its labels too. They are stored with a hash of the content and come back on read, even in a later run. Content changed outside Quard fails the hash check and reads back as untrusted.
+- **Across processes**, a message carries only the run id, the step that sent it and a reference to its labels. The receiving side looks the labels up. A missing or broken reference counts as untrusted. See [Multi-agent](/concepts/multi-agent#across-processes).
+- **Shared memory** keeps its labels too. They are stored with a hash of the content and come back on read, even in a later run. Content changed outside Quard fails the hash check and reads back as untrusted. See [Shared memory](/concepts/shared-memory).
 
 ## Labels and AI
 
