@@ -20,6 +20,7 @@ export const GUARD_WORD: Record<GuardType, string> = {
     approval: "Approval guard",
     egress: "Egress guard",
     limit: "Limit guard",
+    permission: "Permission check",
 };
 
 export const STATUS_WORD: Record<StepStatus, string> = {

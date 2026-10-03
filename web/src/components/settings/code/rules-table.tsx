@@ -12,6 +12,7 @@ const GUARD_WORD: Record<RuleRow["guard"], string> = {
     approval: "Approval",
     egress: "Egress",
     limit: "Limit",
+    permission: "Permission",
 };
 
 export function guardWord(guard: RuleRow["guard"]): string {

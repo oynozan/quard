@@ -17,6 +17,7 @@ export type ModelUsage = {
     cachedTokens: number;
     outputTokens: number;
     costUsd: number;
+    costKnown?: boolean;
     // Tools the model asked for in its answer.
     toolCalls: string[];
 };
@@ -117,6 +118,7 @@ export type RunAgent = {
     steps: number;
     modelCalls: number;
     costUsd: number;
+    costKnown?: boolean;
     startedAt: number;
     endedAt: number;
     influenced: boolean;

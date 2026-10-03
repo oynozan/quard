@@ -9,7 +9,8 @@ export type Label = {
     sensitivity: Sensitivity;
 };
 
-export type GuardType = "source" | "action" | "approval" | "egress" | "limit";
+// "permission" is the check that an agent may use a tool at all
+export type GuardType = "source" | "action" | "approval" | "egress" | "limit" | "permission";
 export type Outcome = "allow" | "ask" | "block" | "pass" | "strip" | "flag";
 export type RunStatus = "running" | "waiting" | "completed" | "failed" | "blocked";
 
@@ -38,6 +39,8 @@ export type RunSummary = {
     durationMs: number;
     steps: number;
     costUsd: number;
+    // False when a model's price is unknown; the cost then shows as "—"
+    costKnown?: boolean;
     decisions: DecisionCounts;
     untrusted: boolean;
 };

@@ -411,6 +411,9 @@ importers:
       '@paper-design/shaders':
         specifier: 0.0.81
         version: 0.0.81
+      '@quard/db':
+        specifier: workspace:*
+        version: link:../db
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

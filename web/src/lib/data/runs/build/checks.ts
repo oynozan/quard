@@ -20,8 +20,8 @@ export type DecisionOverride = {
 
 export type Overrides = Record<string, DecisionOverride>;
 
-// Pipeline order for the checks that act before the call.
-const ORDER: Record<GuardType, number> = { limit: 0, action: 1, egress: 2, approval: 3, source: 4 };
+// Pipeline order for the checks that act before the call. Permission comes first.
+const ORDER: Record<GuardType, number> = { permission: 0, limit: 1, action: 2, egress: 3, approval: 4, source: 5 };
 
 function ruleHash(rule: string, guard: GuardSpec): string {
     return RUN_LIMITS.find((limit) => limit.rule === rule)?.hash ?? guard.hash;

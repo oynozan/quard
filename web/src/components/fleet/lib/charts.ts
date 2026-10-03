@@ -11,6 +11,7 @@ export const GUARD_NAMES: Record<GuardType, string> = {
     egress: "Egress",
     limit: "Limit",
     approval: "Approval",
+    permission: "Permission",
 };
 
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
