@@ -119,7 +119,7 @@ export function QuarantineSection({ quarantine, watching, check, now }: Quaranti
                     />
                 </Toolbar>
             ) : null}
-            {shown.length > 0 ? <QuarantineTable rows={shown} now={now} onMarkKnown={pick} /> : null}
+            <QuarantineTable rows={shown} now={now} onMarkKnown={pick} />
             {rows.length === 0 ? (
                 <TableState
                     title="Nothing in quarantine"

@@ -147,7 +147,8 @@ describe("QuarantineSection", () => {
         expect(heading().textContent).toBe("Quarantine0");
         expect(screen.getByRole("heading", { name: "Nothing in quarantine" })).toBeTruthy();
         expect(screen.getByText("Watching the iban, to and url fields.")).toBeTruthy();
-        expect(screen.getAllByRole("table")).toHaveLength(1);
+        // The quarantine table keeps its header over the empty state, then the watching table
+        expect(screen.getAllByRole("table")).toHaveLength(2);
     });
 
     it("names one watched field, and none before the check saw a value", () => {
@@ -189,7 +190,8 @@ describe("QuarantineSection", () => {
         await markKnown(`${DOMAIN.value} #7`);
 
         expect(screen.getByRole("heading", { name: "No quarantined domains" })).toBeTruthy();
-        expect(screen.getAllByRole("table")).toHaveLength(1);
+        // The quarantine table keeps its header over the empty state, then the watching table
+        expect(screen.getAllByRole("table")).toHaveLength(2);
         fireEvent.click(screen.getByRole("button", { name: "Show all" }));
         expect(listed()).toHaveLength(7);
     });

@@ -147,14 +147,17 @@ export function CellTrace({
                                 ) : null}
                                 <path d={cells.lit} fill="var(--signal)" />
                                 <path d={cells.over} fill="var(--warning)" />
-                                <line
-                                    x1={0}
-                                    x2={layout.width}
-                                    y1={limitY}
-                                    y2={limitY}
-                                    stroke="var(--warning)"
-                                    strokeDasharray={`${CELL} 2`}
-                                />
+                                {/* An empty field has no scale, so the limit line would sit at a made-up height */}
+                                {empty ? null : (
+                                    <line
+                                        x1={0}
+                                        x2={layout.width}
+                                        y1={limitY}
+                                        y2={limitY}
+                                        stroke="var(--warning)"
+                                        strokeDasharray={`${CELL} 2`}
+                                    />
+                                )}
                             </svg>
                             {empty ? (
                                 <FieldMessage

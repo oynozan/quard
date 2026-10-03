@@ -142,9 +142,9 @@ describe("CellBars", () => {
     it("says there is nothing to rank when the list is empty", () => {
         const { container } = renderBars({ items: [] });
         expect(chart().getAttribute("aria-label")).toBe("Nothing to rank yet");
-        // Centered on the track over the middle of five empty rows
+        // Centered on the full-width track over the middle of five empty rows, with no label column
         const message = screen.getByText("Nothing to rank yet");
-        expect([message.style.left, message.style.top, message.style.width]).toEqual(["278px", "56px", "140px"]);
+        expect([message.style.left, message.style.top, message.style.width]).toEqual(["190px", "56px", "140px"]);
         expect(container.querySelectorAll(".skel")).toHaveLength(0);
         fireEvent.pointerEnter(chart().firstElementChild!);
         fireEvent.keyDown(chart(), { key: "ArrowDown" });

@@ -22,7 +22,7 @@ export function TerminalOverview({ runsPerHour, coverage, blockRate, decisions24
         >
             <section className="terminal-pane" data-area="a" style={{ gridArea: "a" }} aria-label="Runs">
                 <PaneHeader title="Runs" tag="24H" />
-                <Counter value={formatInt(runs24h)} />
+                <Counter value={runs24h < 10 ? padCount(runs24h) : formatInt(runs24h)} />
                 <LowerBlock label="Per hour" value={`${lastHour} now`}>
                     <FitSparkline
                         values={hours}

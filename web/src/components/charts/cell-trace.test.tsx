@@ -124,7 +124,8 @@ describe("CellTrace with nothing to rate", () => {
         expect(cellCount(pathByFill(container, "var(--chart-field)"))).toBe(71 * 24);
         expect(pathByFill(container, "var(--signal)")?.getAttribute("d")).toBe("");
         expect(pathByFill(container, "var(--warning)")?.getAttribute("d")).toBe("");
-        expect(container.querySelector('line[stroke="var(--warning)"]')).toBeTruthy();
+        // No scale, so no limit line at a made-up height; the legend still names the limit
+        expect(container.querySelector('line[stroke="var(--warning)"]')).toBeNull();
         expect(field.getAttribute("tabindex")).toBe("-1");
         expect(screen.getByText(EMPTY).style.left).not.toBe("");
         expect(screen.getByText("1 May")).toBeTruthy();

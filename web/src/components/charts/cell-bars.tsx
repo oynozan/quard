@@ -71,10 +71,13 @@ export function CellBars({
     const textWidth = ready
         ? Math.max(...rows.map((r) => monoWidth(showShare ? `${valueText(r)} ${shareText(r)}` : valueText(r), 12)))
         : 0;
-    const labelWidth = Math.min(200, Math.max(96, Math.round(width * 0.32)));
+    // With nothing to rank there are no labels, so the empty tracks span the whole field
+    const labeled = ready || state === "loading";
+    const labelWidth = labeled ? Math.min(200, Math.max(96, Math.round(width * 0.32))) : 0;
+    const trackStart = labeled ? labelWidth + 12 : 0;
     const layout = barsLayout({
         values: rows.map((r) => r.value),
-        trackWidth: Math.max(60, width - labelWidth - 12),
+        trackWidth: Math.max(60, width - trackStart),
         cell,
         textWidth,
         max,
@@ -125,24 +128,25 @@ export function CellBars({
                         return (
                             <div
                                 key={i}
-                                className="grid items-center gap-3"
-                                style={{ height: ROW, gridTemplateColumns: `${labelWidth}px minmax(0, 1fr)` }}
+                                className={cn("grid items-center", labeled && "gap-3")}
+                                style={{
+                                    height: ROW,
+                                    gridTemplateColumns: labeled ? `${labelWidth}px minmax(0, 1fr)` : "minmax(0, 1fr)",
+                                }}
                                 onPointerEnter={() => ready && cursor.setIndex(i)}
                             >
-                                <span
-                                    title={row.label}
-                                    className={cn(
-                                        "truncate text-[12px]",
-                                        monoLabels && "mono",
-                                        on ? "text-ink" : "text-ink-2",
-                                    )}
-                                >
-                                    {ready ? (
-                                        row.label
-                                    ) : state === "loading" ? (
-                                        <Skeleton width={labelWidth * 0.6} height={10} />
-                                    ) : null}
-                                </span>
+                                {labeled ? (
+                                    <span
+                                        title={row.label}
+                                        className={cn(
+                                            "truncate text-[12px]",
+                                            monoLabels && "mono",
+                                            on ? "text-ink" : "text-ink-2",
+                                        )}
+                                    >
+                                        {ready ? row.label : <Skeleton width={labelWidth * 0.6} height={10} />}
+                                    </span>
+                                ) : null}
                                 <span className="relative block" style={{ height: cell }}>
                                     <svg
                                         width={layout.trackWidth}
@@ -176,8 +180,7 @@ export function CellBars({
                         className="absolute flex items-center justify-center bg-page text-[11px] font-light text-ink-muted"
                         style={{
                             left:
-                                labelWidth +
-                                12 +
+                                trackStart +
                                 Math.floor((layout.cells * layout.pitch - messageWidth) / 2 / layout.pitch) *
                                     layout.pitch,
                             top: Math.floor(rows.length / 2) * ROW,
