@@ -1,0 +1,27 @@
+{
+    "name": "quard-workspace",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@12.6.0",
+    "engines": {
+        "node": ">=24"
+    },
+    "scripts": {
+        "build": "pnpm -r build",
+        "test": "pnpm -r --no-bail test",
+        "typecheck": "pnpm -r typecheck",
+        "lint": "eslint . && pnpm --filter web lint",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "db:migrate": "pnpm --filter @quard/db migrate"
+    },
+    "devDependencies": {
+        "@eslint/js": "catalog:",
+        "@types/node": "catalog:",
+        "eslint": "catalog:",
+        "prettier": "catalog:",
+        "typescript": "catalog:",
+        "typescript-eslint": "catalog:",
+        "vitest": "catalog:"
+    }
+}
