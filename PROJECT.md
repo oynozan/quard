@@ -140,33 +140,33 @@ All **Claude's pick**, except the parts already set up in `web/`.
 
 ```ts
 import OpenAI from "openai";
-import { monitor, guard } from "quard";
+import { quard, guard } from "quard";
 
-monitor.configure({
+quard.configure({
     key: process.env.QUARD_AGENT_KEY,
     webhookUrl: process.env.QUARD_WEBHOOK_URL,
     controlUrl: process.env.QUARD_CONTROL_URL,
 });
 
-const client = monitor.wrap(new OpenAI());
+const client = quard.wrap(new OpenAI());
 
 const fetchPage = guard(rawFetchPage, { type: "source", origin: "web" });
 const sendEmail = guard(rawSendEmail, [{ type: "egress" }, { type: "limit" }]);
 const payInvoice = guard(rawPayInvoice, { type: "approval" });
 
-await monitor.run({ agent: "billing" }, async () => {
+await quard.run({ agent: "billing" }, async () => {
     const res = await client.responses.create({ model, input, tools });
     // run the model's tool calls through the guarded functions
 });
 ```
 
-The API names are proposals. See [Open items](#open-items).
+Developers use two names: the `quard` object and `guard()`. Inside Quard, the part that watches model calls is called the monitor.
 
 ### How monitor sees model calls
 
 Decided by Q1, Q2 and Q3.
 
-- `monitor.wrap(client)` installs Quard as the client's `fetch`. Every request, stream and endpoint passes through monitor before the app sees the result.
+- `quard.wrap(client)` installs the monitor as the client's `fetch`. Every request, stream and endpoint passes through the monitor before the app sees the result.
 - v1 supports the OpenAI Responses API in TypeScript. Keep the internal event format provider-neutral, so Anthropic and Python become adapters, not rewrites.
 - A Responses result does not include its input, so monitor reads the request itself. This also works with `store: false` and zero data retention.
 - Input items get labels by matching their content against labeled content the run already holds, not by their role. A brief from another agent that arrives as a "user" message keeps its web label.
@@ -191,15 +191,15 @@ Decided by Q1, Q2 and Q3.
 Decided by the spec (Guards in depth, step 1).
 
 - `guard()` and `monitor` read the run, agent and parent step from the current run context. In Node this is AsyncLocalStorage.
-- `monitor.run()` starts a run. `monitor.agent()` starts a child agent inside it. Everything inside inherits the tags, even across `await`.
+- `quard.run()` starts a run. `quard.agent()` starts a child agent inside it. Everything inside inherits the tags, even across `await`.
 - The OpenAI Agents SDK integration takes the current agent from the framework. Handoffs and agents-as-tools switch agents inside one `run()` call, so app code can't set it.
 - A call outside any scope joins the run of the response it chains to. Otherwise it starts a new run under the agent `"default"`, which holds every guarded tool. So single-agent apps need no scopes. (**Claude's pick**)
 
 ```ts
-await monitor.run({ agent: "orchestrator" }, async () => {
+await quard.run({ agent: "orchestrator" }, async () => {
     const plan = await client.responses.create({ model, input });
 
-    await monitor.agent("researcher", async () => {
+    await quard.agent("researcher", async () => {
         await client.responses.create({ model, input: plan.output_text });
         // tagged: same run, agent "researcher", parent step
         await fetchPage(url);
@@ -255,7 +255,7 @@ The rows for email, files and unknown content are **Claude's pick**.
 Teams change one origin at a time, in code. Every override is recorded in the run. Apps open to the public can mark the user as untrusted.
 
 ```ts
-monitor.configure({
+quard.configure({
     origins: {
         // our own MCP server holds CRM data
         "mcp:crm.acme.internal": { trust: "trusted", sensitivity: "internal" },
@@ -307,6 +307,7 @@ From the spec:
 monitor applies the same checks to what never passes through `guard()`, from Guards in depth:
 
 - Requested tool calls are checked against the agent's permissions and labels before the app receives them.
+- A requested tool call that fails this check stays in the response, marked blocked. When the app runs it through its guarded function, the guard returns the refusal at once and the tool never runs. A tool that isn't wrapped with `guard()` can only be recorded, so Quard warns about it.
 - In a stream, the event that completes a tool call is held until that check passes.
 - Hosted MCP approval requests are answered by `action` and `approval` rules.
 - Hosted web search marks the response web-influenced and checks the consulted domains.
@@ -409,7 +410,7 @@ Decided by the spec and Q11 to Q15.
     - They ride in the slot each channel already has: W3C baggage on HTTP, `_meta` on MCP, `metadata` on A2A, attributes on queue messages.
     - The sender stores the label record, with a hash of the content, before the message leaves.
     - The receiver looks the labels up through `control`.
-    - `monitor.inject({ content })` returns the three items for the channel's slot. On the receiving side, `monitor.continue(carrier, fn)` runs `fn` inside that run.
+    - `quard.inject({ content })` returns the three items for the channel's slot. On the receiving side, `quard.resume(carrier, fn)` runs `fn` inside that run.
     - A missing, unreadable or mismatched reference counts as untrusted. Value tracing reconnects the pieces later.
 - **Across agents.** Value labels search the whole run's content index, so an IBAN from one agent's web page is caught in another agent's payment.
 - **Shared memory** (Q14). A generic wrapper goes around the app's memory read and write functions, or around any store with get, put and search.
@@ -636,12 +637,14 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Database and queue | Postgres only, with pg-boss | Claude's pick |
 | — | SDK event format | Our own JSON API to `webhook`; W3C ids | Claude's pick |
 | — | Auth | Agent keys for the SDK; email and password accounts for the dashboard | Owner, Claude's pick |
+| — | SDK names | The `quard` object (`wrap`, `run`, `agent`, `configure`, `inject`, `resume`), `guard()`, `isGuardRefusal`, `GuardBlockedError` | Owner |
+| — | Blocked tool calls inside monitor | The call stays in the response, marked blocked; the guarded tool refuses it | Owner |
 
 ## Changes to the spec
 
 These points changed the spec. The spec doc was updated to match them on 2026-10-03.
 
-1. **monitor wraps the client.** The spec shows `monitor(await client.responses.create(...))`. Now `monitor.wrap(client)` wraps the client once (Q1).
+1. **The client is wrapped once.** The spec shows `monitor(await client.responses.create(...))`. Now `quard.wrap(client)` wraps the client once (Q1).
 2. **Approvals don't expire.** The spec says an approval is void "if any argument changes or it expires". Now it is void only if an argument changes (Q24).
 3. **Labels travel as a reference.** The spec says run tags and labels ride in message metadata. Now only ids and a label reference travel, and labels are looked up through `control` (Q11).
 4. **Replay compares both sides.** The spec says replay reruns without the suspect content about twenty times. Now it reruns with and without, up to 20 each, and stops early (Q16).
@@ -652,8 +655,6 @@ These points changed the spec. The spec doc was updated to match them on 2026-10
 
 Not decided yet:
 
-- **API names.** `monitor.wrap`, `monitor.run`, `monitor.agent`, `monitor.configure`, `monitor.inject`, `monitor.continue`, `isGuardRefusal` and `GuardBlockedError` are proposals.
-- **Blocked tool calls inside monitor.** What the app receives when monitor blocks a requested tool call. One option: keep the call in the response, mark it blocked, and have the guarded tool return the refusal at once. An unwrapped tool could then only be recorded.
 - **Hosted MCP approvals.** Answering an approval request takes a follow-up model request. Decide whether monitor sends it inside the same client call or hands it to the app.
 - **Agent keys.** One key per agent, or one per app that may host several agents.
 - **Late "approve once".** Used by the next identical call, as picked above, or dropped.

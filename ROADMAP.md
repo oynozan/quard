@@ -4,7 +4,7 @@ Seven milestones, in order. Each one ends with something that runs, with 100% te
 
 ## Start now
 
-Milestones 0 and 1 need no more decisions. Two open items must be settled during milestone 1: the final API names, and what the app receives when monitor blocks a tool call.
+Milestones 0 and 1 need no more decisions.
 
 ## M0. Workspace
 
@@ -19,8 +19,8 @@ Milestones 0 and 1 need no more decisions. Two open items must be settled during
 ## M1. SDK core, no backend
 
 - `packages/shared`: label types, value normalizers (IBAN, email, URL, domain, file path), refusal templates and event schemas.
-- `monitor.wrap(client)`: a fetch hook for the Responses API, streams included. The event that completes a tool call is held until the call is checked.
-- Run context: `monitor.run()` and `monitor.agent()`.
+- `quard.wrap(client)`: a fetch hook for the Responses API, streams included. The event that completes a tool call is held until the call is checked. A call that fails its check is marked blocked, and the guarded tool refuses it.
+- Run context: `quard.run()` and `quard.agent()`.
 - The content index, context labels and value labels: exact, normalized and inside longer text.
 - The `guard()` pipeline with `source` (pattern scans), `action`, `egress` and `limit` (per-run counts). Refusals, `onBlock: "throw"` and observe mode.
 - Tests against a mocked OpenAI server.
@@ -48,7 +48,7 @@ Milestones 0 and 1 need no more decisions. Two open items must be settled during
 ## M4. Multi-agent
 
 - A guarded send function and a receive function with a `source` guard.
-- `monitor.inject()` and `monitor.continue()`. Label records are stored before a message leaves, and looked up through `control`.
+- `quard.inject()` and `quard.resume()`. Label records are stored before a message leaves, and looked up through `control`.
 - Delegated permissions, and run limits in observe mode.
 - The shared-memory wrapper.
 - The OpenAI Agents SDK (JS) integration.
