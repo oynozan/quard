@@ -11,6 +11,8 @@ export { agentRecentCalls } from "./queries/agents/calls.ts";
 export type { AgentRunCalls } from "./queries/agents/calls.ts";
 export { agentLinks } from "./queries/agents/links.ts";
 export type { AgentLinkRow, LinksOptions } from "./queries/agents/links.ts";
+export { agentMessageLinks } from "./queries/agents/messages.ts";
+export type { AgentMessageRow } from "./queries/agents/messages.ts";
 export { agentLastSeen, agentRoster } from "./queries/agents/roster.ts";
 export type { AgentRosterRow, RosterWindow } from "./queries/agents/roster.ts";
 export { agentStats } from "./queries/agents/stats.ts";
