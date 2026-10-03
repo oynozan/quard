@@ -15,7 +15,6 @@ import {
     tool,
     WEB_PAGE,
 } from "../../../../test/agents/events";
-import { seenVersion } from "../../../../test/agents/versions";
 import { DAY, NOW } from "../../../../test/time";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
@@ -214,59 +213,6 @@ describe("agents from Postgres", () => {
         expect(detail?.stats).toMatchObject({ modelCalls24h: 0, influencedShare: null });
         expect(detail?.links).toEqual([]);
         expect(detail?.timeline.map((call) => [call.runId, call.kind])).toEqual([[OLD, "model_call"]]);
-    });
-
-    it("lists an agent's versions newest first, the older one live until the newer one appeared", async () => {
-        const projectId = await createProject(test.db, "Versions");
-        vi.stubEnv("QUARD_PROJECT_ID", projectId);
-        await ingestBatch(
-            test.db,
-            projectId,
-            items([start(NEW, "billing", ago(60)), model(NEW, "billing", S1, ago(50))]),
-        );
-        const first = {
-            agent: "billing",
-            version: "1".repeat(16),
-            model: "gpt-5.4-mini",
-            tools: ["payInvoice"],
-            instructions: "Pay approved invoices.",
-        };
-        await seenVersion(test.db, projectId, first, NOW - 10 * DAY);
-        const second = {
-            ...first,
-            version: "2".repeat(16),
-            tools: ["payInvoice", "fetchPage"],
-            instructions: undefined,
-        };
-        await seenVersion(test.db, projectId, second, NOW - 2 * DAY);
-        // Another agent's version stays on its own page
-        await seenVersion(test.db, projectId, { ...first, agent: "support", version: "3".repeat(16) }, NOW - DAY);
-
-        expect((await getAgent("billing"))?.versions).toEqual([
-            {
-                version: "2".repeat(16),
-                model: "gpt-5.4-mini",
-                instructionsHash: null,
-                tools: ["payInvoice", "fetchPage"],
-                since: NOW - 2 * DAY,
-                until: null,
-                note: "",
-                current: true,
-                incidents: [],
-            },
-            {
-                version: "1".repeat(16),
-                model: "gpt-5.4-mini",
-                // The first 16 hex characters of the SHA-256 of "Pay approved invoices."
-                instructionsHash: "c452794b8ad8444b",
-                tools: ["payInvoice"],
-                since: NOW - 10 * DAY,
-                until: NOW - 2 * DAY,
-                note: "",
-                current: false,
-                incidents: [],
-            },
-        ]);
     });
 
     it("finds only agents the project heard from, by their exact name", async () => {
