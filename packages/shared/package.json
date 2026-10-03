@@ -1,0 +1,19 @@
+{
+    "name": "@quard/shared",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./index.ts"
+    },
+    "scripts": {
+        "test": "vitest run --coverage",
+        "typecheck": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@types/node": "catalog:",
+        "@vitest/coverage-v8": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
+}
