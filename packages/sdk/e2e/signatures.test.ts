@@ -140,14 +140,34 @@ describe("a feed from a URL", () => {
         expect((await call("readFile", "../../etc/shadow")).ran).toBe(false);
     });
 
-    it("records a config_error and lets calls run when the download fails", async () => {
+    it("blocks every call until a download works, then checks calls again", async () => {
+        vi.useFakeTimers({ toFake: ["Date"], now: 0 });
+        const fetch = vi.fn(async () => new Response("down", { status: 503 }));
+        vi.stubGlobal("fetch", fetch);
+        quard.configure({ signatures: { url: FEED_URL } });
+
+        const first = await call("readFile", "./docs/readme.md");
+        expect(first.ran).toBe(false);
+        expect(isGuardRefusal(first.output) && first.output.reason).toBe("signatures_unavailable");
+        expect(events.filter((event) => event.type === "config_error")).toMatchObject([{ source: "signatures" }]);
+
+        fetch.mockImplementation(async () => new Response(readFileSync(FEED_FILE, "utf8")));
+        vi.setSystemTime(5000);
+        expect((await call("readFile", "./docs/readme.md")).ran).toBe(true);
+        expect((await call("readFile", "../../etc/shadow")).ran).toBe(false);
+    });
+
+    it("only records a missing feed in observe mode", async () => {
         vi.stubGlobal(
             "fetch",
             vi.fn(async () => new Response("down", { status: 503 })),
         );
-        quard.configure({ signatures: { url: FEED_URL } });
+        quard.configure({ signatures: { url: FEED_URL, mode: "observe" } });
 
         expect((await call("readFile", "../../etc/shadow")).ran).toBe(true);
-        expect(events.filter((event) => event.type === "config_error")).toMatchObject([{ source: "signatures" }]);
+        expect(decisionsOf(events).find((event) => event.rule === "feed")).toMatchObject({
+            decision: "block",
+            enforced: false,
+        });
     });
 });

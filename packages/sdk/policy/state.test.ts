@@ -7,6 +7,7 @@ import { PRESETS } from "./presets.ts";
 import {
     currentPreset,
     effectiveDetectorRules,
+    feedMissing,
     openSources,
     policyOptions,
     policyOrigins,
@@ -47,6 +48,7 @@ describe("without a policy file or feed", () => {
         expect(currentPreset()).toBe(PRESETS.balanced);
         expect(effectiveDetectorRules({ flagAt: 0.7 })).toEqual({ mode: "observe", flagAt: 0.7, stripAt: 0.9 });
         expect(signatureFeed()).toBeUndefined();
+        expect(feedMissing()).toBe(false);
         expect(signatureMode()).toBe("block");
     });
 });
@@ -135,10 +137,11 @@ describe("a signature feed", () => {
 
     it("downloads a URL feed in the background", async () => {
         openSources(undefined, { url: FEED_URL, refreshSeconds: 60, mode: "observe" });
-        expect(signatureFeed()).toBeUndefined();
+        expect(feedMissing()).toBe(true);
 
         await sourcesReady();
 
+        expect(feedMissing()).toBe(false);
         expect(signatureFeed()?.version).toBe("f1");
         expect(signatureMode()).toBe("observe");
         expect(fetch).toHaveBeenCalledWith(FEED_URL, expect.anything());
@@ -150,7 +153,7 @@ describe("a signature feed", () => {
 
         await sourcesReady();
 
-        expect(signatureFeed()).toBeUndefined();
+        expect(feedMissing()).toBe(true);
         expect(takeEvents()).toMatchObject([
             { type: "config_error", source: "signatures", message: `${FEED_URL}: HTTP 503` },
         ]);

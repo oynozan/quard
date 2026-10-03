@@ -64,7 +64,8 @@ An egress guard looks for secrets (API keys, tokens and private keys), card numb
 The feed is a JSON list of known attack patterns. [signatures.json](../signatures/signatures.json) is the starter feed, and [signatures.schema.json](../signatures/signatures.schema.json) is its schema.
 
 - `file` is reread before calls, like the policy file. A relative `file` is read from the policy file's folder.
-- `url` is downloaded in the background at startup and then every `refreshSeconds` (300 by default), with an ETag. Guarded calls wait for the first download. If it fails, a `config_error` event is recorded and calls go on without signatures until a download works.
+- `url` is downloaded in the background at startup and then every `refreshSeconds` (300 by default), with an ETag. Guarded calls wait for the first download.
+- Quard fails closed: until one download of a `url` feed works, every guarded call is blocked with the reason `signatures_unavailable`, and a `config_error` event says why. While calls come in, Quard tries the download again at most every 5 seconds. In `observe` mode the missing feed is only recorded.
 - `file`, `url` and `refreshSeconds` are read at startup. `mode` applies live: `block` acts on matches, and `observe` only records them.
 - A failed or invalid update keeps the last good feed and records a `config_error` event.
 

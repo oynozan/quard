@@ -31,7 +31,7 @@ describe("urlSource", () => {
         const source = urlSource(FEED_URL, parseN, () => undefined, 60_000);
         expect(source.current()).toBeUndefined();
 
-        await source.ready;
+        await source.settled();
         await source.pull();
         source.refresh(Date.now());
         source.close();
@@ -50,7 +50,7 @@ describe("urlSource", () => {
         const errors: string[] = [];
         const source = urlSource(FEED_URL, parseN, (message) => errors.push(message), 60_000);
 
-        await source.ready;
+        await source.settled();
         await source.pull();
         await source.pull();
         await source.pull();
@@ -65,12 +65,50 @@ describe("urlSource", () => {
         const fetch = answers(new Response('{"n":1}'), new Response('{"n":2}'));
         const source = urlSource(FEED_URL, parseN, () => undefined, 1000);
 
-        await source.ready;
+        await source.settled();
         await vi.advanceTimersByTimeAsync(1000);
         expect(source.current()).toBe(2);
         source.close();
         await vi.advanceTimersByTimeAsync(5000);
 
         expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("tries again on refresh, at most once per retry interval, until a version loads", async () => {
+        vi.useFakeTimers({ toFake: ["Date"], now: 0 });
+        const fetch = answers(new Error("offline"), new Response('{"n":1}'));
+        const source = urlSource(FEED_URL, parseN, () => undefined, 60_000, 5000);
+        await source.settled();
+
+        source.refresh(4999);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        source.refresh(5000);
+        await source.settled();
+        source.refresh(20_000);
+        source.close();
+
+        expect(source.current()).toBe(1);
+        expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("joins a download in flight instead of starting another", async () => {
+        let release = (): void => undefined;
+        const fetch = vi.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    release = () => resolve(new Response('{"n":1}'));
+                }),
+        );
+        vi.stubGlobal("fetch", fetch);
+        const source = urlSource(FEED_URL, parseN, () => undefined, 60_000, 0);
+
+        source.refresh(Date.now() + 1);
+        const joined = source.pull();
+        release();
+        await joined;
+        source.close();
+
+        expect(source.current()).toBe(1);
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 });

@@ -17,6 +17,7 @@ const ALL: ReasonCode[] = [
     "rule_failed",
     "signature_matched",
     "sensitive_data",
+    "signatures_unavailable",
 ];
 
 describe("refusalText", () => {

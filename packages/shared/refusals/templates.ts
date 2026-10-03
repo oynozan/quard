@@ -16,7 +16,8 @@ export type ReasonCode =
     | "content_blocked"
     | "rule_failed"
     | "signature_matched"
-    | "sensitive_data";
+    | "sensitive_data"
+    | "signatures_unavailable";
 
 const REASONS: Record<ReasonCode, (field: string) => string> = {
     permission_denied: () => "this agent is not allowed to use this tool",
@@ -36,6 +37,7 @@ const REASONS: Record<ReasonCode, (field: string) => string> = {
     signature_matched: (field) => `it matched the known attack signature ${field}`,
     // field is the kind of data found: secret, card number or IBAN
     sensitive_data: (field) => `the data to send holds a sensitive value (${field})`,
+    signatures_unavailable: () => "the attack signature feed could not be loaded",
 };
 
 export type RefusalInput = {

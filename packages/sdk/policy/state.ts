@@ -16,12 +16,13 @@ const DEFAULT_REFRESH_SECONDS = 300;
 type Sources = {
     policy: Source<PolicyFile> | undefined;
     feed: Source<CompiledFeed | undefined> | undefined;
-    // Settles after a URL feed's first download
-    ready: Promise<void>;
+    // Settles when a URL feed's download in flight is done
+    settled: () => Promise<void>;
     feedMode: "block" | "observe";
 };
 
-const NONE: Sources = { policy: undefined, feed: undefined, ready: Promise.resolve(), feedMode: "block" };
+const DONE = (): Promise<void> => Promise.resolve();
+const NONE: Sources = { policy: undefined, feed: undefined, settled: DONE, feedMode: "block" };
 let sources = NONE;
 
 function reportTo(source: "policy" | "signatures"): (message: string) => void {
@@ -44,18 +45,18 @@ function besidePolicy(config: SignaturesConfig, policyFile: string): SignaturesC
 }
 
 // A feed file must be valid at once. A URL feed downloads in the
-// background, and a failed download only records a config_error.
-function openFeed(config: SignaturesConfig): Pick<Sources, "feed" | "ready"> {
+// background, and a failed download records a config_error.
+function openFeed(config: SignaturesConfig): Pick<Sources, "feed" | "settled"> {
     const { file } = config;
     if (file !== undefined) {
         return {
             feed: load("signature feed", () => fileSource(file, parseFeed, reportTo("signatures"))),
-            ready: NONE.ready,
+            settled: DONE,
         };
     }
     const refreshMs = (config.refreshSeconds ?? DEFAULT_REFRESH_SECONDS) * 1000;
     const feed = urlSource(String(config.url), parseFeed, reportTo("signatures"), refreshMs);
-    return { feed, ready: feed.ready };
+    return { feed, settled: feed.settled };
 }
 
 // Throws if the policy file or a feed file is invalid. The sources in
@@ -69,7 +70,7 @@ export function openSources(policyFile: string | undefined, signatures: Signatur
     // The policy file's feed wins over the one set in code
     const config =
         fromPolicy !== undefined && policyFile !== undefined ? besidePolicy(fromPolicy, policyFile) : signatures;
-    const opened = config === undefined ? { feed: undefined, ready: NONE.ready } : openFeed(config);
+    const opened = config === undefined ? { feed: undefined, settled: DONE } : openFeed(config);
     closeSources();
     sources = { policy, ...opened, feedMode: config?.mode ?? "block" };
 }
@@ -86,8 +87,9 @@ export function refreshSources(at: number): void {
     sources.feed?.refresh(at);
 }
 
+// Settles when a URL feed's download in flight is done
 export function sourcesReady(): Promise<void> {
-    return sources.ready;
+    return sources.settled();
 }
 
 function policy(): PolicyFile | undefined {
@@ -118,6 +120,11 @@ export function effectiveDetectorRules(fromCode: Partial<DetectorRules> | undefi
 
 export function signatureFeed(): CompiledFeed | undefined {
     return sources.feed?.current();
+}
+
+// A feed is set, but no version of it has loaded yet
+export function feedMissing(): boolean {
+    return sources.feed !== undefined && sources.feed.current() === undefined;
 }
 
 // A mode in the policy file applies live
