@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FitMeter } from "@/components/charts/fit";
-import { DataTable, QuietEmpty, Td, Th, Tr } from "@/components/kit/data-table";
+import { DataTable, Td, Th, Tr } from "@/components/kit/data-table";
 import { SubHeading } from "@/components/kit/headings";
 import type { WatchedValue } from "@/lib/data/fleet";
 import { formatAge, formatLongDate } from "@/lib/format";
@@ -10,14 +10,15 @@ import { ValueCell } from "./value-cell";
 
 type WatchingTableProps = { rows: WatchedValue[]; runsToBlock: number; now: number };
 
-// New values the fleet check is still counting toward a block
+// New values the fleet check is still counting toward a block, drawn only when there are some
 export function WatchingTable({ rows, runsToBlock, now }: WatchingTableProps) {
     const [expanded, setExpanded] = useState(false);
+    if (rows.length === 0) return null;
     const sorted = [...rows].sort((a, b) => b.runs - a.runs || b.firstSeenAt - a.firstSeenAt);
-    // Values seen in more than one run lead; the rest fold into one count
+    // Values seen in more than one run lead, and single-run values fold into one count behind them
     const lead = sorted.filter((row) => row.runs > 1);
-    const rest = sorted.length - lead.length;
-    const shown = expanded ? sorted : lead;
+    const folded = lead.length > 0 ? sorted.length - lead.length : 0;
+    const shown = expanded || folded === 0 ? sorted : lead;
     return (
         <div className="mt-[22px]">
             <SubHeading>Watching</SubHeading>
@@ -68,15 +69,14 @@ export function WatchingTable({ rows, runsToBlock, now }: WatchingTableProps) {
                     ))}
                 </tbody>
             </DataTable>
-            {sorted.length === 0 ? <QuietEmpty>No new values are being counted</QuietEmpty> : null}
-            {rest > 0 ? (
+            {folded > 0 ? (
                 <button
                     type="button"
                     aria-expanded={expanded}
                     onClick={() => setExpanded(!expanded)}
                     className="mt-3 rounded-[2px] text-[12px] font-light text-ink-muted underline decoration-line-hover underline-offset-[3px] transition-colors hover:text-ink-bright hover:decoration-ink-2"
                 >
-                    {expanded ? "Show fewer" : `${rest} more at 1 run`}
+                    {expanded ? "Show fewer" : `${folded} more at 1 run`}
                 </button>
             ) : null}
         </div>

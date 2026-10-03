@@ -1,169 +1,156 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { RUN_A, runA, supportRuns } from "../../../../test/data-values-search/catalog";
-import { keyedHash } from "../values/hash";
-import { searchRuns } from "./query";
-import type { SearchResult } from "./types";
+import { found, setUpSearchDb } from "../../../../test/search/db";
+import {
+    agentRun,
+    CARD,
+    DOCS_RUN,
+    docsRun,
+    EMAIL,
+    FILE,
+    IBAN,
+    INVOICE_ID,
+    INVOICE_RUN,
+    invoiceRun,
+    READ,
+    T0,
+} from "../../../../test/search/events";
+import { searchRuns } from "@/lib/data/search";
 
-const mocks = vi.hoisted(() => ({ catalogRuns: vi.fn() }));
-vi.mock("@/lib/data/runs/catalog", () => ({ catalogRuns: mocks.catalogRuns }));
-mocks.catalogRuns.mockReturnValue([runA(), ...supportRuns(201)]);
+const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
+vi.mock("@/lib/auth/session", () => ({ requireSession }));
+vi.mock("next/server", () => ({ connection: vi.fn(async () => {}) }));
 
-const found = (result: SearchResult) => result.matches.map((m) => [m.stepId, m.field, m.match]);
+const project = setUpSearchDb();
+const at = (seconds: number) => T0 + seconds * 1000;
 
-describe("searchRuns with too little to search", () => {
-    it("finds nothing for an empty query", async () => {
-        expect(await searchRuns("   ")).toEqual({
-            query: "",
-            kind: "text",
-            byHash: false,
-            hash: null,
-            shown: "",
-            matches: [],
-            total: 0,
-            runs: 0,
-            truncated: false,
-        });
+describe("searchRuns before there is anything to search", () => {
+    it("has no runs before a project exists", async () => {
+        expect(await searchRuns("billing")).toEqual({ state: "no-runs" });
+        expect(requireSession).toHaveBeenCalled();
     });
 
-    it("finds nothing for plain text under 3 characters, even when values contain it", async () => {
-        const result = await searchRuns(" in ");
-        expect(result.query).toBe("in");
-        expect(result.kind).toBe("text");
-        expect(result.shown).toBe("in");
-        expect(result.matches).toEqual([]);
-        expect(result.total).toBe(0);
+    it("has no runs in a new project, whatever other projects hold", async () => {
+        await project(...invoiceRun());
+        await project();
+
+        expect(await searchRuns("")).toEqual({ state: "no-runs" });
+        expect(await searchRuns("billing")).toEqual({ state: "no-runs" });
     });
 
-    it("searches plain text from 3 characters", async () => {
-        expect(found(await searchRuns("inv"))).toEqual([
-            ["s4", "brief", "text"],
-            ["s3", "note", "text"],
-            ["s2", "output", "text"],
-        ]);
+    it("waits for a query once the project has runs", async () => {
+        await project(...invoiceRun());
+
+        expect(await searchRuns("   ")).toEqual({ state: "idle" });
     });
 });
 
 describe("searchRuns by name", () => {
-    it("finds an agent by name in any case", async () => {
-        const result = await searchRuns("  Billing ");
-        expect(result.kind).toBe("agent");
-        expect(result.shown).toBe("Billing");
-        expect(result.byHash).toBe(false);
-        expect(result.hash).toBeNull();
+    it("finds an agent in any case, at its first step in each run", async () => {
+        await project(...invoiceRun(), ...docsRun());
+
+        expect(await found(" BILLING ")).toEqual({
+            query: "BILLING",
+            kind: "agent",
+            byHash: false,
+            shown: "BILLING",
+            matches: [
+                {
+                    runId: INVOICE_RUN,
+                    stepId: READ,
+                    agent: "billing",
+                    tool: "",
+                    field: "agent",
+                    value: "billing",
+                    label: null,
+                    at: at(2),
+                    match: "name",
+                },
+            ],
+            runRows: [expect.objectContaining({ id: INVOICE_RUN, rootAgent: "billing", status: "completed" })],
+            total: 1,
+            runs: 1,
+            truncated: false,
+        });
+    });
+
+    it("finds a tool where it was called", async () => {
+        await project(...invoiceRun(), ...docsRun());
+
+        const result = await found("readfile");
+
+        expect(result).toMatchObject({ kind: "tool", byHash: false, shown: "readfile", total: 1, runs: 1 });
         expect(result.matches).toEqual([
             {
-                runId: RUN_A,
-                stepId: "s1",
-                agent: "billing",
-                tool: "",
-                field: "agent",
-                value: "billing",
-                kind: "agent",
-                label: runA().detail.steps[0].context,
-                at: 10,
-                byHash: false,
+                runId: DOCS_RUN,
+                stepId: FILE,
+                agent: "researcher",
+                tool: "readFile",
+                field: "tool",
+                value: "readFile",
+                label: null,
+                at: at(13),
                 match: "name",
             },
         ]);
     });
 
-    it("finds a tool by name", async () => {
-        const result = await searchRuns("fetch_page");
-        expect(result.kind).toBe("tool");
-        expect(found(result)).toEqual([["s2", "tool", "name"]]);
-    });
+    it("prefers an agent over a tool of the same name", async () => {
+        const other = "e".repeat(32);
+        await project(...docsRun(), ...agentRun(other, "readFile"));
 
-    it("stops at 200 matches, newest first, and counts the rest", async () => {
-        const result = await searchRuns("support");
-        expect(result.matches).toHaveLength(200);
-        expect(result.total).toBe(201);
-        expect(result.runs).toBe(201);
-        expect(result.truncated).toBe(true);
-        expect(result.matches[0].at).toBe(1200);
-        expect(result.matches[199].at).toBe(1001);
-    });
-});
+        const result = await found("readFile");
 
-describe("searchRuns for sensitive values", () => {
-    it("matches an IBAN by keyed hash, once per place, and masks it", async () => {
-        const result = await searchRuns("de89370400440532013000");
-        expect(result.kind).toBe("iban");
-        expect(result.byHash).toBe(true);
-        expect(result.hash).toBe(keyedHash("DE89370400440532013000").slice(0, 12));
-        expect(result.shown).toBe("DE89…3000");
-        expect(found(result)).toEqual([
-            ["s6", "memory", "exact"],
-            ["s3", "note", "inside"],
-        ]);
-        expect(result.matches.every((m) => m.byHash && m.value === "DE89…3000")).toBe(true);
-        expect(result.total).toBe(2);
-        expect(result.runs).toBe(1);
-        expect(result.truncated).toBe(false);
-    });
-
-    it("matches an email in any case", async () => {
-        const result = await searchRuns("Remit@Northwind-Payments.example");
-        expect(result.shown).toBe("r…@northwind-payments.example");
-        expect(found(result)).toEqual([["s5", "message", "exact"]]);
-    });
-
-    it("finds nothing for an email no run saw", async () => {
-        const result = await searchRuns("nobody@example.com");
-        expect(result.byHash).toBe(true);
-        expect(result.matches).toEqual([]);
-        expect(result.runs).toBe(0);
-    });
-});
-
-describe("searchRuns for URLs and domains", () => {
-    it("matches the same URL after normalizing it", async () => {
-        const result = await searchRuns("https://supplier-portal.example/suppliers/SUP-004417/");
-        expect(found(result)).toEqual([["s2", "output", "exact"]]);
-        expect(result.matches[0].byHash).toBe(false);
-    });
-
-    it("matches another URL on the same host", async () => {
-        expect(found(await searchRuns("https://supplier-portal.example/other"))).toEqual([["s2", "output", "host"]]);
-    });
-
-    it("matches a domain against hosts under it", async () => {
-        const result = await searchRuns("nwparts-secure.example");
-        expect(result.kind).toBe("domain");
-        expect(found(result)).toEqual([["s3", "url", "domain"]]);
-    });
-
-    it("matches a domain exactly, and a parent domain by main domain", async () => {
-        expect(found(await searchRuns("mail.acme.co.uk"))).toEqual([["s1", "input", "exact"]]);
-        expect(found(await searchRuns("acme.co.uk"))).toEqual([["s1", "input", "domain"]]);
-    });
-
-    it("finds nothing for a URL without a host", async () => {
-        const result = await searchRuns("http://:8080");
-        expect(result.kind).toBe("url");
-        expect(result.total).toBe(0);
-    });
-});
-
-describe("searchRuns for IDs and text", () => {
-    it("matches an ID on its own and inside a longer value", async () => {
-        const result = await searchRuns("INV-20931");
-        expect(result.kind).toBe("id");
-        expect(found(result)).toEqual([
-            ["s4", "brief", "exact"],
-            ["s3", "note", "inside"],
+        expect(result).toMatchObject({ kind: "agent", total: 1, runs: 1 });
+        expect(result.matches.map(({ runId, field }) => ({ runId, field }))).toEqual([
+            { runId: other, field: "agent" },
         ]);
     });
 
-    it("matches plain text inside values in any case", async () => {
-        const result = await searchRuns("INVOICE run");
-        expect(result.kind).toBe("text");
-        expect(found(result)).toEqual([["s2", "output", "text"]]);
+    it("lists the newest 50 runs of an agent and says there are more", async () => {
+        const runs = Array.from({ length: 51 }, (_, n) => agentRun((n + 1).toString(16).padStart(32, "a"), "billing"));
+        await project(...runs.flat());
+
+        const result = await found("billing");
+
+        expect(result).toMatchObject({ kind: "agent", total: 51, runs: 51, truncated: true });
+        expect(result.matches).toHaveLength(50);
+        expect(result.runRows).toHaveLength(50);
+    });
+});
+
+describe("searchRuns when a query cannot be searched", () => {
+    it("says when a query is no value and no name", async () => {
+        await project(...invoiceRun());
+
+        expect(await searchRuns("hello world")).toEqual({ state: "nothing" });
     });
 
-    it("does not match plain text against agent and tool names", async () => {
-        const result = await searchRuns("fetch_pa");
-        expect(result.kind).toBe("text");
-        expect(result.matches).toEqual([]);
+    it("refuses card numbers, which have no stored key", async () => {
+        await project(...invoiceRun());
+
+        expect(await searchRuns(CARD)).toEqual({ state: "card" });
+    });
+
+    it("turns IBAN and email search off without the hash key, keeping clear values", async () => {
+        await project(...invoiceRun());
+        vi.stubEnv("QUARD_HASH_KEY", "");
+
+        expect(await searchRuns(IBAN)).toEqual({ state: "hash-off" });
+        expect(await searchRuns(EMAIL)).toEqual({ state: "hash-off" });
+        expect((await found(INVOICE_ID)).total).toBe(2);
+    });
+
+    it("fails on a hash key that is not 64 hex characters", async () => {
+        await project(...invoiceRun());
+        vi.stubEnv("QUARD_HASH_KEY", "short");
+
+        await expect(searchRuns(IBAN)).rejects.toThrow("64 hex characters");
+    });
+
+    it("stops at the sign-in redirect for people who are not signed in", async () => {
+        requireSession.mockRejectedValueOnce(new Error("redirect:/sign-in"));
+
+        await expect(searchRuns("billing")).rejects.toThrow("redirect:/sign-in");
     });
 });

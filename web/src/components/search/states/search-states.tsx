@@ -1,16 +1,12 @@
-import Link from "next/link";
-import { DataTable, TableState } from "@/components/kit/data-table";
 import { DetailList, DetailRow } from "@/components/kit/detail/detail-list";
-import { buttonVariants } from "@/components/ui/button";
-import { SEARCH_MIN_WIDTH, SearchColgroup, SearchHead } from "../results/search-columns";
+import { EmptyLine } from "@/components/kit/empty";
 
-// What each kind of query finds, shown before the first search.
+// What each kind of query finds, shown before the first search
 const KINDS: { term: string; finds: string }[] = [
-    { term: "Domain or URL", finds: "Same host or main domain" },
-    { term: "IBAN, card or email", finds: "Exact match, by hash" },
+    { term: "IBAN or email", finds: "Exact match, by hash" },
+    { term: "URL or domain", finds: "Same host or main domain" },
     { term: "File path or ID", finds: "Any value that holds it" },
-    { term: "Agent or tool", finds: "Runs where it appears" },
-    { term: "Other text", finds: "3+ characters" },
+    { term: "Agent or tool name", finds: "Runs where it appears" },
 ];
 
 export function SearchIntro() {
@@ -30,40 +26,23 @@ export function SearchIntro() {
     );
 }
 
-// The header row with a centered state block under it, as full tables show empties.
-function StateFrame({ children }: { children: React.ReactNode }) {
-    return (
-        <div>
-            <DataTable minWidth={SEARCH_MIN_WIDTH} className="text-[14px]">
-                <SearchColgroup />
-                <SearchHead />
-            </DataTable>
-            <div role="status" className="min-h-[320px] border-b border-line [&>div]:min-h-[320px]">
-                {children}
-            </div>
-        </div>
-    );
-}
+export type SearchStop = "card" | "hash-off" | "nothing" | "no-match";
 
-const CLEAR = (
-    <Link href="/search" scroll={false} className={buttonVariants({ variant: "outline", size: "sm" })}>
-        Clear search
-    </Link>
-);
+const STOP_LINE: Record<Exclude<SearchStop, "hash-off">, string> = {
+    card: "Card numbers can't be searched",
+    nothing: "Not an IBAN, email, URL, domain, path, ID, agent or tool",
+    "no-match": "No matches",
+};
 
-export function SearchNoMatch({ byHash }: { byHash: boolean }) {
-    const body = byHash ? "Sensitive values match only in full." : "Try a shorter value or the main domain.";
+// Why a search lists nothing, in place of the results
+export function SearchStopped({ reason }: { reason: SearchStop }) {
+    if (reason !== "hash-off") return <EmptyLine>{STOP_LINE[reason]}</EmptyLine>;
     return (
-        <StateFrame>
-            <TableState title="No matches" body={body} action={CLEAR} />
-        </StateFrame>
-    );
-}
-
-export function SearchTooShort() {
-    return (
-        <StateFrame>
-            <TableState title="Type a little more" body="Text needs 3 or more characters." action={CLEAR} />
-        </StateFrame>
+        <EmptyLine>
+            IBAN and email search is off
+            <span className="block">
+                Set <span className="mono">QUARD_HASH_KEY</span> to the key your agents use
+            </span>
+        </EmptyLine>
     );
 }

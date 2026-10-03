@@ -2,7 +2,7 @@ import type { RunLabel } from "@quard/db";
 import type { ValueAppearance, ValueKind, ValueLabel, ValueMatch } from "../../types";
 import type { StepArg } from "../types";
 
-// A stored value key: "iban:DE89…3000#<hash>" for sensitive values, "host:acme.com" for others
+// A stored value key, such as "iban:<masked>#<hash>" for a sensitive value or "host:<name>" for others
 type Key = { kind: string; shown: string; full: string };
 
 const SENSITIVE = new Set(["iban", "email"]);

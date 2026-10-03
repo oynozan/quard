@@ -1,61 +1,65 @@
-import { SDK_APPS } from "../guards/apps";
-import { RUN_LIMITS } from "../guards/limits";
-import { TOOLS } from "../guards/tools";
-import { ORIGIN_OVERRIDES } from "../labels/origins";
-import { NOW, DAY } from "../rng";
-import { ACCOUNTS } from "../values/people";
-import { agentKeys, keyPrefix, RETENTION } from "./fixtures";
-import type { RuleRow, SettingsData } from "./types";
+import "server-only";
+import { listAgentKeys, originOverrides, projectSettings, type AgentKeyRow, type OriginOverrideRow } from "@quard/db";
+import { DEFAULT_MAPPING, originKind, type OriginOverride } from "../labels/origins";
+import { projectScope } from "../scope";
+import { retentionRows } from "./retention";
+import type { AgentKey, SettingsData } from "./types";
 
-// Every rule the connected SDKs reported, once per rule name.
-export function rulesFromCode(): RuleRow[] {
-    const rows = new Map<string, RuleRow>();
-    for (const tool of TOOLS) {
-        for (const guard of tool.guards) {
-            const row = rows.get(guard.rule);
-            if (row) {
-                row.tools = [...new Set([...row.tools, tool.name])];
-                row.apps = [...new Set([...row.apps, ...tool.apps])];
-                continue;
-            }
-            rows.set(guard.rule, {
-                name: guard.rule,
-                guard: guard.type,
-                tools: [tool.name],
-                apps: [...tool.apps],
-                mode: guard.mode,
-                hash: guard.hash,
-                summary: guard.summary,
-                source: guard.source,
-            });
-        }
-    }
-    rows.delete("run-limits");
-    for (const limit of RUN_LIMITS) {
-        rows.set(limit.rule, {
-            name: limit.rule,
-            guard: "limit",
-            tools: limit.name === "steps" || limit.name === "cost" ? [] : ["delegate"],
-            apps: SDK_APPS.map((app) => app.name),
-            mode: limit.mode,
-            hash: limit.hash,
-            summary: `${limit.limit} ${limit.unit} per run`,
-            source: limit.name === "loops" ? "team" : "product default",
-        });
-    }
-    return [...rows.values()];
+// Overrides come from the newest runs, the same window the runs list reads
+const RUNS = 200;
+
+function empty(): SettingsData {
+    return { hasProject: false, keys: [], retention: [], origins: [], rules: [], sdks: [] };
 }
 
-// Agent keys, accounts, retention, and the read-only origins and rules from code.
-export async function getSettings(): Promise<SettingsData> {
+function msOf(time: Date | null): number | null {
+    return time === null ? null : time.getTime();
+}
+
+function keyOf(row: AgentKeyRow): AgentKey {
     return {
-        keys: agentKeys(),
-        accounts: ACCOUNTS,
-        retention: RETENTION,
-        origins: ORIGIN_OVERRIDES,
-        rules: rulesFromCode(),
-        sdks: SDK_APPS.map(({ keyId, ...app }) => ({ ...app, key: keyPrefix(keyId) })),
-        hashKey: { algorithm: "HMAC-SHA-256", setAt: NOW - 52 * DAY, previousKeptUntil: null },
-        detector: { name: "Jev", version: "jev-1.13.0", mode: "observe" },
+        id: row.id,
+        name: row.name,
+        prefix: row.prefix,
+        createdAt: row.createdAt.getTime(),
+        lastUsedAt: msOf(row.lastUsedAt),
+        revokedAt: msOf(row.revokedAt),
+    };
+}
+
+// An override beside the default it replaces, which also fills a side it left out
+function overrideOf(row: OriginOverrideRow): OriginOverride {
+    const base = DEFAULT_MAPPING[originKind(row.origin)];
+    return {
+        origin: row.origin,
+        trust: row.trust ?? base.trust,
+        sensitivity: row.sensitivity ?? base.sensitivity,
+        defaultTrust: base.trust,
+        defaultSensitivity: base.sensitivity,
+        agents: row.agents,
+        seenAt: row.seenAt.getTime(),
+    };
+}
+
+// The current project's keys, retention and the origin overrides its runs reported
+export async function getSettings(): Promise<SettingsData> {
+    const scope = await projectScope();
+    if (!scope) return empty();
+    const { db, project } = scope;
+    const [keys, settings, origins] = await Promise.all([
+        listAgentKeys(db, project.id),
+        projectSettings(db, project.id),
+        originOverrides(db, project.id, { limit: RUNS }),
+    ]);
+    // The project was removed between the two reads
+    if (!settings) return empty();
+    return {
+        hasProject: true,
+        keys: keys.map(keyOf),
+        retention: retentionRows(settings.retentionDays),
+        origins: origins.map(overrideOf),
+        // Rules and connected apps arrive with the SDK connect step
+        rules: [],
+        sdks: [],
     };
 }

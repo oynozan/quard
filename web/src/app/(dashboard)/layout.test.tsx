@@ -1,10 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OPEN } from "../../../test/approvals/requests";
 import { stubBrowser } from "../../../test/auth-app/browser";
 import { shadersModule } from "../../../test/auth-app/shell";
 import { signSession, type Session } from "@/lib/auth/session-token";
-import { openApprovals } from "@/lib/data/approvals";
+import { getApprovals } from "@/lib/data/approvals";
 import DashboardLayout from "./layout";
+
+vi.mock("@/lib/data/approvals", async (importOriginal) => {
+    const real = await importOriginal<typeof import("@/lib/data/approvals")>();
+    return { ...real, getApprovals: vi.fn(real.getApprovals) };
+});
 
 const jar = vi.hoisted(() => new Map<string, string>());
 vi.mock("next/headers", () => ({
@@ -49,32 +55,38 @@ describe("DashboardLayout", () => {
         vi.unstubAllGlobals();
     });
 
-    it("puts the page in the app shell, with the open approvals count", async () => {
-        await signIn({ email: "dana@acme.com", github: null });
+    it("puts the page in the app shell, with no approvals count while none wait", async () => {
+        await signIn({ email: "jo@example.com", github: null });
         await showLayout();
         expect(screen.getByRole("main").textContent).toBe("Runs page");
-        const waiting = openApprovals().length;
-        expect(waiting).toBeGreaterThan(0);
-        expect(screen.getByRole("link", { name: `Review ${waiting} approvals` })).toBeTruthy();
-        expect(screen.queryByText("acme-prod")).toBeNull();
+        expect(screen.getByRole("link", { name: "Approvals" })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "Open approvals" })).toBeTruthy();
+    });
+
+    it("counts the open approval requests in the sidebar", async () => {
+        vi.mocked(getApprovals).mockResolvedValueOnce({ open: OPEN.slice(0, 2), grants: [], decisions: [] });
+        await signIn({ email: "jo@example.com", github: null });
+        await showLayout();
+        expect(screen.getByRole("link", { name: "Approvals2" })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "Review 2 approvals" })).toBeTruthy();
     });
 
     it("shows an email account as signed in", async () => {
-        await signIn({ email: "dana@acme.com", github: null });
+        await signIn({ email: "jo@example.com", github: null });
         await showLayout();
-        expect(accountRow()).toEqual(["dana@acme.com", "Signed in"]);
+        expect(accountRow()).toEqual(["jo@example.com", "Signed in"]);
     });
 
     it("adds the GitHub name under the email when both are linked", async () => {
-        await signIn({ email: "dana@acme.com", github: "dana-k" });
+        await signIn({ email: "jo@example.com", github: "jo-k" });
         await showLayout();
-        expect(accountRow()).toEqual(["dana@acme.com", "@dana-k"]);
+        expect(accountRow()).toEqual(["jo@example.com", "@jo-k"]);
     });
 
     it("names a GitHub-only account by its handle", async () => {
-        await signIn({ email: null, github: "dana-k" });
+        await signIn({ email: null, github: "jo-k" });
         await showLayout();
-        expect(accountRow()).toEqual(["@dana-k", "GitHub"]);
+        expect(accountRow()).toEqual(["@jo-k", "GitHub"]);
     });
 
     it("sends visitors without a session to sign in", async () => {

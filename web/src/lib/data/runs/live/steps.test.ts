@@ -1,3 +1,4 @@
+import type { RunDecision } from "@quard/db";
 import { describe, expect, it } from "vitest";
 import { at, BASE, CHILD, M1, M2, M3, storedRun, T1, T2 } from "../../../../../test/runs-fixture";
 import { buildSteps } from "./steps";
@@ -110,6 +111,39 @@ describe("buildSteps", () => {
         expect(limit).toMatchObject({ status: "ok", guard: { mode: "observe" } });
         expect(approval?.guard?.mode).toBeNull();
         expect(pass).toMatchObject({ detail: "pass", guard: { scan: { findings: [] } } });
+        expect(steps.map((step) => step.guard?.degraded)).toEqual([false, false, false, false, false]);
+    });
+
+    it("says which decisions came late, and keeps a detector's score on the source scan", () => {
+        const run = storedRun();
+        run.decisions[1] = { ...run.decisions[1]!, degraded: true, score: 0.87 };
+        run.decisions[2] = { ...run.decisions[2]!, degraded: true, score: 0.4 };
+        const [source, action, limit] = buildSteps(run).filter((step) => step.kind === "guard_decision");
+
+        expect(source?.guard).toMatchObject({ degraded: true, scan: { jevScore: 0.87 } });
+        // Only a source scan shows a score
+        expect(action?.guard).toMatchObject({ degraded: true, scan: null });
+        expect(limit?.guard?.degraded).toBe(false);
+    });
+
+    it("reads a decision stored without its event as on time and not scored", () => {
+        const check: RunDecision = {
+            eventId: "e00000000000000c",
+            stepId: T1,
+            agent: "billing",
+            tool: "fetchPage",
+            guard: "source",
+            rule: "source",
+            decision: "flag",
+            mode: "block",
+            enforced: true,
+            reason: null,
+            field: null,
+            at: at(3),
+        };
+        const [step] = buildSteps({ steps: [], labels: [], decisions: [check] });
+
+        expect(step?.guard).toMatchObject({ degraded: false, scan: { findings: [], jevScore: null } });
     });
 
     it("handles calls with no matching model call, an error, model-generated values and no arguments", () => {

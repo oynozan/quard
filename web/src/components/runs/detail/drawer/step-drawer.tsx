@@ -41,7 +41,7 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
     return (
         <>
             <IdentifierRow value={step.id} />
-            <p className="mt-4 text-[13px] leading-[1.7] text-ink-note">{step.detail}</p>
+            {step.detail ? <p className="mt-4 text-[13px] leading-[1.7] text-ink-note">{step.detail}</p> : null}
 
             <DrawerSection>
                 <DetailList>
@@ -125,7 +125,9 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
             {step.output ? (
                 <DrawerSection title="Output">
                     <LabelChip label={step.output.label} />
-                    <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft">{step.output.summary}</p>
+                    {step.output.summary ? (
+                        <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft">{step.output.summary}</p>
+                    ) : null}
                 </DrawerSection>
             ) : null}
 

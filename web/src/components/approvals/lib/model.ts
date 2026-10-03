@@ -1,6 +1,5 @@
 import type { AlwaysGrant, ApprovalAnswer, ApprovalDecision, ApprovalDetail } from "@/lib/data/approvals/types";
 import type { GuardDecision } from "@/lib/data/runs/types";
-import { SIGNED_IN } from "@/lib/data/session";
 import { formatOutcome } from "@/lib/format";
 
 // Live requests first, because a process is blocked on them right now.
@@ -10,11 +9,8 @@ export function orderOpen(open: ApprovalDetail[]): ApprovalDetail[] {
     return [...open].sort((a, b) => live(a) - live(b) || a.request.openedAt - b.request.openedAt);
 }
 
-// Who answers in this session
-export const CURRENT_USER = SIGNED_IN.email;
-
 // After a decision only the hash and the masked values stay.
-export function decisionOf(item: ApprovalDetail, answer: ApprovalAnswer, at: number): ApprovalDecision {
+export function decisionOf(item: ApprovalDetail, answer: ApprovalAnswer, at: number, by: string): ApprovalDecision {
     return {
         requestId: item.request.id,
         runId: item.request.runId,
@@ -22,7 +18,7 @@ export function decisionOf(item: ApprovalDetail, answer: ApprovalAnswer, at: num
         agent: item.request.agent,
         tool: item.request.tool,
         answer,
-        by: CURRENT_USER,
+        by,
         openedAt: item.request.openedAt,
         decidedAt: at,
         argsHash: item.argsHash,
@@ -30,14 +26,14 @@ export function decisionOf(item: ApprovalDetail, answer: ApprovalAnswer, at: num
     };
 }
 
-export function grantOf(item: ApprovalDetail, at: number): AlwaysGrant {
+export function grantOf(item: ApprovalDetail, at: number, by: string): AlwaysGrant {
     return {
         id: `grant_${item.argsHash.slice(0, 4)}`,
         agent: item.request.agent,
         tool: item.request.tool,
         argsHash: item.argsHash,
         args: item.args.map((arg) => ({ name: arg.name, value: arg.masked })),
-        approvedBy: CURRENT_USER,
+        approvedBy: by,
         approvedAt: at,
         timesUsed: 0,
         lastUsedAt: null,
@@ -78,4 +74,9 @@ export function passedCheck(decision: GuardDecision): boolean {
 
 export function argsLine(args: { name: string; value: string }[]): string {
     return args.map((arg) => `${arg.name}=${arg.value}`).join("  ");
+}
+
+// Count chips only show a count above 0
+export function chipCount(value: number): number | undefined {
+    return value > 0 ? value : undefined;
 }

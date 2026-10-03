@@ -2,6 +2,8 @@
 
 import { ChartPane } from "@/components/charts/chart-pane";
 import { ChartTable } from "@/components/charts/chart-table";
+import { EmptyLine } from "@/components/kit/empty";
+import { Pane } from "@/components/kit/pane";
 import type { AgentCall } from "@/lib/data/agents";
 import { formatClock, formatInt, formatStepDuration, shortId } from "@/lib/format";
 import { CONTEXTS, contextStyle } from "@/components/runs/detail/lib/context";
@@ -68,6 +70,13 @@ function summaryOf(name: string, calls: AgentCall[]): string {
 
 // The agent's newest calls as label-colored cells, with every call listed behind the Table toggle
 export function CallTimeline({ name, calls }: { name: string; calls: AgentCall[] }) {
+    if (calls.length === 0) {
+        return (
+            <Pane title="Recent calls">
+                <EmptyLine inset>No calls yet</EmptyLine>
+            </Pane>
+        );
+    }
     const count = (kind: MarkKind) => calls.filter((call) => markOf(call) === kind).length;
     const untrusted = calls.filter((call) => call.context.trust === "untrusted").length;
 
@@ -75,7 +84,6 @@ export function CallTimeline({ name, calls }: { name: string; calls: AgentCall[]
         <ChartTable
             caption={`The last ${calls.length} calls by ${name}, newest first`}
             height={260}
-            emptyText="No calls yet"
             columns={[
                 { label: "Time (UTC)", align: "left" },
                 { label: "Kind", align: "left" },
@@ -86,7 +94,8 @@ export function CallTimeline({ name, calls }: { name: string; calls: AgentCall[]
                 { label: "Run" },
             ]}
             rows={calls.map((call) => ({
-                key: call.stepId,
+                // Step ids are unique only within a run
+                key: `${call.runId}/${call.stepId}`,
                 cells: [
                     formatClock(call.at, true),
                     KIND_WORD[call.kind],
@@ -104,7 +113,6 @@ export function CallTimeline({ name, calls }: { name: string; calls: AgentCall[]
         <ChartPane
             title="Recent calls"
             tag={`LAST ${calls.length}`}
-            state={calls.length ? "ready" : "empty"}
             readouts={[
                 { label: "Untrusted context", value: formatInt(untrusted) },
                 { label: "Asked", value: formatInt(count("ask")) },
@@ -112,16 +120,8 @@ export function CallTimeline({ name, calls }: { name: string; calls: AgentCall[]
             ]}
             table={table}
         >
-            {calls.length ? (
-                <>
-                    <CallField calls={calls} summary={summaryOf(name, calls)} />
-                    <Legend calls={calls} />
-                </>
-            ) : (
-                <div className="flex h-[140px] items-center justify-center bg-chart-field">
-                    <p className="bg-page px-3 py-1 text-[11px] text-ink-muted">{name} has made no calls yet</p>
-                </div>
-            )}
+            <CallField calls={calls} summary={summaryOf(name, calls)} />
+            <Legend calls={calls} />
         </ChartPane>
     );
 }

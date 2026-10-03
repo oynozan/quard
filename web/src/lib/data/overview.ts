@@ -1,61 +1,72 @@
-import { AGENTS } from "./agents";
-import { modelCallsPer10Min, runsPerHour, blockRatePerDay, BLOCK_RATE_START } from "./activity";
-import { openApprovals } from "./approvals";
-import { latestDecisions } from "./events";
-import { recentIncidents } from "./incidents";
-import { recentRuns } from "./runs";
-import { NOW } from "./rng";
-import type { Agent, ApprovalRequest, DecisionEvent, GuardCoverage, Incident, RunSummary } from "./types";
+import {
+    agentRoster,
+    blockRateDays,
+    decisionTotals,
+    guardCounts,
+    hasRuns,
+    latestDecisions,
+    modelCallBuckets,
+    runStartBuckets,
+    toolCoverage,
+} from "@quard/db";
+import { decisionLog } from "./overview/decisions";
+import { greetingFor } from "./overview/greeting";
+import { agentsOf, guardRows, type GuardRow } from "./overview/rail";
+import { blockRates, bucketSeries } from "./overview/series";
+import { HERO_BUCKETS, RATE_DAYS, RUN_HOURS, windowsAt } from "./overview/windows";
+import { projectScope } from "./scope";
+import type { Agent, DecisionEvent, GuardCoverage } from "./types";
 
+const LOG_LINES = 12;
+// A day above this block rate is worth a review
+const REVIEW_RATE = 2;
+
+// Every series is oldest first, and empty when nothing happened in its window
 export type OverviewData = {
-    now: number;
     greeting: string;
-    activity: number[];
+    // Model calls per 10 minutes over the 24 hours before endsAt
+    activity: { values: number[]; endsAt: number };
     runsPerHour: number[];
     coverage: GuardCoverage;
+    // Percent of guarded tool calls blocked per UTC day from startAt
     blockRate: { values: number[]; limit: number; startAt: number };
     decisions24h: { asked: number; blocked: number };
-    approvals: ApprovalRequest[];
-    runs: RunSummary[];
-    incidents: Incident[];
     events: DecisionEvent[];
     agents: Agent[];
-    guardCounts: { type: string; count: number }[];
+    guardCounts: GuardRow[];
 };
 
-function greetingFor(now: number, running: number): string {
-    const hour = new Date(now).getUTCHours();
-    const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-    const agents = running === 1 ? "One agent is" : `${running} agents are`;
-    return `${part}. ${running === 0 ? "No agents are" : agents} running.`;
-}
-
-// Everything the overview page shows. Mock data until the services exist.
-export async function getOverview(): Promise<OverviewData> {
-    const runs = recentRuns();
-    const running = AGENTS.filter((agent) => agent.state === "running").length;
-    const asked = runs.reduce((sum, run) => sum + run.decisions.asked, 0);
-    const blocked = runs.reduce((sum, run) => sum + run.decisions.blocked, 0);
-
+// The current project's overview at now, or null before its first run
+export async function getOverview(now: number): Promise<OverviewData | null> {
+    const scope = await projectScope();
+    if (!scope || !(await hasRuns(scope.db, scope.project.id))) return null;
+    const { db } = scope;
+    const id = scope.project.id;
+    const windows = windowsAt(now);
+    const [activity, runs, coverage, rates, totals, decisions, roster, guards] = await Promise.all([
+        modelCallBuckets(db, id, windows.activity),
+        runStartBuckets(db, id, windows.runs),
+        toolCoverage(db, id, windows.lastDay),
+        blockRateDays(db, id, windows.rateDays),
+        decisionTotals(db, id, windows.lastDay),
+        latestDecisions(db, id, { ...windows.lastDay, limit: LOG_LINES }),
+        agentRoster(db, id, windows.roster),
+        guardCounts(db, id, windows.lastDay),
+    ]);
+    const agents = agentsOf(roster);
     return {
-        now: NOW,
-        greeting: greetingFor(NOW, running),
-        activity: modelCallsPer10Min(),
-        runsPerHour: runsPerHour(),
-        coverage: { guarded: 18, seen: 21 },
-        blockRate: { values: blockRatePerDay(), limit: 2, startAt: BLOCK_RATE_START },
-        decisions24h: { asked, blocked },
-        approvals: openApprovals(),
-        runs: runs.slice(0, 6),
-        incidents: recentIncidents().slice(0, 4),
-        events: latestDecisions(),
-        agents: AGENTS,
-        guardCounts: [
-            { type: "source", count: 2140 },
-            { type: "action", count: 612 },
-            { type: "egress", count: 344 },
-            { type: "limit", count: 1906 },
-            { type: "approval", count: 41 },
-        ],
+        greeting: greetingFor(now, agents.filter((agent) => agent.state === "running").length),
+        activity: { values: bucketSeries(activity, HERO_BUCKETS), endsAt: windows.activity.until.getTime() },
+        runsPerHour: bucketSeries(runs, RUN_HOURS),
+        coverage,
+        blockRate: {
+            values: blockRates(rates, RATE_DAYS),
+            limit: REVIEW_RATE,
+            startAt: windows.rateDays.since.getTime(),
+        },
+        decisions24h: totals,
+        events: decisionLog(decisions),
+        agents,
+        guardCounts: guardRows(guards),
     };
 }

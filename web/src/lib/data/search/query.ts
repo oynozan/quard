@@ -1,99 +1,57 @@
-import { maskValue } from "../../mask";
-import { agentNames } from "../agents/roster";
-import { TOOLS } from "../guards/tools";
-import { keyedHash } from "../values/hash";
-import { hostOf, mainDomain, normalize } from "../values/kinds";
-import { classifyQuery, isSensitive, valueIndex, type IndexEntry } from "./value-index";
-import type { ValueKind } from "../types";
-import type { SearchKind, SearchMatch, SearchMatchKind, SearchResult } from "./types";
+import { findName, findValue, hasRuns, listRuns, searchKeys, type Db } from "@quard/db";
+import { runRowOf } from "../runs/live/detail";
+import { projectScope } from "../scope";
+import { KIND_OF, nameMatches, valueMatches } from "./matches";
+import type { SearchResult, SearchState } from "./types";
 
-const LIMIT = 200;
+// Search lists the newest 50 matches
+const LIMIT = 50;
 
-// Queries to offer on an empty search page. Sensitive values are left out on purpose.
-export const SEARCH_EXAMPLES: { query: string; kind: SearchKind }[] = [
-    { query: "supplier-portal.example", kind: "domain" },
-    { query: "claims-desk.io", kind: "domain" },
-    { query: "INV-20931", kind: "id" },
-    { query: "pay_invoice", kind: "tool" },
-    { query: "researcher", kind: "agent" },
-    { query: "/srv/exports/contacts-2026-10.csv", kind: "path" },
-];
+type Found = Omit<SearchResult, "query" | "runRows" | "truncated">;
 
-function matchOf(entry: IndexEntry, kind: SearchKind, query: string, hash: string | null): SearchMatchKind | null {
-    if (kind === "agent" || kind === "tool") {
-        return entry.kind === kind && entry.clear === query.toLowerCase() ? "name" : null;
+// Runs where an agent by that name made a step, else where a tool by that name was called
+async function byName(db: Db, projectId: string, name: string): Promise<Found | null> {
+    const agents = await findName(db, projectId, { agent: name, limit: LIMIT });
+    if (agents.total > 0) {
+        const matches = nameMatches(agents.matches, "agent");
+        return { kind: "agent", byHash: false, shown: name, total: agents.total, runs: agents.runs, matches };
     }
-    if (entry.kind === "agent" || entry.kind === "tool") return null;
-    if (hash) return entry.hash === hash ? (entry.inside ? "inside" : "exact") : null;
-    const valueKind = kind as ValueKind;
-    const norm = normalize(query, valueKind);
-    if (entry.clear === norm) return entry.inside ? "inside" : "exact";
-    if (kind === "url" || kind === "domain") {
-        const host = hostOf(query, valueKind);
-        if (host && entry.host === host) return "host";
-        if (host && entry.domain === mainDomain(host)) return "domain";
-        return null;
+    const tools = await findName(db, projectId, { tool: name, limit: LIMIT });
+    if (tools.total > 0) {
+        const matches = nameMatches(tools.matches, "tool");
+        return { kind: "tool", byHash: false, shown: name, total: tools.total, runs: tools.runs, matches };
     }
-    if (kind === "text") return entry.clear?.includes(norm) ? "text" : null;
     return null;
 }
 
-// Every run that touched a value: a domain, URL, email, IBAN, card, path, ID, agent or tool.
-// IBANs, cards and emails are hashed with the install key and matched by hash.
-export async function searchRuns(query: string): Promise<SearchResult> {
+// Every run that read or sent a value, or where an agent or tool by that name ran
+export async function searchRuns(query: string): Promise<SearchState> {
+    const scope = await projectScope();
+    if (!scope || !(await hasRuns(scope.db, scope.project.id))) return { state: "no-runs" };
     const text = query.trim();
-    const kind = classifyQuery(
-        text,
-        agentNames(),
-        TOOLS.map((tool) => tool.name),
-    );
-    const sensitive = isSensitive(kind);
-    const hash = sensitive ? keyedHash(normalize(text, kind as ValueKind)) : null;
-    if (!text || (kind === "text" && text.length < 3)) {
-        return {
-            query: text,
-            kind,
-            byHash: false,
-            hash: null,
-            shown: text,
-            matches: [],
-            total: 0,
-            runs: 0,
-            truncated: false,
+    if (!text) return { state: "idle" };
+    const { db, project } = scope;
+    let found = await byName(db, project.id, text);
+    if (!found) {
+        const value = searchKeys(text, process.env.QUARD_HASH_KEY);
+        if (!value) return { state: "nothing" };
+        if (value.status === "not-searchable") return { state: "card" };
+        if (value.status === "needs-hash-key") return { state: "hash-off" };
+        const hits = await findValue(db, project.id, value.keys, { limit: LIMIT });
+        found = {
+            kind: KIND_OF[value.kind],
+            byHash: value.kind === "iban" || value.kind === "email",
+            shown: value.shown,
+            total: hits.total,
+            runs: hits.runs,
+            matches: valueMatches(hits.matches, value.keys),
         };
     }
-    const seen = new Set<string>();
-    const matches: SearchMatch[] = [];
-    for (const entry of valueIndex()) {
-        const match = matchOf(entry, kind, text, hash);
-        if (!match) continue;
-        const key = `${entry.runId}:${entry.stepId}:${entry.field}:${entry.shown}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        matches.push({
-            runId: entry.runId,
-            stepId: entry.stepId,
-            agent: entry.agent,
-            tool: entry.tool,
-            field: entry.field,
-            value: entry.shown,
-            kind: entry.kind,
-            label: entry.label,
-            at: entry.at,
-            byHash: entry.hash !== null && hash !== null,
-            match,
-        });
-    }
-    matches.sort((a, b) => b.at - a.at);
+    const runIds = [...new Set(found.matches.map((match) => match.runId))];
+    const now = Date.now();
+    const runRows = (await listRuns(db, project.id, { runIds })).map((run) => runRowOf(run, now));
     return {
-        query: text,
-        kind,
-        byHash: sensitive,
-        hash: hash ? hash.slice(0, 12) : null,
-        shown: sensitive ? maskValue(text) : text,
-        matches: matches.slice(0, LIMIT),
-        total: matches.length,
-        runs: new Set(matches.map((match) => match.runId)).size,
-        truncated: matches.length > LIMIT,
+        state: "searched",
+        result: { query: text, ...found, runRows, truncated: found.total > found.matches.length },
     };
 }

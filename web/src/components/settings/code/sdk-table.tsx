@@ -1,5 +1,5 @@
 import { Boxes } from "lucide-react";
-import { DataTable, NameCell, QuietEmpty, Td, Tr } from "@/components/kit/data-table";
+import { DataTable, NameCell, Td, Tr } from "@/components/kit/data-table";
 import { StatusValue } from "@/components/kit/detail/detail-list";
 import type { SdkConnection } from "@/lib/data/settings";
 import { formatAge } from "@/lib/format";
@@ -9,9 +9,6 @@ const WIDTHS = ["21%", "18%", "9%", "14%", "15%", "11%", "12%"];
 
 // Each connected app with the rules hash it reported on connect
 export function SdkTable({ sdks, now }: { sdks: SdkConnection[]; now: number }) {
-    if (sdks.length === 0) {
-        return <QuietEmpty>No SDK connected yet</QuietEmpty>;
-    }
     // Offline apps need a look, so they lead
     const rows = [...sdks].sort((a, b) => Number(a.state === "connected") - Number(b.state === "connected"));
     return (

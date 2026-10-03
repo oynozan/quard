@@ -1,13 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { NOW } from "@/lib/data/rng";
-import { guardDecision, openRequest } from "../../../../test/approvals-overview/fixtures";
+import { guardDecision } from "../../../../test/approvals-overview/fixtures";
+import { OPEN, openRequest } from "../../../../test/approvals/requests";
+import { NOW } from "../../../../test/time";
 import {
     ANSWER_WORD,
     answerMessage,
     argsLine,
     checkWord,
-    CURRENT_USER,
+    chipCount,
     decisionOf,
     grantOf,
     orderOpen,
@@ -15,18 +16,18 @@ import {
 } from "./model";
 
 describe("orderOpen", () => {
-    it("puts live requests first, longest wait on top, without changing the input", async () => {
-        const items = await Promise.all(["apr_7f31", "apr_7f2c", "apr_7f1e", "apr_7f0a"].map(openRequest));
+    it("puts live requests first, longest wait on top, without changing the input", () => {
+        const items = [...OPEN];
         const ordered = orderOpen(items);
         expect(ordered.map((item) => item.request.id)).toEqual(["apr_7f2c", "apr_7f31", "apr_7f0a", "apr_7f1e"]);
-        expect(items[0].request.id).toBe("apr_7f31");
+        expect(items.map((item) => item.request.id)).toEqual(["apr_7f31", "apr_7f2c", "apr_7f1e", "apr_7f0a"]);
     });
 });
 
 describe("decisionOf", () => {
-    it("keeps only the hash and the masked values, answered by the signed-in user", async () => {
-        const item = await openRequest("apr_7f31");
-        const decision = decisionOf(item, "deny", NOW);
+    it("keeps only the hash and the masked values, answered by the given person", () => {
+        const item = openRequest("apr_7f31");
+        const decision = decisionOf(item, "deny", NOW, "jo@example.com");
         expect(decision).toEqual({
             requestId: "apr_7f31",
             runId: item.request.runId,
@@ -34,7 +35,7 @@ describe("decisionOf", () => {
             agent: "billing",
             tool: "pay_invoice",
             answer: "deny",
-            by: "dana@acme.com",
+            by: "jo@example.com",
             openedAt: item.request.openedAt,
             decidedAt: NOW,
             argsHash: item.argsHash,
@@ -44,14 +45,13 @@ describe("decisionOf", () => {
                 { name: "reference", value: "INV-20931" },
             ],
         });
-        expect(CURRENT_USER).toBe("dana@acme.com");
     });
 });
 
 describe("grantOf", () => {
-    it("binds a new unused grant to the agent, tool and argument hash", async () => {
-        const item = await openRequest("apr_7f2c");
-        const grant = grantOf(item, NOW);
+    it("binds a new unused grant to the agent, tool and argument hash", () => {
+        const item = openRequest("apr_7f2c");
+        const grant = grantOf(item, NOW, "@jo-k");
         expect(grant).toEqual({
             id: "grant_5b81",
             agent: "support",
@@ -65,7 +65,7 @@ describe("grantOf", () => {
                     value: "Refund approved for 312.00 EUR. It reaches the original card in 5 to 7 days.",
                 },
             ],
-            approvedBy: "dana@acme.com",
+            approvedBy: "@jo-k",
             approvedAt: NOW,
             timesUsed: 0,
             lastUsedAt: null,
@@ -160,5 +160,12 @@ describe("argsLine", () => {
             ]),
         ).toBe("service=docs-site  ref=main");
         expect(argsLine([])).toBe("");
+    });
+});
+
+describe("chipCount", () => {
+    it("keeps a count above 0 and drops a 0", () => {
+        expect(chipCount(3)).toBe(3);
+        expect(chipCount(0)).toBeUndefined();
     });
 });

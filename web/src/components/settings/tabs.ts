@@ -4,7 +4,7 @@ export type SettingsTab = "keys" | "accounts" | "retention" | "code";
 
 export const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
     { value: "keys", label: "Agent keys" },
-    { value: "accounts", label: "Accounts and roles" },
+    { value: "accounts", label: "Accounts" },
     { value: "retention", label: "Retention" },
     { value: "code", label: "Rules from code" },
 ];

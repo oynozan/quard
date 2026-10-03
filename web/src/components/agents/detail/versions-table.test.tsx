@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { version } from "../../../../test/agents-lib-detail/fixtures";
+import { expectNoChartsOrTables } from "../../../../test/empty";
 import { VersionsTable } from "./versions-table";
 
 // Newest first, as the agent page passes them
@@ -62,9 +63,10 @@ describe("VersionsTable", () => {
         ]);
     });
 
-    it("shows an empty table for an agent with no versions", () => {
+    it("says there are no versions yet, with no table and no count", () => {
         render(<VersionsTable versions={[]} />);
-        expect(rows()).toHaveLength(0);
-        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Versions0");
+        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Versions");
+        expect(screen.getByRole("status").textContent).toBe("No versions yet");
+        expectNoChartsOrTables();
     });
 });

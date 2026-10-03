@@ -3,26 +3,22 @@ import type { SearchKind, SearchMatch } from "@/lib/data/search";
 // How the page names each kind of query
 export const KIND_WORD: Record<SearchKind, string> = {
     iban: "IBAN",
-    card: "Card number",
     email: "Email address",
     url: "URL",
     domain: "Domain",
     path: "File path",
     id: "ID",
-    amount: "Amount",
-    text: "Text",
     agent: "Agent",
     tool: "Tool",
 };
 
-// A short marker for how a value matched. "By hash" sits once in the summary.
+// A short marker for how a value matched, with "by hash" said once in the summary instead
 const MATCH_WORD: Record<SearchMatch["match"], string> = {
     exact: "exact",
     inside: "inside a value",
     host: "same host",
     domain: "same domain",
     name: "by name",
-    text: "contains",
 };
 
 export function matchWord(match: SearchMatch): string {

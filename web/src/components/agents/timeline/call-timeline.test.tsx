@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agentCall, CALLS } from "../../../../test/agents-graph-timeline/fixtures";
 import { stubResizeObserver } from "../../../../test/agents-graph-timeline/resize";
+import { expectNoChartsOrTables } from "../../../../test/empty";
 import { CallTimeline } from "./call-timeline";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -76,13 +77,23 @@ describe("CallTimeline", () => {
         ]);
     });
 
-    it("says the agent has made no calls yet when there are none", () => {
-        render(<CallTimeline name="planner" calls={[]} />);
-        expect(screen.getByText("planner has made no calls yet")).toBeTruthy();
-        expect(screen.getByRole("region", { name: "Recent calls" }).textContent).toContain("LAST 0");
-        expect(screen.queryByRole("img")).toBeNull();
-        expect(readout("Blocked")).toBe("—");
+    it("keys each table row by run, since step ids repeat across runs", () => {
+        const twice = [agentCall("s1", { runId: "run-b" }), agentCall("s1", { runId: "run-a" })];
+        const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        render(<CallTimeline name="planner" calls={twice} />);
         fireEvent.click(screen.getByRole("button", { name: "Table" }));
-        expect(screen.getByText("No calls yet")).toBeTruthy();
+        expect(screen.getAllByRole("row")).toHaveLength(3);
+        expect(error).not.toHaveBeenCalled();
+        error.mockRestore();
+    });
+
+    it("says there are no calls yet when there are none, with no drawing, readouts or table", () => {
+        render(<CallTimeline name="planner" calls={[]} />);
+        const pane = screen.getByRole("region", { name: "Recent calls" });
+        expect(within(pane).getByRole("status").textContent).toBe("No calls yet");
+        expect(pane.textContent).not.toContain("LAST");
+        expect(screen.queryByText("Blocked")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
+        expectNoChartsOrTables();
     });
 });

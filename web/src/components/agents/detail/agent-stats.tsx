@@ -41,10 +41,10 @@ export function AgentStats({ stats }: { stats: Stats }) {
                     </Counter>
                 </Tile>
                 <Tile label="Calls after untrusted">
-                    <Counter>{formatShare(stats.influencedShare)}</Counter>
+                    <Counter>{stats.influencedShare === null ? "—" : formatShare(stats.influencedShare)}</Counter>
                 </Tile>
                 <Tile label="Est. cost">
-                    <Counter>{formatUsd(stats.costUsd24h)}</Counter>
+                    <Counter>{stats.costKnown ? formatUsd(stats.costUsd24h) : "—"}</Counter>
                 </Tile>
             </dl>
         </section>

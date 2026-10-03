@@ -121,6 +121,17 @@ describe("StepDrawer", () => {
         expect(section("Output").textContent).toBe("Outputweb:acme.netuntrustedAn invoice page with an IBAN.");
     });
 
+    it("leaves out an empty detail line and an output summary that was not kept", () => {
+        const dialog = open({
+            kind: "tool_call",
+            name: "listInvoices",
+            detail: "",
+            output: { label: UNTRUSTED, summary: "" },
+        });
+        expect(section("Output").textContent).toBe("Outputweb:acme.netuntrusted");
+        expect(dialog.querySelectorAll("p")).toHaveLength(0);
+    });
+
     it("shows a message between agents with the labels it carries", () => {
         const link = {
             kind: "handoff" as const,

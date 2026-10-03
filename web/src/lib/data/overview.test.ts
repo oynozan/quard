@@ -1,88 +1,176 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { AGENTS } from "./agents";
-import { blockRatePerDay, BLOCK_RATE_START, modelCallsPer10Min, runsPerHour } from "./activity";
-import { openApprovals } from "./approvals";
-import { latestDecisions } from "./events";
-import { recentIncidents } from "./incidents";
-import { getOverview } from "./overview";
-import { NOW } from "./rng";
-import { recentRuns } from "./runs";
+import { createProject, ingestBatch } from "@quard/db";
+import { startTestDb, type TestDb } from "@quard/db/testing";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { decision, modelCall, started, stepId, toolCall, upload, type UploadItem } from "../../../test/overview/events";
+import { billing, FLEET, SUPPORT_CALL, support } from "../../../test/overview/fleet";
+import { DAY, HOUR, MINUTE, NOW } from "../../../test/time";
 
-afterEach(() => {
-    vi.doUnmock("./rng");
-    vi.resetModules();
+const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
+vi.mock("@/lib/auth/session", () => ({ requireSession }));
+vi.mock("next/server", () => ({ connection: vi.fn(async () => {}) }));
+
+const { getOverview } = await import("./overview");
+const { database } = await import("./runs/live/client");
+
+let test: TestDb;
+let projects = 0;
+
+beforeAll(async () => {
+    test = await startTestDb();
+    vi.stubEnv("DATABASE_URL", test.url);
+    vi.stubEnv("QUARD_PROJECT_ID", "");
+}, 60_000);
+
+afterAll(async () => {
+    await database().destroy();
+    vi.unstubAllEnvs();
+    await test.stop();
 });
 
-// A fresh copy of the overview with the mock clock at this UTC hour and these agents running.
-async function overviewAt(hour: number, running: string[] | null = null) {
-    vi.resetModules();
-    vi.doMock("./rng", async (importOriginal) => ({
-        ...(await importOriginal<typeof import("./rng")>()),
-        NOW: Date.UTC(2026, 9, 3, hour, 0),
-    }));
-    const roster = await import("./agents/roster");
-    if (running) {
-        for (const agent of roster.AGENTS) {
-            agent.state = running.includes(agent.name) ? "running" : "idle";
-        }
-    }
-    const fresh = await import("./overview");
-    return fresh.getOverview();
+// A fresh project for the dashboard to show, holding these events
+async function showProject(events: UploadItem["event"][]): Promise<void> {
+    const id = await createProject(test.db, `Project ${++projects}`);
+    vi.stubEnv("QUARD_PROJECT_ID", id);
+    if (events.length > 0) await ingestBatch(test.db, id, upload(events));
 }
 
 describe("getOverview", () => {
-    it("greets by the time of day and counts the running agents", async () => {
-        const overview = await getOverview();
-        expect(overview.now).toBe(NOW);
-        expect(overview.greeting).toBe("Good evening. 3 agents are running.");
+    it("has nothing to show before a project exists", async () => {
+        expect(await getOverview(NOW)).toBeNull();
+        expect(requireSession).toHaveBeenCalled();
     });
 
-    it("says good morning before noon and good afternoon until 6 pm", async () => {
-        expect((await overviewAt(9)).greeting).toBe("Good morning. 3 agents are running.");
-        expect((await overviewAt(12)).greeting).toBe("Good afternoon. 3 agents are running.");
-        expect((await overviewAt(17)).greeting).toBe("Good afternoon. 3 agents are running.");
+    it("has nothing to show before the project's first run", async () => {
+        await showProject([]);
+
+        expect(await getOverview(NOW)).toBeNull();
     });
 
-    it("says when one agent or no agent is running", async () => {
-        expect((await overviewAt(18, ["billing"])).greeting).toBe("Good evening. One agent is running.");
-        expect((await overviewAt(18, [])).greeting).toBe("Good evening. No agents are running.");
+    it("greets with the running agents and lists them first", async () => {
+        await showProject(FLEET);
+        const overview = await getOverview(NOW);
+
+        expect(overview?.greeting).toBe("Good evening. One agent is running.");
+        expect(overview?.agents).toEqual([
+            { name: "billing", state: "running", model: "gpt-5.4-mini" },
+            { name: "researcher", state: "idle", model: "o4-mini" },
+            { name: "support", state: "idle", model: "gpt-5.4" },
+        ]);
     });
 
-    it("adds up asked and blocked decisions over the recent runs", async () => {
-        const runs = recentRuns();
-        const overview = await getOverview();
-        expect(overview.decisions24h).toEqual({
-            asked: runs.reduce((sum, run) => sum + run.decisions.asked, 0),
-            blocked: runs.reduce((sum, run) => sum + run.decisions.blocked, 0),
+    it("counts model calls in 10-minute buckets up to the next round 10 minutes", async () => {
+        await showProject(FLEET);
+        const activity = (await getOverview(NOW))!.activity;
+
+        expect(activity.endsAt).toBe(Date.UTC(2026, 9, 3, 18, 50));
+        expect(activity.values).toHaveLength(144);
+        const lit = activity.values.flatMap((count, bucket) => (count ? [[bucket, count]] : []));
+        expect(lit).toEqual([
+            [0, 1],
+            [125, 1],
+            [142, 2],
+            [143, 1],
+        ]);
+    });
+
+    it("counts run starts per hour and the guarded tools of the last 24 hours", async () => {
+        await showProject(FLEET);
+        const overview = (await getOverview(NOW))!;
+
+        const started = overview.runsPerHour.flatMap((count, hour) => (count ? [[hour, count]] : []));
+        expect(overview.runsPerHour).toHaveLength(24);
+        expect(started).toEqual([
+            [20, 1],
+            [23, 1],
+        ]);
+        expect(overview.coverage).toEqual({ seen: 3, guarded: 2 });
+    });
+
+    it("gives the share of guarded calls blocked per UTC day for 30 days", async () => {
+        await showProject(FLEET);
+        const { blockRate } = (await getOverview(NOW))!;
+
+        expect(blockRate.startAt).toBe(Date.UTC(2026, 8, 4));
+        expect(blockRate.limit).toBe(2);
+        // Two days ago one call, blocked, and today two calls, one blocked
+        expect(blockRate.values).toEqual([...Array<number>(27).fill(0), 100, 0, 50]);
+    });
+
+    it("totals enforced blocks and asks, and orders the guards with unknown ones last", async () => {
+        await showProject(FLEET);
+        const overview = (await getOverview(NOW))!;
+
+        expect(overview.decisions24h).toEqual({ blocked: 3, asked: 1 });
+        expect(overview.guardCounts).toEqual([
+            { type: "source", count: 1 },
+            { type: "action", count: 1 },
+            { type: "egress", count: 1 },
+            { type: "limit", count: 2 },
+            { type: "approval", count: 1 },
+            { type: "permission", count: 1 },
+            { type: "signature", count: 1 },
+            { type: "budget", count: 1 },
+        ]);
+    });
+
+    it("logs the decisions oldest first, in the run timeline's words", async () => {
+        await showProject(FLEET);
+        const { events } = (await getOverview(NOW))!;
+
+        expect(events.map(({ guard, outcome, tool, detail }) => [guard, outcome, tool, detail])).toEqual([
+            ["egress", "allow", "lookup", "allow"],
+            ["source", "pass", "lookup", "would flag · instructions, unknown host"],
+            ["approval", "ask", "lookup", "approval required"],
+            ["signature", "flag", "lookup", "signature matched"],
+            ["permission", "block", "exportAll", "permission denied"],
+            ["action", "block", "payInvoice", "value not from allowed origin"],
+        ]);
+        expect(events[0]).toMatchObject({ at: SUPPORT_CALL, agent: "support", runId: support.runId });
+        expect(events[5]).toMatchObject({ at: NOW - 3 * MINUTE, agent: "billing", runId: billing.runId });
+        expect(new Set(events.map((event) => event.id)).size).toBe(6);
+    });
+
+    it("keeps the 12 newest decisions in the log", async () => {
+        const blocks = Array.from({ length: 14 }, (_, n) =>
+            decision(billing, stepId(n + 1), NOW - (14 - n) * MINUTE, {
+                tool: "payInvoice",
+                guard: "action",
+                rule: "amount:max",
+                decision: "block",
+            }),
+        );
+        await showProject([started(billing, NOW - HOUR), ...blocks]);
+        const { events } = (await getOverview(NOW))!;
+
+        expect(events.map((event) => event.at)).toEqual(Array.from({ length: 12 }, (_, n) => NOW - (12 - n) * MINUTE));
+    });
+
+    it("leaves each part empty when the runs are older than its window", async () => {
+        const old = NOW - 40 * DAY;
+        await showProject([
+            started(billing, old),
+            modelCall(billing, stepId(1), old),
+            toolCall(billing, stepId(2), old, "payInvoice"),
+            decision(billing, stepId(2), old, { tool: "payInvoice", guard: "action", rule: "a", decision: "block" }),
+        ]);
+
+        expect(await getOverview(NOW)).toEqual({
+            greeting: "Good evening. No agents are running.",
+            activity: { values: [], endsAt: Date.UTC(2026, 9, 3, 18, 50) },
+            runsPerHour: [],
+            coverage: { seen: 0, guarded: 0 },
+            blockRate: { values: [], limit: 2, startAt: Date.UTC(2026, 8, 4) },
+            decisions24h: { blocked: 0, asked: 0 },
+            events: [],
+            agents: [],
+            guardCounts: [],
         });
     });
 
-    it("shows the 6 newest runs, the 4 newest incidents and the latest decisions", async () => {
-        const overview = await getOverview();
-        expect(overview.runs).toEqual(recentRuns().slice(0, 6));
-        expect(overview.incidents.map((item) => item.id)).toEqual(
-            recentIncidents()
-                .slice(0, 4)
-                .map((item) => item.id),
-        );
-        expect(overview.events).toEqual(latestDecisions());
-        expect(overview.approvals).toEqual(openApprovals());
-        expect(overview.agents).toBe(AGENTS);
-    });
+    it("stops at the sign-in redirect for people who are not signed in", async () => {
+        requireSession.mockRejectedValueOnce(new Error("redirect:/sign-in"));
 
-    it("gives the charts their series, the 2% block rate limit and the guard counts", async () => {
-        const overview = await getOverview();
-        expect(overview.activity).toEqual(modelCallsPer10Min());
-        expect(overview.runsPerHour).toEqual(runsPerHour());
-        expect(overview.blockRate).toEqual({ values: blockRatePerDay(), limit: 2, startAt: BLOCK_RATE_START });
-        expect(overview.coverage).toEqual({ guarded: 18, seen: 21 });
-        expect(overview.guardCounts.map((row) => [row.type, row.count])).toEqual([
-            ["source", 2140],
-            ["action", 612],
-            ["egress", 344],
-            ["limit", 1906],
-            ["approval", 41],
-        ]);
+        await expect(getOverview(NOW)).rejects.toThrow("redirect:/sign-in");
     });
 });

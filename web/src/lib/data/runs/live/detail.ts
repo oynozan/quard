@@ -101,5 +101,5 @@ export function runDetailOf(run: StoredRun, now: number): RunDetail {
         incidentId: null,
         approvalId: null,
     };
-    return { summary, agents, graph: { nodes: agents, edges: [] }, steps, limits: [], rulesHashes: [] };
+    return { summary, agents, graph: { nodes: agents, edges: [] }, steps, limits: [] };
 }

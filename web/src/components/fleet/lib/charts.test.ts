@@ -44,7 +44,7 @@ describe("dailySummary", () => {
 describe("heatSummary", () => {
     it("gives the total and the busiest UTC hour", () => {
         const hourTotals = HOURS.map((_, hour) => (hour === 23 ? 40 : 1));
-        const summary = heatSummary({ days: [], values: [], hourTotals, max: 40, total: 1234 });
+        const summary = heatSummary({ values: [], hourTotals, total: 1234 });
         expect(summary).toBe(
             "Blocks by weekday and UTC hour over the last 30 days, 1,234 in total. Busiest hour 23:00–00:00.",
         );

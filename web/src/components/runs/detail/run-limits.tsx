@@ -16,8 +16,9 @@ function modeWord(limit: RunLimitUse): string {
     return observe ? "Observe" : "Enforced";
 }
 
-// Each run limit as a meter against its default, with the mode it runs in. Limits passed come first.
+// Each run limit as a meter against its default, with the mode it runs in and passed limits first
 export function RunLimits({ limits }: { limits: RunLimitUse[] }) {
+    if (limits.length === 0) return null;
     const sorted = [...limits].sort((a, b) => Number(b.over) - Number(a.over));
     return (
         <Pane title="Run limits">

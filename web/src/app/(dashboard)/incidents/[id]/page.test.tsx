@@ -1,9 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { stubBrowser } from "../../../../../test/auth-app/browser";
-import { listIncidents } from "@/lib/data/incidents/query";
-import { NOW } from "@/lib/data/rng";
-import { formatAge, formatLongDate } from "@/lib/format";
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { getIncident } from "@/lib/data/incidents/query";
+import { formatLongDate } from "@/lib/format";
+import { INCIDENT_DETAIL } from "../../../../../test/incidents/detail";
+import { NOW } from "../../../../../test/time";
 import IncidentPage, { generateMetadata } from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -11,36 +11,50 @@ vi.mock("next/navigation", () => ({
         throw new Error("not found");
     },
 }));
+vi.mock("@/lib/data/scope", () => ({ requestTime: async () => NOW }));
+vi.mock("@/lib/data/incidents/query", async (importOriginal) => {
+    const real = await importOriginal<typeof import("@/lib/data/incidents/query")>();
+    return { ...real, getIncident: vi.fn(real.getIncident) };
+});
 
 const props = (id: string) => ({ params: Promise.resolve({ id }), searchParams: Promise.resolve({}) });
 
+const { incident } = INCIDENT_DETAIL;
+
 describe("IncidentPage", () => {
-    beforeEach(() => {
-        stubBrowser();
+    it("shows the not-found page for any id while nothing stores incidents", async () => {
+        await expect(IncidentPage(props(incident.id))).rejects.toThrow("not found");
+        expect(getIncident).toHaveBeenCalledWith(incident.id);
     });
 
-    afterEach(() => {
-        vi.unstubAllGlobals();
+    it("says the incident is missing in the tab title", async () => {
+        expect(await generateMetadata(props(incident.id))).toEqual({ title: "Incident not found" });
     });
 
-    it("shows the incident with links back to the list and on to its run", async () => {
-        const [incident] = await listIncidents();
-        render(await IncidentPage(props(incident!.id)));
-        expect(screen.getByRole("heading", { level: 1, name: incident!.title })).toBeTruthy();
+    it("shows a stored incident with links back to the list and on to its run", async () => {
+        vi.mocked(getIncident).mockResolvedValueOnce(INCIDENT_DETAIL);
+        render(await IncidentPage(props(incident.id)));
+        expect(screen.getByRole("heading", { level: 1, name: incident.title })).toBeTruthy();
         expect(screen.getByRole("link", { name: "Incidents" }).getAttribute("href")).toBe("/incidents");
-        expect(screen.getByRole("link", { name: "Open run" }).getAttribute("href")).toBe(`/runs/${incident!.runId}`);
-        const opened = screen.getByTitle(formatLongDate(incident!.openedAt));
-        expect(opened.textContent).toBe(`Opened ${formatAge(incident!.openedAt, NOW)} ago`);
-        expect(screen.getByRole("region", { name: "Replay" })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "Open run" }).getAttribute("href")).toBe(`/runs/${incident.runId}`);
+        expect(screen.queryByRole("button", { name: "Replay round" })).toBeNull();
+        const opened = screen.getByTitle(formatLongDate(incident.openedAt));
+        expect(opened.textContent).toBe("Opened 3 min ago");
+        expect(opened.parentElement?.textContent).toContain("Run Blocked");
     });
 
-    it("shows the not-found page for an unknown id", async () => {
-        await expect(IncidentPage(props("inc_missing"))).rejects.toThrow("not found");
+    it("shows the path, the replay, the AI explanation and the verdict", async () => {
+        vi.mocked(getIncident).mockResolvedValueOnce(INCIDENT_DETAIL);
+        render(await IncidentPage(props(incident.id)));
+        expect(screen.getByText("4 steps")).toBeTruthy();
+        const replay = within(screen.getByRole("region", { name: "Replay" }));
+        expect(replay.getByText("Confirmed")).toBeTruthy();
+        expect(screen.getByText(INCIDENT_DETAIL.reviewer!.paragraphs[0])).toBeTruthy();
+        expect(within(screen.getByRole("region", { name: "Verdict" })).getByText("bad input")).toBeTruthy();
     });
 
-    it("titles the tab with the incident, or says it is missing", async () => {
-        const [incident] = await listIncidents();
-        expect(await generateMetadata(props(incident!.id))).toEqual({ title: incident!.title });
-        expect(await generateMetadata(props("inc_missing"))).toEqual({ title: "Incident not found" });
+    it("titles the tab with a stored incident", async () => {
+        vi.mocked(getIncident).mockResolvedValueOnce(INCIDENT_DETAIL);
+        expect(await generateMetadata(props(incident.id))).toEqual({ title: incident.title });
     });
 });

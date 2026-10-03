@@ -44,7 +44,7 @@ export function AgentSkeleton() {
                 </section>
                 <section aria-hidden className="border border-line">
                     <PaneHeader title="Permissions" />
-                    {[0, 1, 2].map((i) => (
+                    {[0, 1].map((i) => (
                         <div key={i} className="grid gap-2 border-b border-line px-3 py-[14px] last:border-b-0">
                             <Skeleton width={90} height={9} />
                             <Skeleton width={220} height={12} />

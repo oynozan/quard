@@ -1,9 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { SearchIntro, SearchNoMatch, SearchTooShort } from "./search-states";
+import { expectNoChartsOrTables } from "../../../../test/empty";
+import { SearchIntro, SearchStopped } from "./search-states";
 
 describe("SearchIntro", () => {
-    it("lists what each kind of query finds", () => {
+    it("lists what each kind of query finds, as terms rather than a table", () => {
         render(<SearchIntro />);
         const section = screen.getByRole("region", { name: "What you can search" });
         const terms = within(section)
@@ -12,45 +13,33 @@ describe("SearchIntro", () => {
         const finds = within(section)
             .getAllByRole("definition")
             .map((item) => item.textContent);
-        expect(terms).toEqual([
-            "Domain or URL",
-            "IBAN, card or email",
-            "File path or ID",
-            "Agent or tool",
-            "Other text",
-        ]);
+        expect(terms).toEqual(["IBAN or email", "URL or domain", "File path or ID", "Agent or tool name"]);
         expect(finds).toEqual([
-            "Same host or main domain",
             "Exact match, by hash",
+            "Same host or main domain",
             "Any value that holds it",
             "Runs where it appears",
-            "3+ characters",
         ]);
+        expectNoChartsOrTables();
     });
 });
 
-describe("SearchNoMatch", () => {
-    it("suggests a shorter value for plain text", () => {
-        render(<SearchNoMatch byHash={false} />);
-        const state = screen.getByRole("status");
-        expect(within(state).getByRole("heading", { name: "No matches" })).toBeTruthy();
-        expect(within(state).getByText("Try a shorter value or the main domain.")).toBeTruthy();
-        expect(within(state).getByRole("link", { name: "Clear search" }).getAttribute("href")).toBe("/search");
-        expect(screen.getAllByRole("columnheader")).toHaveLength(6);
+describe("SearchStopped", () => {
+    it.each([
+        ["no-match", "No matches"],
+        ["card", "Card numbers can't be searched"],
+        ["nothing", "Not an IBAN, email, URL, domain, path, ID, agent or tool"],
+    ] as const)("says %s in one line with no table", (reason, line) => {
+        render(<SearchStopped reason={reason} />);
+        expect(screen.getByRole("status").textContent).toBe(line);
+        expectNoChartsOrTables();
     });
 
-    it("explains that sensitive values match only in full", () => {
-        render(<SearchNoMatch byHash />);
-        expect(screen.getByText("Sensitive values match only in full.")).toBeTruthy();
-    });
-});
-
-describe("SearchTooShort", () => {
-    it("asks for at least 3 characters and offers to clear", () => {
-        render(<SearchTooShort />);
-        const state = screen.getByRole("status");
-        expect(within(state).getByRole("heading", { name: "Type a little more" })).toBeTruthy();
-        expect(within(state).getByText("Text needs 3 or more characters.")).toBeTruthy();
-        expect(within(state).getByRole("link", { name: "Clear search" }).getAttribute("href")).toBe("/search");
+    it("says IBAN and email search is off and names the setting that turns it on", () => {
+        render(<SearchStopped reason="hash-off" />);
+        const status = screen.getByRole("status");
+        expect(status.textContent).toBe("IBAN and email search is offSet QUARD_HASH_KEY to the key your agents use");
+        expect(within(status).getByText("QUARD_HASH_KEY").className).toContain("mono");
+        expectNoChartsOrTables();
     });
 });

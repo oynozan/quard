@@ -23,12 +23,16 @@ export function GuardDetails({ guard }: { guard: GuardDecision }) {
                 <DetailRow term="Rule" mono>
                     {guard.rule}
                 </DetailRow>
-                <DetailRow term="Rule hash" mono>
-                    {guard.ruleHash}
-                </DetailRow>
-                <DetailRow term="Rules hash" mono>
-                    {guard.rulesHash}
-                </DetailRow>
+                {guard.ruleHash ? (
+                    <DetailRow term="Rule hash" mono>
+                        {guard.ruleHash}
+                    </DetailRow>
+                ) : null}
+                {guard.rulesHash ? (
+                    <DetailRow term="Rules hash" mono>
+                        {guard.rulesHash}
+                    </DetailRow>
+                ) : null}
                 <DetailRow term="Mode">
                     {guard.mode === "observe" ? (
                         "Observe"
@@ -45,7 +49,7 @@ export function GuardDetails({ guard }: { guard: GuardDecision }) {
                     </DetailRow>
                 ) : null}
             </DetailList>
-            <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft">{guard.reason}</p>
+            {guard.reason ? <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft">{guard.reason}</p> : null}
             {guard.scan?.findings.length ? (
                 <ul className="mt-3 grid gap-1 text-[12px] leading-[1.6] text-ink-note">
                     {guard.scan.findings.map((finding) => (

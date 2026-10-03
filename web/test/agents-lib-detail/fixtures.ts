@@ -1,5 +1,5 @@
 import type { AgentDetail, AgentEdge, AgentNode, AgentVersionRow } from "@/lib/data/agents";
-import { DAY, NOW } from "@/lib/data/rng";
+import { DAY, HOUR, NOW } from "../time";
 
 // One link between two agents; every count is zero unless given
 export function edge(from: string, to: string, counts: Partial<AgentEdge> = {}): AgentEdge {
@@ -9,21 +9,7 @@ export function edge(from: string, to: string, counts: Partial<AgentEdge> = {}):
 }
 
 export function node(name: string, extra: Partial<AgentNode> = {}): AgentNode {
-    return {
-        name,
-        version: "v1",
-        model: "claude-sonnet",
-        tools: [],
-        state: "running",
-        app: "support-app",
-        runs24h: 0,
-        runs30d: 0,
-        entryPoints: 0,
-        turningPoints: 0,
-        damage: 0,
-        lastSeenAt: NOW,
-        ...extra,
-    };
+    return { name, state: "running", model: "claude-sonnet", runs24h: 0, lastSeenAt: NOW, ...extra };
 }
 
 export function version(name: string, extra: Partial<AgentVersionRow> = {}): AgentVersionRow {
@@ -41,15 +27,24 @@ export function version(name: string, extra: Partial<AgentVersionRow> = {}): Age
     };
 }
 
-// A small agent page: "researcher" in app "support-app", with no links, incidents or calls
+// Where the activity window starts at NOW, 24 hours before NOW's hour ends
+export const ACTIVITY_START = Date.UTC(2026, 9, 2, 19);
+
+// A quiet page for a running researcher with no calls, links, versions or incidents
 export function detail(extra: Partial<AgentDetail> = {}): AgentDetail {
     return {
-        agent: { name: "researcher", version: "v3", model: "claude-sonnet", tools: ["search"], state: "running" },
-        app: { name: "support-app", rulesHash: "0123456789abcdef0123", state: "connected", lastSeenAt: NOW },
-        versions: [],
-        stats: { runs24h: 0, modelCalls24h: 0, costUsd24h: 0, asked24h: 0, blocked24h: 0, influencedShare: 0 },
-        activity: [],
+        agent: node("researcher", { lastSeenAt: NOW - 3 * HOUR }),
+        stats: {
+            modelCalls24h: 0,
+            influencedShare: null,
+            costUsd24h: 0,
+            costKnown: true,
+            asked24h: 0,
+            blocked24h: 0,
+        },
+        activity: { startAt: ACTIVITY_START, perHour: Array.from({ length: 24 }, () => 0) },
         links: [],
+        versions: [],
         incidents: [],
         timeline: [],
         ...extra,

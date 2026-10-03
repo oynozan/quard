@@ -1,53 +1,67 @@
-import type { SdkApp } from "../guards/apps";
 import type { OriginOverride } from "../labels/origins";
-import type { Account } from "../values/people";
 import type { GuardMode, GuardType } from "../types";
 
-// The SDK talks to webhook and control with agent keys only. The dashboard shows a prefix.
+// A key the SDK sends events with, shown only by its prefix
 export type AgentKey = {
     id: string;
     name: string;
-    // "qk_live_7f31…"
+    // The first 12 characters, such as "qk_live_7f31"
     prefix: string;
-    scope: "agent" | "app";
-    agents: string[];
     createdAt: number;
-    createdBy: string;
+    // The last upload made with the key
     lastUsedAt: number | null;
     revokedAt: number | null;
-    revokedBy: string | null;
 };
 
 export type RetentionRow = {
     item: string;
-    // "30 days", "1 year", "Kept".
+    // Such as "30 days", "1 year" or "Kept"
     keep: string;
     days: number | null;
-    note: string;
 };
 
-// A rule from code. Read-only here: rules change through pull requests.
+// A rule from code, read-only here because rules change through pull requests
 export type RuleRow = {
     name: string;
     guard: GuardType;
     tools: string[];
     apps: string[];
-    // Null for approval guards, which always ask.
+    // Null for approval guards, which always ask
     mode: GuardMode | null;
     hash: string;
     summary: string;
     source: "team" | "product default";
 };
 
-export type SdkConnection = Omit<SdkApp, "keyId"> & { key: string };
+// An app that runs the SDK, as it reports itself when it connects
+export type SdkConnection = {
+    name: string;
+    agents: string[];
+    sdkVersion: string;
+    runtime: string;
+    // The prefix of the agent key it uses
+    key: string;
+    rulesHash: string;
+    // The hash before the last deploy, and when it changed
+    previousHash: string | null;
+    hashSince: number;
+    lastSeenAt: number;
+    state: "connected" | "offline";
+};
 
 export type SettingsData = {
+    // False on a new install, before anyone made a key
+    hasProject: boolean;
     keys: AgentKey[];
-    accounts: Account[];
     retention: RetentionRow[];
     origins: OriginOverride[];
     rules: RuleRow[];
     sdks: SdkConnection[];
-    hashKey: { algorithm: string; setAt: number; previousKeptUntil: number | null };
-    detector: { name: string; version: string; mode: GuardMode };
 };
+
+// A new key, whose full secret travels to the drawer once and is never stored
+export type CreatedKey = { key: Pick<AgentKey, "id" | "name" | "prefix">; secret: string };
+
+export type CreateKeyResult = CreatedKey | { error: string };
+
+export type RevokeKeyResult = { ok: true } | { error: string };

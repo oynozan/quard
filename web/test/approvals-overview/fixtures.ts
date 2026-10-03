@@ -1,6 +1,4 @@
 import { vi } from "vitest";
-import { getApprovals } from "@/lib/data/approvals";
-import type { ApprovalDetail } from "@/lib/data/approvals";
 import type { GuardDecision } from "@/lib/data/runs/types";
 
 // One guard result. Tests override the fields they care about.
@@ -18,14 +16,6 @@ export function guardDecision(overrides: Partial<GuardDecision> = {}): GuardDeci
         scan: null,
         ...overrides,
     };
-}
-
-// The sample open request with this id, as the approvals page loads it.
-export async function openRequest(id: string): Promise<ApprovalDetail> {
-    const { open } = await getApprovals();
-    const item = open.find((entry) => entry.request.id === id);
-    if (!item) throw new Error(`No sample request ${id}`);
-    return item;
 }
 
 // jsdom has no ResizeObserver. Charts keep their starting width.

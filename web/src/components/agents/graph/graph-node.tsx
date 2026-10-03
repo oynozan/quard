@@ -1,16 +1,12 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { Glyph } from "@/components/icons/glyphs";
-import type { AgentNode } from "@/lib/data/agents";
+import type { AgentNode, AgentState } from "@/lib/data/agents";
 import { cn } from "@/lib/utils";
 import { SQUARE, type Orientation, type PlacedNode } from "../lib/graph-geometry";
 import { STATE_WORD } from "../lib/words";
 
-const SQUARE_STYLE = {
-    running: "bg-signal",
-    idle: "bg-chart-context",
-    offline: "border border-line-strong bg-page",
-};
+const SQUARE_STYLE: Record<AgentState, string> = { running: "bg-signal", idle: "bg-chart-context" };
 
 const LABEL_WIDTH = 104;
 
@@ -57,7 +53,7 @@ export function GraphNode({ node, agent, orientation, width, height, dim, onFocu
         <li className="contents">
             <Link
                 href={`/agents/${encodeURIComponent(agent.name)}`}
-                aria-label={`${agent.name}, ${STATE_WORD[agent.state].toLowerCase()}, ${agent.version}, ${agent.model}`}
+                aria-label={[agent.name, STATE_WORD[agent.state].toLowerCase(), agent.model].filter(Boolean).join(", ")}
                 onMouseEnter={onFocus}
                 onMouseLeave={onBlur}
                 onFocus={onFocus}
@@ -82,10 +78,9 @@ export function GraphNode({ node, agent, orientation, width, height, dim, onFocu
                 <span className="-mx-1 flex max-w-[calc(100%+8px)] min-w-0 flex-col rounded-[2px] px-1 leading-[1.35] transition-colors group-hover:bg-nav-hover">
                     <span
                         className={cn(
-                            "inline-flex min-w-0 items-center gap-[2px] text-[12px] group-hover:text-ink-bright",
+                            "inline-flex min-w-0 items-center gap-[2px] text-[12px] text-ink group-hover:text-ink-bright",
                             across && before && "justify-end",
                             !across && "justify-center",
-                            agent.state === "offline" ? "text-ink-subtle" : "text-ink",
                         )}
                     >
                         <span className="mono min-w-0 truncate">{agent.name}</span>
@@ -97,9 +92,7 @@ export function GraphNode({ node, agent, orientation, width, height, dim, onFocu
                             !across && "justify-center",
                         )}
                     >
-                        <span className="mono truncate">
-                            {across ? `${agent.version} · ${agent.model}` : agent.version}
-                        </span>
+                        <span className="mono truncate">{agent.model}</span>
                         {across ? null : <Chevron />}
                     </span>
                 </span>

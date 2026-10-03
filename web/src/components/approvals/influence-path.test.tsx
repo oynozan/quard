@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Label, PathNode } from "@/lib/data/types";
-import { NOW, SECOND } from "@/lib/data/rng";
-import { openRequest } from "../../../test/approvals-overview/fixtures";
+import { openRequest } from "../../../test/approvals/requests";
+import { NOW, SECOND } from "../../../test/time";
 import { InfluencePath } from "./influence-path";
 
 const WEB: Label = { origin: "web:supplier-portal.example", trust: "untrusted", sensitivity: "public" };
@@ -17,8 +17,8 @@ function steps(container: HTMLElement) {
 }
 
 describe("InfluencePath", () => {
-    it("names the path by its length and lists each step with its time", async () => {
-        const { path } = await openRequest("apr_7f31");
+    it("names the path by its length and lists each step with its time", () => {
+        const { path } = openRequest("apr_7f31");
         const { container } = render(<InfluencePath nodes={path} waiting pathId="apr_7f31-path" />);
         expect(screen.getByRole("list").getAttribute("aria-label")).toBe(
             "Influence path, 5 steps from entry point to this call",
@@ -30,8 +30,8 @@ describe("InfluencePath", () => {
         expect(first.querySelector("time")?.textContent).toBe("18:35:48");
     });
 
-    it("shows a chip where untrusted content enters and on this call, and only the trust word between", async () => {
-        const { path } = await openRequest("apr_7f31");
+    it("shows a chip where untrusted content enters and on this call, and only the trust word between", () => {
+        const { path } = openRequest("apr_7f31");
         const { container } = render(<InfluencePath nodes={path} waiting pathId="apr_7f31-path" />);
         const chips = steps(container).map((item) => item.querySelector("[title]")?.getAttribute("title") ?? null);
         expect(chips).toEqual([

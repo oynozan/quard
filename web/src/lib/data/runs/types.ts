@@ -1,5 +1,7 @@
-import type { LimitName } from "../guards/limits";
 import type { GuardMode, GuardType, Label, Outcome, RunStatus, RunSummary, StepKind, ValueLabel } from "../types";
+
+// The run limits PROJECT.md names
+export type LimitName = "depth" | "fan-out" | "loops" | "steps" | "cost";
 
 export type StepStatus = "ok" | "error" | "blocked" | "waiting" | "running";
 
@@ -163,7 +165,6 @@ export type RunDetail = {
     // Time ordered.
     steps: Step[];
     limits: RunLimitUse[];
-    rulesHashes: string[];
 };
 
 export type RunQuery = {

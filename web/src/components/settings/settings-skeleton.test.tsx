@@ -12,15 +12,16 @@ describe("SettingsSkeleton", () => {
     it("shows the real tab labels, hidden from screen readers", () => {
         const { container } = render(<SettingsSkeleton />);
         const labels = container.querySelector("[aria-hidden]");
-        expect(labels?.textContent).toBe("Agent keysAccounts and rolesRetentionRules from code");
+        expect(labels?.textContent).toBe("Agent keysAccountsRetentionRules from code");
     });
 
     it("shows the agent key table headers over loading rows with a selection slot", () => {
-        render(<SettingsSkeleton />);
+        const { container } = render(<SettingsSkeleton />);
         const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-        expect(headers).toEqual(["Key", "Scope and agents", "Owner", "Created", "Last used", "Status", ""]);
-        // The selection slot plus seven columns, matching the header's merged first cell
+        expect(headers).toEqual(["Key", "Created", "Last used", "Status", ""]);
+        // The selection slot plus five columns, matching the header's merged first cell
         const [, firstLoading] = screen.getAllByRole("row");
-        expect(firstLoading.querySelectorAll("td")).toHaveLength(8);
+        expect(firstLoading.querySelectorAll("td")).toHaveLength(6);
+        expect(container.querySelectorAll("col")).toHaveLength(6);
     });
 });

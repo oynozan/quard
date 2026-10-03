@@ -1,4 +1,5 @@
 import type { RunDetail } from "@/lib/data/runs/types";
+import { cn } from "@/lib/utils";
 import { RunCallout, waitingStep } from "./run-callout";
 import { RunGraph } from "./run-graph";
 import { RunHeading } from "./run-heading";
@@ -39,7 +40,11 @@ export function RunView({ run, step }: { run: RunDetail; step?: string }) {
                 />
             </div>
             <div
-                className="reveal mt-7 grid grid-cols-[minmax(0,1fr)_268px] items-start gap-7 max-[1180px]:grid-cols-[minmax(0,1fr)_232px] max-[1180px]:gap-[22px] max-[980px]:grid-cols-1 max-[760px]:mt-[22px]"
+                className={cn(
+                    "reveal mt-7 max-[760px]:mt-[22px]",
+                    run.limits.length > 0 &&
+                        "grid grid-cols-[minmax(0,1fr)_268px] items-start gap-7 max-[1180px]:grid-cols-[minmax(0,1fr)_232px] max-[1180px]:gap-[22px] max-[980px]:grid-cols-1",
+                )}
                 style={{ animationDelay: "120ms" }}
             >
                 <RunGraph graph={run.graph} startedAt={summary.startedAt} />

@@ -16,10 +16,7 @@ export function EventLog({ events, live = true }: { events: DecisionEvent[]; liv
         <div className="mono overflow-x-auto px-3 py-[10px] text-[11px] leading-[20px]" aria-live="polite">
             <ol className="min-w-[560px]">
                 {events.map((event) => (
-                    <li
-                        key={`${event.at}-${event.tool}`}
-                        className="grid grid-cols-[58px_12px_104px_96px_108px_1fr] items-center gap-x-2"
-                    >
+                    <li key={event.id} className="grid grid-cols-[58px_12px_104px_96px_108px_1fr] items-center gap-x-2">
                         <span className="text-ink-muted">{formatClock(event.at, true)}</span>
                         <span aria-hidden className={`size-[6px] ${SQUARE[event.outcome]}`} />
                         <span className="text-ink">

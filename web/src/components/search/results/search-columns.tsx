@@ -1,6 +1,6 @@
 import { Th } from "@/components/kit/data-table";
 
-// Shared by the results, their skeleton and the empty states so all keep one geometry.
+// The results table's minimum width, columns and heads
 export const SEARCH_MIN_WIDTH = 960;
 export const SEARCH_COLUMNS = 7;
 

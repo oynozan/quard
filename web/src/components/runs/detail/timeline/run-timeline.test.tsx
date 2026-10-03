@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Step } from "@/lib/data/runs/types";
+import { expectNoChartsOrTables } from "../../../../../test/empty";
 import { START, UNTRUSTED_PUBLIC, makeStep } from "../../../../../test/runs-timeline-lib/steps";
 import { RunTimeline } from "./run-timeline";
 
@@ -72,12 +73,24 @@ describe("RunTimeline summary", () => {
         );
     });
 
-    it("shows an empty state with a dash and the legend when the run has no steps", () => {
-        render(<RunTimeline steps={[]} lanes={[]} startedAt={START} />);
-        expect(screen.getByText("This run has no steps yet")).toBeTruthy();
-        expect(screen.queryByRole("img")).toBeNull();
-        expect(readout()).toBe("Untrusted context—steps");
-        expect(screen.getByText("Legend:")).toBeTruthy();
+    it("shows a run with no steps as the pane title and one line", () => {
+        render(<RunTimeline steps={[]} lanes={["billing"]} startedAt={START} initialStep="0000000000000001" />);
+        const pane = screen.getByRole("region", { name: "Timeline" });
+        expect(pane.textContent).toBe("TimelineNo steps yet");
+        expect(screen.getByRole("status").textContent).toBe("No steps yet");
+        expect(screen.queryByText("Untrusted context")).toBeNull();
+        expect(screen.queryByText("Legend:")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
+        expect(screen.queryByRole("dialog")).toBeNull();
+        expectNoChartsOrTables(pane);
+    });
+
+    it("draws the steps once a run that had none records some", () => {
+        const { rerender } = render(<RunTimeline steps={[]} lanes={["billing"]} startedAt={START} />);
+        rerender(<RunTimeline steps={[makeStep()]} lanes={["billing"]} startedAt={START} />);
+        expect(screen.queryByText("No steps yet")).toBeNull();
+        expect(screen.getByRole("img").getAttribute("aria-label")).toContain("Timeline of 1 step across 1 agent");
+        expect(readout()).toBe("Untrusted context0steps");
     });
 
     it("narrows the lane labels when the pane shrinks below 520 px", () => {

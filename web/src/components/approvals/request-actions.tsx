@@ -13,35 +13,18 @@ type Props = {
     onAnswer(answer: ApprovalAnswer): void;
 };
 
-const BUSY_MS = 450;
-
-const BUSY_WORD: Record<ApprovalAnswer, string> = {
-    "approve once": "Approving…",
-    "always approve": "Saving grant…",
-    deny: "Denying…",
-};
-
 // Approve once, always approve, or deny after an inline confirm.
 export function RequestActions({ agent, tool, live, onAnswer }: Props) {
     const [confirming, setConfirming] = useState(false);
-    const [busy, setBusy] = useState<ApprovalAnswer | null>(null);
-    const timer = useRef<number | null>(null);
     const denyRef = useRef<HTMLButtonElement>(null);
     const confirmRef = useRef<HTMLButtonElement>(null);
     const opened = useRef(false);
-
-    useEffect(() => () => void (timer.current && window.clearTimeout(timer.current)), []);
 
     useEffect(() => {
         if (confirming) confirmRef.current?.focus();
         else if (opened.current) denyRef.current?.focus();
         opened.current = confirming || opened.current;
     }, [confirming]);
-
-    function answer(choice: ApprovalAnswer) {
-        setBusy(choice);
-        timer.current = window.setTimeout(() => onAnswer(choice), BUSY_MS);
-    }
 
     if (confirming) {
         return (
@@ -51,15 +34,10 @@ export function RequestActions({ agent, tool, live, onAnswer }: Props) {
                     This cannot be undone.
                 </CautionBox>
                 <div className="flex flex-wrap gap-2">
-                    <Button
-                        ref={confirmRef}
-                        variant="destructive"
-                        busy={busy === "deny"}
-                        onClick={() => answer("deny")}
-                    >
-                        {busy === "deny" ? BUSY_WORD.deny : "Deny call"}
+                    <Button ref={confirmRef} variant="destructive" onClick={() => onAnswer("deny")}>
+                        Deny call
                     </Button>
-                    <Button variant="ghost" disabled={busy !== null} onClick={() => setConfirming(false)}>
+                    <Button variant="ghost" onClick={() => setConfirming(false)}>
                         Cancel
                     </Button>
                 </div>
@@ -68,13 +46,8 @@ export function RequestActions({ agent, tool, live, onAnswer }: Props) {
     }
 
     const once = (
-        <Button
-            variant="default"
-            busy={busy === "approve once"}
-            disabled={busy !== null}
-            onClick={() => answer("approve once")}
-        >
-            {busy === "approve once" ? BUSY_WORD["approve once"] : "Approve once"}
+        <Button variant="default" onClick={() => onAnswer("approve once")}>
+            Approve once
         </Button>
     );
 
@@ -86,16 +59,11 @@ export function RequestActions({ agent, tool, live, onAnswer }: Props) {
                 <Hint content="The process stopped. The next identical call uses this approval.">{once}</Hint>
             )}
             <Hint content="Same agent, tool and exact arguments, in any run, until revoked.">
-                <Button
-                    variant="outline"
-                    busy={busy === "always approve"}
-                    disabled={busy !== null}
-                    onClick={() => answer("always approve")}
-                >
-                    {busy === "always approve" ? BUSY_WORD["always approve"] : "Always approve"}
+                <Button variant="outline" onClick={() => onAnswer("always approve")}>
+                    Always approve
                 </Button>
             </Hint>
-            <Button ref={denyRef} variant="destructive" disabled={busy !== null} onClick={() => setConfirming(true)}>
+            <Button ref={denyRef} variant="destructive" onClick={() => setConfirming(true)}>
                 Deny
             </Button>
         </div>

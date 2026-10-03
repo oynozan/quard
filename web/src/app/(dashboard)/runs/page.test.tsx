@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DAY, NOW } from "@/lib/data/rng";
-import { catalogRows } from "@/lib/data/runs/catalog";
+import { expectNoChartsOrTables } from "../../../../test/empty";
+import { makeRow } from "../../../../test/runs-detail-list/fixtures";
+import { HOUR, NOW } from "../../../../test/time";
 import type { RunQuery, RunRow } from "@/lib/data/runs/types";
 import { shortId } from "@/lib/format";
 import RunsPage, { metadata } from "./page";
@@ -12,17 +13,26 @@ const query = vi.hoisted(() => ({
     listRuns: vi.fn(),
 }));
 vi.mock("@/lib/data/runs/query", () => ({
-    // The first call reads every run for the agent list; the second applies the filter
+    // Without a filter it reads every run, and with one it reads the matches
     listRuns: (filter?: RunQuery) => {
         query.listRuns(filter);
         return Promise.resolve(filter ? query.shown : query.all);
     },
-    // Two days after the sample runs, so every row reads "2 d"
-    requestTime: async () => NOW + 2 * DAY,
 }));
+vi.mock("@/lib/data/scope", () => ({ requestTime: async () => NOW }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }));
 
-const ROWS = catalogRows();
+const ROWS = [
+    makeRow({ id: "a".repeat(32), rootAgent: "billing", agents: ["billing"], startedAt: NOW - 2 * HOUR }),
+    makeRow({
+        id: "b".repeat(32),
+        rootAgent: "orchestrator",
+        agents: ["orchestrator", "billing"],
+        status: "failed",
+        startedAt: NOW - 3 * HOUR,
+    }),
+    makeRow({ id: "c".repeat(32), rootAgent: "support", agents: ["support"], startedAt: NOW - 5 * HOUR }),
+];
 
 async function showPage(searchParams: Record<string, string> = {}) {
     render(await RunsPage({ params: Promise.resolve({}), searchParams: Promise.resolve(searchParams) }));
@@ -42,34 +52,33 @@ describe("RunsPage", () => {
         expect(metadata.title).toBe("Runs");
     });
 
-    it("lists recent runs with their count and age, and asks for no filter", async () => {
+    it("lists every run with its count and age, reading the runs once", async () => {
         await showPage();
-        expect(heading().textContent).toBe(`Runs${ROWS.length}`);
-        expect(heading().querySelector("[title]")!.getAttribute("title")).toBe("Runs in the last 6 hours");
-        expect(query.listRuns).toHaveBeenCalledWith({ query: undefined, agent: undefined, status: undefined });
+        expect(heading().textContent).toBe("Runs3");
+        expect(heading().querySelector("[title]")!.getAttribute("title")).toBe("Runs");
+        expect(query.listRuns).toHaveBeenCalledTimes(1);
+        expect(query.listRuns).toHaveBeenCalledWith(undefined);
         expect(screen.getByRole("status").textContent).toBe("");
         const link = runLink(ROWS[0]!);
         expect(link.getAttribute("href")).toBe(`/runs/${ROWS[0]!.id}`);
-        expect(link.closest("tr")!.textContent).toContain("2 d");
+        expect(link.closest("tr")!.textContent).toContain("2 h ago");
     });
 
     it("offers every recorded agent in the filter, even when the filter narrows the list", async () => {
         query.shown = ROWS.slice(0, 1);
         await showPage({ status: "failed" });
         await act(async () => fireEvent.click(screen.getByRole("combobox", { name: "Filter by agent" })));
-        const agents = [...new Set(ROWS.flatMap((run) => run.agents))].sort();
-        expect(agents.length).toBeGreaterThan(ROWS[0]!.agents.length);
         const options = screen.getAllByRole("option").map((option) => option.textContent);
-        expect(options).toEqual(["All agents", ...agents]);
+        expect(options).toEqual(["All agents", "billing", "orchestrator", "support"]);
     });
 
     it("passes the filters from the address on and counts the matches", async () => {
-        query.shown = ROWS.slice(0, 3);
+        query.shown = ROWS.slice(0, 2);
         await showPage({ q: "invoice", agent: "billing", status: "blocked" });
         expect(query.listRuns).toHaveBeenCalledWith({ query: "invoice", agent: "billing", status: "blocked" });
-        expect(heading().textContent).toBe("Runs3");
+        expect(heading().textContent).toBe("Runs2");
         expect(heading().querySelector("[title]")!.getAttribute("title")).toBe("Runs that match the filters");
-        expect(screen.getByText("3 runs match")).toBeTruthy();
+        expect(screen.getByText("2 runs match")).toBeTruthy();
     });
 
     it("says one run matches in the singular", async () => {
@@ -79,19 +88,39 @@ describe("RunsPage", () => {
         expect(runLink(ROWS[0]!)).toBeTruthy();
     });
 
-    it("offers to clear filters that match nothing", async () => {
+    it("keeps the toolbar and offers to clear filters that match nothing, with no empty table", async () => {
         query.shown = [];
         await showPage({ q: "nothing" });
+        expect(heading().textContent).toBe("Runs");
         expect(screen.getByText("0 runs match")).toBeTruthy();
+        expect(screen.getByRole("searchbox", { name: "Search runs" })).toBeTruthy();
         expect(screen.getByRole("heading", { level: 3, name: "No runs match" })).toBeTruthy();
         expect(screen.getByRole("link", { name: "Clear filters" }).getAttribute("href")).toBe("/runs");
+        expect(screen.queryByRole("table")).toBeNull();
+        expect(screen.queryByRole("columnheader")).toBeNull();
     });
 
-    it("says there are no runs yet when nothing has been recorded", async () => {
+    it("shows a project with no runs as just the title and one line", async () => {
         query.all = [];
         query.shown = [];
         await showPage();
-        expect(screen.getByRole("heading", { level: 3, name: "No runs yet" })).toBeTruthy();
+        expect(heading().textContent).toBe("Runs");
+        expect(heading().children).toHaveLength(0);
+        expect(screen.getByRole("status").textContent).toBe("No runs yet");
+        expect(screen.queryByRole("searchbox")).toBeNull();
+        expect(screen.queryByRole("combobox")).toBeNull();
+        expect(screen.queryByRole("list", { name: "Guard decision colors" })).toBeNull();
         expect(screen.queryByRole("link", { name: "Clear filters" })).toBeNull();
+        expectNoChartsOrTables();
+    });
+
+    it("says there are no runs yet whatever filters the address carries", async () => {
+        query.all = [];
+        query.shown = [];
+        await showPage({ q: "pay", status: "failed" });
+        expect(screen.getByRole("status").textContent).toBe("No runs yet");
+        expect(screen.queryByText("0 runs match")).toBeNull();
+        expect(screen.queryByRole("link", { name: "Clear filters" })).toBeNull();
+        expectNoChartsOrTables();
     });
 });

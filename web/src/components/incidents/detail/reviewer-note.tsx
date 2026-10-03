@@ -1,3 +1,4 @@
+import { EmptyLine } from "@/components/kit/empty";
 import { SectionHeading } from "@/components/kit/headings";
 import { Pane } from "@/components/kit/pane";
 import type { ReviewerNote as Note } from "@/lib/data/incidents/types";
@@ -23,7 +24,7 @@ export function ReviewerNote({ note }: { note: Note | null }) {
                     </div>
                 </Pane>
             ) : (
-                <p className="border-y border-line py-4 text-[13px] text-ink-muted">No explanation yet.</p>
+                <EmptyLine>No explanation yet</EmptyLine>
             )}
         </section>
     );

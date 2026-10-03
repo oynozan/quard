@@ -60,6 +60,19 @@ describe("GuardDetails", () => {
         expect(detailValue(container, "Degraded")).toBe("Yes, sent late");
     });
 
+    it("leaves out hashes the SDK did not send and a reason the guard did not give", () => {
+        const container = show({ outcome: "allow", ruleHash: "", rulesHash: "", reason: "" });
+        expect([...container.querySelectorAll("dt")].map((term) => term.textContent)).toEqual([
+            "Decision",
+            "Guard",
+            "Tool",
+            "Rule",
+            "Mode",
+            "Degraded",
+        ]);
+        expect(container.querySelector("p")).toBeNull();
+    });
+
     it("leaves out the scan row and findings when nothing was scanned", () => {
         const container = show();
         expect(screen.queryByText("Jev score")).toBeNull();

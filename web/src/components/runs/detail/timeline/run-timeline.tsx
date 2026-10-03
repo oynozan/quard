@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ChartPane } from "@/components/charts/chart-pane";
 import { useFitWidth } from "@/components/charts/hooks/use-fit-width";
+import { EmptyLine } from "@/components/kit/empty";
+import { Pane } from "@/components/kit/pane";
 import type { Step } from "@/lib/data/runs/types";
 import { formatInt } from "@/lib/format";
 import { StepDrawer } from "../drawer/step-drawer";
@@ -27,22 +29,30 @@ function timelineSummary(steps: Step[], lanes: string[]): string {
     return `${base} Context turned untrusted at step ${steps.indexOf(first) + 1} (${first.name}, ${first.agent}); ${untrusted.length} ${stepWord(untrusted.length)} ran on untrusted context.`;
 }
 
-// One lane per agent, one cell per step. A step opens in the drawer.
-export function RunTimeline({ steps, lanes, startedAt, initialStep }: RunTimelineProps) {
+// One lane per agent and one cell per step that opens in the drawer
+export function RunTimeline(props: RunTimelineProps) {
+    if (props.steps.length === 0) {
+        return (
+            <Pane title="Timeline">
+                <EmptyLine inset>No steps yet</EmptyLine>
+            </Pane>
+        );
+    }
+    return <StepTimeline {...props} />;
+}
+
+function StepTimeline({ steps, lanes, startedAt, initialStep }: RunTimelineProps) {
     const [ref, width] = useFitWidth<HTMLDivElement>(900);
     const [selected, setSelected] = useState<number | null>(() => {
         const index = initialStep ? steps.findIndex((step) => step.id === initialStep) : -1;
         return index >= 0 ? index : null;
     });
     const untrusted = steps.filter((step) => step.context.trust === "untrusted").length;
-    const summary = timelineSummary(steps, lanes);
-    const state = steps.length === 0 ? "empty" : "ready";
 
     return (
         <>
             <ChartPane
                 title="Timeline"
-                state={state}
                 readouts={[
                     {
                         label: "Untrusted context",
@@ -60,21 +70,15 @@ export function RunTimeline({ steps, lanes, startedAt, initialStep }: RunTimelin
                 }
             >
                 <div ref={ref}>
-                    {steps.length === 0 ? (
-                        <p className="py-10 text-center text-[11px] font-light text-ink-muted">
-                            This run has no steps yet
-                        </p>
-                    ) : (
-                        <TimelineField
-                            steps={steps}
-                            lanes={lanes}
-                            startedAt={startedAt}
-                            width={width}
-                            summary={summary}
-                            selected={selected}
-                            onOpen={setSelected}
-                        />
-                    )}
+                    <TimelineField
+                        steps={steps}
+                        lanes={lanes}
+                        startedAt={startedAt}
+                        width={width}
+                        summary={timelineSummary(steps, lanes)}
+                        selected={selected}
+                        onOpen={setSelected}
+                    />
                     <div className="mt-[18px] border-t border-line pt-3">
                         <TimelineLegend steps={steps} />
                     </div>

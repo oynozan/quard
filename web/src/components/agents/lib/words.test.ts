@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { edge } from "../../../../test/agents-lib-detail/fixtures";
-import { edgeKind, edgeKinds, plural, ROLE_WORD, STATE_TONE, STATE_WORD } from "./words";
+import { edgeKind, plural, ROLE_WORD, STATE_TONE, STATE_WORD } from "./words";
 
 describe("plural", () => {
     it("uses the single word only for one", () => {
@@ -12,22 +12,6 @@ describe("plural", () => {
 
     it("takes an irregular plural", () => {
         expect(plural(3, "policy", "policies")).toBe("policies");
-    });
-});
-
-describe("edgeKinds", () => {
-    it("lists every kind a link carries with grouped counts", () => {
-        const link = edge("a", "b", { delegations: 3020, handoffs: 1, messages: 12 });
-        expect(edgeKinds(link)).toBe("3,020 delegations, 1 handoff, 12 messages");
-    });
-
-    it("skips kinds with no traffic", () => {
-        expect(edgeKinds(edge("a", "b", { delegations: 1 }))).toBe("1 delegation");
-        expect(edgeKinds(edge("a", "b", { messages: 1 }))).toBe("1 message");
-    });
-
-    it("says so when a link carried nothing", () => {
-        expect(edgeKinds(edge("a", "b"))).toBe("No traffic");
     });
 });
 
@@ -49,8 +33,8 @@ describe("edgeKind", () => {
 
 describe("word tables", () => {
     it("names each agent state and its tone", () => {
-        expect(STATE_WORD).toEqual({ running: "Running", idle: "Idle", offline: "Offline" });
-        expect(STATE_TONE.offline).toBe("off");
+        expect(STATE_WORD).toEqual({ running: "Running", idle: "Idle" });
+        expect(STATE_TONE).toEqual({ running: "on", idle: "context" });
         expect(ROLE_WORD.turning).toBe("Turning point");
     });
 });

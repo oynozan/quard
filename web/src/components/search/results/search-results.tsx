@@ -7,7 +7,7 @@ import type { RunGroup } from "../lib/group";
 import { matchWord, plural, stepName } from "../lib/words";
 import { SEARCH_COLUMNS, SEARCH_MIN_WIDTH, SearchColgroup, SearchHead } from "./search-columns";
 
-// The header row of one run's group: the run link, its status, starter and match count.
+// The header row of a run's group with its link, status, starter and match count
 function RunGroupRow({ group }: { group: RunGroup }) {
     const { run, runId, matches } = group;
     const count = matches.length;
@@ -18,20 +18,14 @@ function RunGroupRow({ group }: { group: RunGroup }) {
                     <TextLink mono href={`/runs/${runId}`} className="text-[13px]">
                         Run {shortId(runId)}
                     </TextLink>
-                    {run ? (
-                        <>
-                            <RunStatusLabel status={run.status} />
-                            <span className="truncate">
-                                Started by <span className="text-ink-2">{run.rootAgent}</span>
-                                <span className="mono">
-                                    {" "}
-                                    · {formatShortDate(run.startedAt)}, {formatClock(run.startedAt)}
-                                </span>
-                            </span>
-                        </>
-                    ) : (
-                        <span className="text-ink-absent">Run details expired</span>
-                    )}
+                    <RunStatusLabel status={run.status} />
+                    <span className="truncate">
+                        Started by <span className="text-ink-2">{run.rootAgent}</span>
+                        <span className="mono">
+                            {" "}
+                            · {formatShortDate(run.startedAt)}, {formatClock(run.startedAt)}
+                        </span>
+                    </span>
                     <span className="ml-auto shrink-0 pr-[2px]">
                         <span className="mono text-ink-2">{count}</span> {plural(count, "match", "matches")}
                     </span>
@@ -68,9 +62,7 @@ function MatchRow({ match }: { match: SearchMatch }) {
                     <small className="truncate text-[11px] text-ink-note">{matchWord(match)}</small>
                 </span>
             </Td>
-            <Td className="truncate">
-                <LabelChip label={match.label} />
-            </Td>
+            <Td className="truncate">{match.label ? <LabelChip label={match.label} /> : null}</Td>
             <Td className="mono text-[12px] whitespace-nowrap text-ink-2" title={formatLongDate(match.at)}>
                 {formatClock(match.at, true)}
                 <RowChevron />
@@ -79,7 +71,7 @@ function MatchRow({ match }: { match: SearchMatch }) {
     );
 }
 
-// Every match, grouped by run with the newest run first.
+// Every match, grouped by run with the newest run first
 export function SearchResults({ groups }: { groups: RunGroup[] }) {
     return (
         <DataTable minWidth={SEARCH_MIN_WIDTH} className="text-[14px]">

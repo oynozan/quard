@@ -7,7 +7,7 @@ describe("KIND_WORD", () => {
     it("names each kind of query", () => {
         expect(KIND_WORD.iban).toBe("IBAN");
         expect(KIND_WORD.path).toBe("File path");
-        expect(Object.keys(KIND_WORD)).toHaveLength(11);
+        expect(Object.keys(KIND_WORD)).toEqual(["iban", "email", "url", "domain", "path", "id", "agent", "tool"]);
     });
 });
 
@@ -18,21 +18,20 @@ describe("matchWord", () => {
         expect(matchWord(matchOf({ match: "host" }))).toBe("same host");
         expect(matchWord(matchOf({ match: "domain" }))).toBe("same domain");
         expect(matchWord(matchOf({ match: "name" }))).toBe("by name");
-        expect(matchWord(matchOf({ match: "text" }))).toBe("contains");
     });
 });
 
 describe("stepName", () => {
     it("names the step by its tool", () => {
-        expect(stepName(matchOf({ tool: "pay_invoice" }))).toBe("pay_invoice");
+        expect(stepName(matchOf({ tool: "payInvoice" }))).toBe("payInvoice");
     });
 
     it("names an agent's start when there is no tool", () => {
         expect(stepName(matchOf({ tool: "", field: "agent" }))).toBe("Agent started");
     });
 
-    it("falls back to Step", () => {
-        expect(stepName(matchOf({ tool: "", field: "message" }))).toBe("Step");
+    it("falls back to Step for content whose step is not stored yet", () => {
+        expect(stepName(matchOf({ tool: "", field: "content" }))).toBe("Step");
     });
 });
 

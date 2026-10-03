@@ -2,6 +2,7 @@
 import { createProject, ingestBatch } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { attack, scoredFetch } from "../../../../test/runs/events";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
 vi.mock("@/lib/auth/session", () => ({ requireSession }));
@@ -13,13 +14,11 @@ const { database } = await import("./live/client");
 const RUN = "b".repeat(32);
 const OTHER = "c".repeat(32);
 let test: TestDb;
-let next = 0;
-const id = () => (++next).toString(16).padStart(16, "d");
-const at = (seconds: number) => new Date(Date.UTC(2026, 9, 3, 12, 0, seconds)).toISOString();
 
 beforeAll(async () => {
     test = await startTestDb();
     vi.stubEnv("DATABASE_URL", test.url);
+    vi.stubEnv("QUARD_PROJECT_ID", "");
 }, 60_000);
 
 afterAll(async () => {
@@ -27,67 +26,6 @@ afterAll(async () => {
     vi.unstubAllEnvs();
     await test.stop();
 });
-
-// The poisoned-invoice run as webhook stores it: redacted, with hashed value keys
-function attack(runId: string, agent: string, ended = false) {
-    const base = { runId, agent };
-    const events = [
-        ...(ended ? [{ type: "run_finished", runId, agent, at: at(4), status: "completed" }] : []),
-        { type: "run_started", runId, agent, at: at(0), origins: {} },
-        {
-            type: "model_call",
-            ...base,
-            stepId: "1".repeat(16),
-            at: at(2),
-            model: "gpt-5.4-mini",
-            status: "ok",
-            durationMs: 900,
-            toolCalls: [{ callId: "c1", name: "payInvoice", arguments: "{}" }],
-            usage: { inputTokens: 2000, cachedTokens: 1000, outputTokens: 500 },
-        },
-        {
-            type: "content",
-            ...base,
-            stepId: "1".repeat(16),
-            at: at(1.5),
-            contentId: "c1",
-            origin: "web:acme-billing.net",
-            trust: "untrusted",
-            sensitivity: "public",
-            flags: [],
-            keys: [`iban:GB33…5555#${"e".repeat(32)}`],
-        },
-        {
-            type: "decision",
-            ...base,
-            stepId: "2".repeat(16),
-            at: at(3),
-            tool: "payInvoice",
-            guard: "action",
-            rule: "iban:from",
-            decision: "block",
-            mode: "block",
-            enforced: true,
-            reason: "value_not_from_allowed_origin",
-            field: "iban",
-        },
-        {
-            type: "tool_call",
-            ...base,
-            stepId: "2".repeat(16),
-            at: at(3),
-            tool: "payInvoice",
-            callId: "c1",
-            arguments: { iban: "GB33…5555", amount: 4950 },
-            status: "blocked",
-            influenced: true,
-            flagged: false,
-            durationMs: 0,
-            keys: [`iban:GB33…5555#${"e".repeat(32)}`],
-        },
-    ];
-    return events.map((event) => ({ id: id(), event: event as never }));
-}
 
 describe("runs from Postgres", () => {
     it("shows nothing before a project exists", async () => {
@@ -127,6 +65,19 @@ describe("runs from Postgres", () => {
         expect((await listRuns({ query: "SUPPORT pay" })).map((row) => row.id)).toEqual([OTHER]);
         expect((await listRuns({ query: "bbbb" })).map((row) => row.id)).toEqual([RUN]);
         expect(await listRuns({ limit: 1 })).toHaveLength(1);
+    });
+
+    it("says which decisions came late and keeps a detector's score", async () => {
+        const projectId = await createProject(test.db, "Scored");
+        vi.stubEnv("QUARD_PROJECT_ID", projectId);
+        await ingestBatch(test.db, projectId, [...attack(RUN, "billing"), ...scoredFetch(RUN, "billing")]);
+
+        const checks = (await getRun(RUN))?.steps.flatMap((step) => (step.guard ? [step.guard] : []));
+        vi.stubEnv("QUARD_PROJECT_ID", "");
+        expect(checks?.map((guard) => [guard.guard, guard.degraded, guard.scan?.jevScore])).toEqual([
+            ["action", false, undefined],
+            ["source", true, 0.87],
+        ]);
     });
 
     it("tells the time of the request", async () => {

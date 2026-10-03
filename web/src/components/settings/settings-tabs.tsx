@@ -6,6 +6,7 @@ import { SETTINGS_TABS, type SettingsTab } from "./tabs";
 
 type SettingsTabsProps = {
     initial: SettingsTab;
+    // A count shows only when it is above 0
     counts: Partial<Record<SettingsTab, number>>;
     panels: Record<SettingsTab, ReactNode>;
 };
@@ -23,12 +24,15 @@ export function SettingsTabs({ initial, counts, panels }: SettingsTabsProps) {
             }}
         >
             <TabList aria-label="Settings sections">
-                {SETTINGS_TABS.map((tab) => (
-                    <Tab key={tab.value} value={tab.value}>
-                        {tab.label}
-                        {counts[tab.value] !== undefined ? <TabCount value={counts[tab.value] ?? 0} /> : null}
-                    </Tab>
-                ))}
+                {SETTINGS_TABS.map((tab) => {
+                    const count = counts[tab.value] ?? 0;
+                    return (
+                        <Tab key={tab.value} value={tab.value}>
+                            {tab.label}
+                            {count > 0 ? <TabCount value={count} /> : null}
+                        </Tab>
+                    );
+                })}
             </TabList>
             {SETTINGS_TABS.map((tab) => (
                 <TabPanel key={tab.value} value={tab.value} className="mt-[30px] max-[760px]:mt-[25px]">

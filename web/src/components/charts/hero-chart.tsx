@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
+import { EmptyLine } from "@/components/kit/empty";
+import { Greeting } from "@/components/overview/greeting";
 import { columnOverlay } from "@/lib/charts/cells";
 import { heroLayout, HERO_DATA_ROWS } from "@/lib/charts/hero";
 import { formatClock, formatCompact, formatInt } from "@/lib/format";
 import { useWidth } from "@/lib/hooks/use-width";
+import { MINUTE } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { ChartTooltip, HeaderDivider, LiveMark, Readout, TableToggle } from "./chart-parts";
 
-const BUCKET_MS = 10 * 60_000;
+const BUCKET_MS = 10 * MINUTE;
 
 type HeroChartProps = {
     greeting: string;
@@ -17,13 +20,27 @@ type HeroChartProps = {
     live?: boolean;
 };
 
-// The overview's signature: model calls over the last 24 hours as green cell columns.
-export function HeroChart({ greeting, values, endsAt, live = true }: HeroChartProps) {
+const LABEL = "Model calls in the last 24 hours";
+
+// The greeting over the last 24 hours of model calls as green cell columns
+export function HeroChart(props: HeroChartProps) {
+    const total = props.values.reduce((sum, v) => sum + v, 0);
+    if (total === 0) {
+        return (
+            <section aria-label={LABEL} className="reveal">
+                <Greeting text={props.greeting} className="mb-[18px]" />
+                <EmptyLine>No model calls in the last 24 hours</EmptyLine>
+            </section>
+        );
+    }
+    return <HeroField {...props} total={total} />;
+}
+
+function HeroField({ greeting, values, endsAt, live = true, total }: HeroChartProps & { total: number }) {
     const [ref, width] = useWidth<HTMLDivElement>(978);
     const [hover, setHover] = useState<number | null>(null);
     const [table, setTable] = useState(false);
 
-    const total = values.reduce((sum, v) => sum + v, 0);
     const startsAt = endsAt - values.length * BUCKET_MS;
     const layout = heroLayout(values, Math.max(240, width));
     const { field, buckets, bucketSize, peak } = layout;
@@ -64,11 +81,9 @@ export function HeroChart({ greeting, values, endsAt, live = true }: HeroChartPr
     )}, now ${formatInt(buckets[buckets.length - 1])}.`;
 
     return (
-        <section aria-label="Model calls in the last 24 hours" className="reveal">
+        <section aria-label={LABEL} className="reveal">
             <div className="mb-[18px] flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-                <h1 className="text-[27px] leading-[1.25] font-extralight tracking-[-0.2px] text-ink-bright max-[1250px]:text-[25px] max-[760px]:max-w-[18ch]">
-                    {greeting}
-                </h1>
+                <Greeting text={greeting} />
                 <div className="flex items-center gap-[14px] pb-[5px]">
                     <Readout label={`Model calls per ${per}`} value={formatInt(total)} suffix="in 24h" />
                     <LiveMark live={live} />
@@ -126,7 +141,7 @@ export function HeroChart({ greeting, values, endsAt, live = true }: HeroChartPr
                                     fill="var(--chart-grid)"
                                 />
                             ))}
-                            <path d={field.lit.lit ?? ""} fill="var(--signal)" />
+                            <path d={field.lit.lit} fill="var(--signal)" />
                             {overlay ? (
                                 <>
                                     <path d={overlay.unlit} fill="var(--highlight)" />

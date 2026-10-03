@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { MINUTE, NOW } from "@/lib/data/rng";
+import { MINUTE, NOW } from "../../../../test/time";
 import { Ago, Cols, Head, Quiet, ShortDate } from "./table-parts";
 
 describe("Cols", () => {

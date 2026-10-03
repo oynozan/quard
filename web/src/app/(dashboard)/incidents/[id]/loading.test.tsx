@@ -8,4 +8,10 @@ describe("IncidentLoading", () => {
         expect(screen.getByRole("status").textContent).toBe("Loading the incident…");
         expect(container.firstElementChild!.getAttribute("aria-busy")).toBe("true");
     });
+
+    it("draws a title bar and one small bar, with no path, replay or verdict skeletons", () => {
+        const { container } = render(<IncidentLoading />);
+        expect(container.querySelectorAll(".skel")).toHaveLength(2);
+        expect(container.querySelectorAll("[class*='border']")).toHaveLength(0);
+    });
 });

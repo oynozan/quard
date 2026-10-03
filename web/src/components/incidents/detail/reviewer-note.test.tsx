@@ -27,8 +27,9 @@ describe("ReviewerNote", () => {
     it("says there is no explanation yet without a note", () => {
         render(<ReviewerNote note={null} />);
         expect(screen.getByRole("region", { name: "AI reviewer" }).textContent).toBe(
-            "AI explanationNo explanation yet.",
+            "AI explanationNo explanation yet",
         );
+        expect(screen.getByRole("status").textContent).toBe("No explanation yet");
         expect(screen.queryByText("not the verdict")).toBeNull();
     });
 });

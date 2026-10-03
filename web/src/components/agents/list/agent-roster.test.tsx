@@ -4,9 +4,9 @@ import { node } from "../../../../test/agents-lib-detail/fixtures";
 import { AgentRoster } from "./agent-roster";
 
 describe("AgentRoster", () => {
-    it("lists running agents first, then idle, then offline, busiest first within each", () => {
+    it("lists running agents first, then idle ones, busiest first within each", () => {
         const agents = [
-            node("deploy-bot", { state: "offline", runs24h: 900 }),
+            node("deploy-bot", { state: "idle", runs24h: 900 }),
             node("support", { state: "idle", runs24h: 12 }),
             node("billing", { state: "running", runs24h: 40 }),
             node("researcher", { state: "running", runs24h: 1520 }),
@@ -16,8 +16,8 @@ describe("AgentRoster", () => {
         expect(names).toEqual([
             "researcher, Running1,520 runs 24h",
             "billing, Running40 runs 24h",
+            "deploy-bot, Idle900 runs 24h",
             "support, Idle12 runs 24h",
-            "deploy-bot, Offline900 runs 24h",
         ]);
     });
 
@@ -30,20 +30,5 @@ describe("AgentRoster", () => {
         render(<AgentRoster agents={[node("a"), node("b")]} />);
         const pane = screen.getByRole("region", { name: "Agents" });
         expect(within(pane).getByText("2")).toBeTruthy();
-    });
-
-    it("dims the name of an offline agent", () => {
-        render(<AgentRoster agents={[node("on"), node("off", { state: "offline" })]} />);
-        const [on, off] = screen.getAllByRole("link").map((link) => link.children[1]);
-        expect(on.classList.contains("text-ink")).toBe(true);
-        expect(off.classList.contains("text-ink-subtle")).toBe(true);
-        expect(off.classList.contains("text-ink")).toBe(false);
-    });
-
-    it("says there are no agents yet when the list is empty", () => {
-        render(<AgentRoster agents={[]} />);
-        expect(screen.getByRole("status").textContent).toBe("No agents yet");
-        expect(screen.queryByRole("list")).toBeNull();
-        expect(within(screen.getByRole("region", { name: "Agents" })).getByText("0")).toBeTruthy();
     });
 });

@@ -1,48 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { DetailList, DetailRow } from "@/components/kit/detail/detail-list";
 import { DrawerActions, DrawerSection } from "@/components/kit/detail/drawer-parts";
 import { WarningRule } from "@/components/kit/feedback/feedback";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
-import type { AgentKey } from "@/lib/data/settings";
-import { createKey, pause, type KeyDraft } from "../lib/new-key";
+import type { CreatedKey, CreateKeyResult } from "@/lib/data/settings";
 import { KeyForm } from "./key-form";
 
 type KeyDrawerProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    agents: string[];
     takenNames: string[];
-    account: string;
-    now: number;
-    onCreated: (key: AgentKey) => void;
+    createAction: (name: string) => Promise<CreateKeyResult>;
+    // Told the new key's name once it exists
+    onCreated: (name: string) => void;
 };
 
-type Created = { key: AgentKey; secret: string };
+const FAILED = "Could not create the key. Try again.";
+
+// The SDK takes the key in quard.configure, together with the webhook address and the hash key
+const USE_IT = `quard.configure({
+    key: process.env.QUARD_AGENT_KEY,
+    webhookUrl: process.env.QUARD_WEBHOOK_URL,
+    hashKey: process.env.QUARD_HASH_KEY,
+});`;
 
 // Create a key, then show the full secret once with a Copy button
-export function KeyDrawer({ open, onOpenChange, agents, takenNames, account, now, onCreated }: KeyDrawerProps) {
-    const [created, setCreated] = useState<Created | null>(null);
+export function KeyDrawer({ open, onOpenChange, takenNames, createAction, onCreated }: KeyDrawerProps) {
+    const [created, setCreated] = useState<CreatedKey | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const [session, setSession] = useState(0);
+    const [busy, startTransition] = useTransition();
 
     function change(next: boolean) {
+        // Closing while the key is made would lose the secret
+        if (busy && !next) return;
         onOpenChange(next);
         if (!next) {
             // Forget the secret once the closing wipe has finished
             setTimeout(() => {
                 setCreated(null);
+                setError(null);
                 setSession((s) => s + 1);
             }, 240);
         }
     }
 
-    async function submit(draft: KeyDraft) {
-        await pause(700);
-        const result = createKey(draft, account, now);
-        setCreated(result);
-        onCreated(result.key);
+    function submit(name: string) {
+        setError(null);
+        startTransition(async () => {
+            const result = await createAction(name).catch((): CreateKeyResult => ({ error: FAILED }));
+            startTransition(() => {
+                if ("error" in result) {
+                    setError(result.error);
+                    return;
+                }
+                setCreated(result);
+                onCreated(result.key.name);
+            });
+        });
     }
 
     return (
@@ -53,12 +71,13 @@ export function KeyDrawer({ open, onOpenChange, agents, takenNames, account, now
             view={created ? "created" : "form"}
         >
             {created ? (
-                <CreatedKey created={created} onDone={() => change(false)} />
+                <ShownOnce created={created} onDone={() => change(false)} />
             ) : (
                 <KeyForm
                     key={session}
-                    agents={agents}
                     takenNames={takenNames}
+                    busy={busy}
+                    error={error}
                     onSubmit={submit}
                     onCancel={() => change(false)}
                 />
@@ -67,7 +86,7 @@ export function KeyDrawer({ open, onOpenChange, agents, takenNames, account, now
     );
 }
 
-function CreatedKey({ created, onDone }: { created: Created; onDone: () => void }) {
+function ShownOnce({ created, onDone }: { created: CreatedKey; onDone: () => void }) {
     const { key, secret } = created;
     return (
         <>
@@ -78,17 +97,13 @@ function CreatedKey({ created, onDone }: { created: Created; onDone: () => void 
                         {key.name}
                     </DetailRow>
                     <DetailRow term="Prefix" mono>
-                        {key.prefix}
-                    </DetailRow>
-                    <DetailRow term="Scope">{key.scope === "app" ? "One app" : "One agent"}</DetailRow>
-                    <DetailRow term="Agents" mono>
-                        {key.agents.join(", ")}
+                        {key.prefix}…
                     </DetailRow>
                 </DetailList>
             </DrawerSection>
             <DrawerSection title="Use it">
-                <pre className="mono overflow-x-auto rounded-md bg-recess px-3 py-[10px] text-[12px] text-ink-soft">
-                    QUARD_KEY={key.prefix}
+                <pre className="mono overflow-x-auto rounded-md bg-recess px-3 py-[10px] text-[12px] leading-[1.6] text-ink-soft">
+                    {USE_IT}
                 </pre>
             </DrawerSection>
             <DrawerActions>

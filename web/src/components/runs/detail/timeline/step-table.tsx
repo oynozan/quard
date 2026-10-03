@@ -72,9 +72,6 @@ export function StepTable({ steps, startedAt, height, onOpen }: StepTableProps) 
                     ))}
                 </tbody>
             </table>
-            {steps.length === 0 ? (
-                <p className="py-6 text-center text-[11px] text-ink-muted">This run has no steps yet</p>
-            ) : null}
         </div>
     );
 }

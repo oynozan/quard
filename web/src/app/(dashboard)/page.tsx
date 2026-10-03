@@ -1,21 +1,32 @@
 import { HeroChart } from "@/components/charts/hero-chart";
-import { EventLog } from "@/components/charts/event-log";
-import { LiveMark } from "@/components/charts/chart-parts";
-import { Pane } from "@/components/kit/pane";
+import { EmptyLine } from "@/components/kit/empty";
+import { PAGE_WIDE } from "@/components/kit/page";
+import { DecisionLog } from "@/components/overview/decision-log";
+import { Greeting } from "@/components/overview/greeting";
 import { ApprovalsSection, IncidentsSection, RunsSection } from "@/components/overview/overview-tables";
 import { OverviewRail } from "@/components/overview/overview-rail";
 import { TerminalOverview } from "@/components/overview/terminal-overview";
 import { getOverview } from "@/lib/data/overview";
-import { listRuns, requestTime } from "@/lib/data/runs/query";
-import { PAGE_WIDE } from "@/components/kit/page";
+import { greetingFor } from "@/lib/data/overview/greeting";
+import { listRuns } from "@/lib/data/runs/query";
+import { requestTime } from "@/lib/data/scope";
 
 export default async function OverviewPage() {
-    // Recent runs come from Postgres; the other panes still show sample data
-    const [data, runs, now] = await Promise.all([getOverview(), listRuns({ limit: 6 }), requestTime()]);
+    const now = await requestTime();
+    const [data, runs] = await Promise.all([getOverview(now), listRuns({ limit: 6 })]);
+
+    if (!data) {
+        return (
+            <div className={PAGE_WIDE}>
+                <Greeting text={greetingFor(now, 0)} className="mb-[18px]" />
+                <EmptyLine>No activity yet</EmptyLine>
+            </div>
+        );
+    }
 
     return (
         <div className={PAGE_WIDE}>
-            <HeroChart greeting={data.greeting} values={data.activity} endsAt={data.now} />
+            <HeroChart greeting={data.greeting} values={data.activity.values} endsAt={data.activity.endsAt} />
 
             <TerminalOverview
                 runsPerHour={data.runsPerHour}
@@ -29,12 +40,11 @@ export default async function OverviewPage() {
                     className="reveal grid min-w-0 grid-cols-1 gap-7 max-[760px]:gap-[25px]"
                     style={{ animationDelay: "80ms" }}
                 >
-                    <ApprovalsSection approvals={data.approvals} now={data.now} />
+                    {/* Approvals and incidents have no source until their services exist */}
+                    <ApprovalsSection approvals={[]} now={now} />
                     <RunsSection runs={runs} now={now} />
-                    <IncidentsSection incidents={data.incidents} now={data.now} />
-                    <Pane title="Decision log" actions={<LiveMark />}>
-                        <EventLog events={data.events} />
-                    </Pane>
+                    <IncidentsSection incidents={[]} now={now} />
+                    <DecisionLog events={data.events} />
                 </div>
                 <OverviewRail agents={data.agents} guardCounts={data.guardCounts} />
             </div>

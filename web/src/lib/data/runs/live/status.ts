@@ -1,9 +1,9 @@
+import { MINUTE } from "@/lib/time";
 import type { DecisionCounts, RunStatus } from "../../types";
 import type { Step } from "../types";
 
-// A run without a recorded end (one started without quard.run(), or a process that
-// stopped) counts as running until it has been quiet this long.
-export const IDLE_MS = 2 * 60_000;
+// A run with no recorded end, such as one outside quard.run(), counts as running until quiet this long
+export const IDLE_MS = 2 * MINUTE;
 
 export type LastStep = { kind: string; status: string } | null;
 export type Outcome = "completed" | "failed" | "blocked" | null;

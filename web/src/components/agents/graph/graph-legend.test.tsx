@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { GraphLegend } from "./graph-legend";
 
 describe("GraphLegend", () => {
-    it("names the three agent states", () => {
+    it("names the two agent states, with no offline one while connections are not recorded", () => {
         render(<GraphLegend />);
         expect(screen.getByText("Agents")).toBeTruthy();
         expect(screen.getByText("Running")).toBeTruthy();
         expect(screen.getByText("Idle")).toBeTruthy();
-        expect(screen.getByText("Offline")).toBeTruthy();
+        expect(screen.queryByText("Offline")).toBeNull();
     });
 
     it("shows a line for each untrusted share bucket, dashing only the top one", () => {

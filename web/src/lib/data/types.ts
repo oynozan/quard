@@ -18,10 +18,9 @@ export type AgentState = "running" | "idle" | "offline";
 
 export type Agent = {
     name: string;
-    version: string;
-    model: string;
-    tools: string[];
     state: AgentState;
+    // The model of its latest model call, or null when none is known
+    model: string | null;
 };
 
 export type DecisionCounts = {
@@ -82,11 +81,16 @@ export type Incident = {
     openedAt: number;
 };
 
+// Every guard that records decisions, the signature feed check included
+export type DecisionGuard = GuardType | "signature";
+
 export type DecisionEvent = {
+    // The decision's own event id
+    id: string;
     at: number;
     agent: string;
     tool: string;
-    guard: GuardType;
+    guard: DecisionGuard;
     outcome: Outcome;
     runId: string;
     detail: string;

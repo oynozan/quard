@@ -1,118 +1,66 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CountChip } from "@/components/kit/headings";
-import { TableState } from "@/components/kit/data-table";
+import { useState } from "react";
+import { EmptyLine } from "@/components/kit/empty";
+import { SectionHeading } from "@/components/kit/headings";
 import { Toolbar } from "@/components/kit/table/toolbar";
-import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
-import { showToast } from "@/components/ui/toast";
-import type { FleetData, QuarantinedValue } from "@/lib/data/fleet";
-import { MarkKnownDrawer } from "./mark-known-drawer";
+import type { QuarantinedValue, WatchedValue } from "@/lib/data/fleet";
+import { hasQuarantine } from "../lib/sections";
+import { EmptySection } from "../section-states";
 import { QuarantineTable } from "./quarantine-table";
 import { KIND_NAMES } from "./value-cell";
 import { WatchingTable } from "./watching-table";
 
 type Kind = "all" | QuarantinedValue["kind"];
 
-const KINDS: Kind[] = ["all", "iban", "email", "domain"];
+const KINDS: QuarantinedValue["kind"][] = ["iban", "email", "domain"];
 // The kind filter only helps once the list is long
 const FILTER_FROM = 6;
-const PLURALS = { all: "values", iban: "IBANs", email: "email addresses", domain: "domains" };
+// PROJECT.md Q9 blocks a value everywhere once a 5th run uses it within 24 hours
+const RUNS_TO_BLOCK = 5;
 
-type QuarantineSectionProps = {
-    quarantine: QuarantinedValue[];
-    watching: FleetData["watching"];
-    check: FleetData["fleetCheck"];
-    now: number;
-};
+type QuarantineSectionProps = { quarantine: QuarantinedValue[]; watching: WatchedValue[]; now: number };
 
-// The fleet-check quarantine list with a local "Mark as known" action
-export function QuarantineSection({ quarantine, watching, check, now }: QuarantineSectionProps) {
-    const [rows, setRows] = useState(quarantine);
+// Values the fleet check blocked everywhere, and new values it is still counting
+export function QuarantineSection({ quarantine, watching, now }: QuarantineSectionProps) {
     const [kind, setKind] = useState<Kind>("all");
-    const [picked, setPicked] = useState<QuarantinedValue | null>(null);
-    const [open, setOpen] = useState(false);
-    const [busy, setBusy] = useState(false);
-    const [announcement, setAnnouncement] = useState("");
-    const headingRef = useRef<HTMLDivElement>(null);
-    const timers = useRef<number[]>([]);
+    if (!hasQuarantine({ quarantine, watching })) {
+        return <EmptySection title="Quarantine">Nothing in quarantine</EmptySection>;
+    }
 
-    useEffect(() => () => timers.current.forEach((id) => window.clearTimeout(id)), []);
-
-    const filtering = rows.length > FILTER_FROM;
-    const shown = !filtering || kind === "all" ? rows : rows.filter((row) => row.kind === kind);
-    const options = KINDS.map((value) => ({
+    // Only kinds the list holds are offered, and a picked kind that runs out shows them all
+    const offered = KINDS.map((value) => ({
         value,
-        label: value === "all" ? "All" : KIND_NAMES[value],
-        count: value === "all" ? rows.length : rows.filter((row) => row.kind === value).length,
-    }));
-
-    function pick(row: QuarantinedValue) {
-        setPicked(row);
-        setOpen(true);
-    }
-
-    function confirm() {
-        if (!picked) return;
-        const done = picked;
-        setBusy(true);
-        // Stands in for the request until the backend exists
-        timers.current.push(
-            window.setTimeout(() => {
-                const left = rows.filter((row) => row.hash !== done.hash);
-                setRows(left);
-                setBusy(false);
-                setOpen(false);
-                showToast(`${done.value} marked as known`);
-                setAnnouncement(`${done.value} marked as known. ${left.length} left in quarantine.`);
-                timers.current.push(window.setTimeout(() => headingRef.current?.focus(), 260));
-            }, 650),
-        );
-    }
+        count: quarantine.filter((row) => row.kind === value).length,
+    })).filter((item) => item.count > 0);
+    const filtering = quarantine.length > FILTER_FROM;
+    const picked = filtering && offered.some((item) => item.value === kind) ? kind : "all";
+    const shown = picked === "all" ? quarantine : quarantine.filter((row) => row.kind === picked);
+    const options = [
+        { value: "all", label: "All", count: quarantine.length },
+        ...offered.map(({ value, count }) => ({ value, label: KIND_NAMES[value], count })),
+    ];
 
     return (
         <section aria-label="Quarantine">
-            <div ref={headingRef} tabIndex={-1} className="mb-4 outline-none">
-                <h2 className="text-[15px] leading-[1.4] font-extralight max-[760px]:text-[14px]">
-                    Quarantine
-                    <CountChip value={rows.length} />
-                </h2>
-            </div>
+            <SectionHeading title="Quarantine" count={quarantine.length > 0 ? quarantine.length : undefined} />
             {filtering ? (
                 <Toolbar>
                     <Segmented
                         options={options}
-                        value={kind}
+                        value={picked}
                         onValueChange={(value) => setKind(value as Kind)}
                         aria-label="Value kind"
                     />
                 </Toolbar>
             ) : null}
-            {shown.length > 0 ? <QuarantineTable rows={shown} now={now} onMarkKnown={pick} /> : null}
-            {rows.length === 0 ? (
-                <TableState title="Nothing in quarantine" />
-            ) : shown.length === 0 ? (
-                <TableState
-                    title={`No quarantined ${PLURALS[kind]}`}
-                    action={
-                        <Button variant="outline" size="sm" onClick={() => setKind("all")}>
-                            Show all
-                        </Button>
-                    }
-                />
-            ) : null}
-            <WatchingTable rows={watching} runsToBlock={check.runsToBlock} now={now} />
-            <div role="status" aria-live="polite" className="sr-only">
-                {announcement}
-            </div>
-            <MarkKnownDrawer
-                open={open}
-                value={picked}
-                busy={busy}
-                onConfirm={confirm}
-                onClose={() => setOpen(false)}
-            />
+            {quarantine.length > 0 ? (
+                <QuarantineTable rows={shown} now={now} />
+            ) : (
+                <EmptyLine>Nothing in quarantine</EmptyLine>
+            )}
+            <WatchingTable rows={watching} runsToBlock={RUNS_TO_BLOCK} now={now} />
         </section>
     );
 }

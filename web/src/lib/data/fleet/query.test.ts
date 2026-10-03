@@ -1,155 +1,164 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { agentEdges, incidentRoles } from "../agents/graph";
-import { NOW } from "../rng";
-import { catalogRuns } from "../runs/catalog";
-import { quarantined, watched } from "./quarantine";
-import { getFleet } from "./query";
-import { blockSeries } from "./series";
+import { createProject, ingestBatch } from "@quard/db";
+import { startTestDb, type TestDb } from "@quard/db/testing";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { block, delegate, itemsOf, modelCall, runOf, stepOf, webPage } from "../../../../test/summary/events";
+import { emptyFleet, START_AT } from "../../../../test/summary/fleet";
+import { DAY, HOUR, MINUTE, NOW, SECOND } from "../../../../test/time";
 
-const data = vi.hoisted(() => ({ noIncidents: false }));
+const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
+vi.mock("@/lib/auth/session", () => ({ requireSession }));
+vi.mock("next/server", () => ({ connection: vi.fn(async () => {}) }));
 
-vi.mock("../incidents/query", async (importOriginal) => {
-    const real = await importOriginal<typeof import("../incidents/query")>();
-    return { ...real, incidentDetail: (id: string) => (data.noIncidents ? null : real.incidentDetail(id)) };
+const { getFleet } = await import("./query");
+const { database } = await import("../runs/live/client");
+
+let test: TestDb;
+let clock: MockInstance<() => number>;
+
+beforeAll(async () => {
+    test = await startTestDb();
+    vi.stubEnv("DATABASE_URL", test.url);
+    vi.stubEnv("QUARD_PROJECT_ID", "");
+}, 60_000);
+
+beforeEach(() => {
+    clock = vi.spyOn(Date, "now").mockReturnValue(NOW);
 });
 
 afterEach(() => {
-    data.noIncidents = false;
+    clock.mockRestore();
 });
 
-const byCountThenName = <T>(rows: T[], count: (row: T) => number, name: (row: T) => string) =>
-    [...rows].sort((a, b) => count(b) - count(a) || name(a).localeCompare(name(b)));
+afterAll(async () => {
+    await database().destroy();
+    vi.unstubAllEnvs();
+    await test.stop();
+});
+
+// A fresh project that the dashboard reads
+async function project(name: string): Promise<string> {
+    const id = await createProject(test.db, name);
+    vi.stubEnv("QUARD_PROJECT_ID", id);
+    return id;
+}
+
+const RUN = runOf(1);
+const TODAY = START_AT + 29 * DAY;
 
 describe("getFleet", () => {
-    it("covers the 30 days of the block series, up to now", async () => {
-        const fleet = await getFleet();
-        const { byGuard, heatmap } = blockSeries();
-
-        expect(fleet).toMatchObject({ windowDays: 30, startAt: byGuard.startAt, endAt: NOW });
-        expect(fleet.blocksByGuard).toBe(byGuard);
-        expect(fleet.blocksHeatmap).toBe(heatmap);
+    it("is empty before a project exists, over the 30 UTC days up to now", async () => {
+        expect(await getFleet()).toEqual(emptyFleet());
+        expect(requireSession).toHaveBeenCalled();
     });
 
-    it("counts incidents by the source that started them, most first", async () => {
-        const sources = (await getFleet()).incidentsBySource;
+    it("is empty for a new project that has not sent anything", async () => {
+        await project("Main");
 
-        expect(sources[0]).toEqual({
-            origin: "email:claims-desk.io",
-            label: { origin: "email:claims-desk.io", trust: "untrusted", sensitivity: "public" },
-            count: 2,
-        });
-        expect(sources).toEqual(
-            byCountThenName(
-                sources,
-                (row) => row.count,
-                (row) => row.origin,
+        expect(await getFleet()).toEqual(emptyFleet());
+    });
+
+    it("counts enforced blocks of the six guards per UTC day, weekday and hour", async () => {
+        const id = await project("Main");
+        const other = await createProject(test.db, "Other");
+        await ingestBatch(
+            test.db,
+            id,
+            itemsOf(
+                // Friday 4 Sep at 09:05, the window's first day
+                block(RUN, START_AT + 9 * HOUR + 5 * MINUTE, "source"),
+                // Monday 28 Sep at 23:30
+                block(RUN, START_AT + 24 * DAY + 23 * HOUR + 30 * MINUTE, "limit", { rule: "max-calls-per-run" }),
+                // Today, a Saturday, twice in one hour and once just before now
+                block(RUN, TODAY + 10 * HOUR + 15 * MINUTE, "egress"),
+                block(RUN, TODAY + 10 * HOUR + 45 * MINUTE, "egress"),
+                block(RUN, NOW - SECOND, "permission", { rule: "requested-call" }),
+                // Left out as outside the window, not a dashboard guard, observed, asked or allowed
+                block(RUN, START_AT - 1, "source"),
+                block(RUN, NOW, "action"),
+                block(RUN, TODAY + HOUR, "signature", { rule: "PROMPT-INJECTION-1" }),
+                block(RUN, TODAY + HOUR, "action", { mode: "observe", enforced: false }),
+                block(RUN, TODAY + HOUR, "approval", { decision: "ask" }),
+                block(RUN, TODAY + HOUR, "limit", { decision: "allow", reason: undefined }),
             ),
         );
-        expect(sources.reduce((sum, row) => sum + row.count, 0)).toBe(incidentRoles().length);
+        await ingestBatch(test.db, other, itemsOf(block(RUN, TODAY + HOUR, "source")));
+
+        const { blocksByGuard, blocksHeatmap, untrustedLinks } = await getFleet();
+
+        expect(blocksByGuard.startAt).toBe(START_AT);
+        expect(blocksByGuard.series.map((row) => [row.guard, row.total])).toEqual([
+            ["source", 1],
+            ["action", 0],
+            ["egress", 2],
+            ["limit", 1],
+            ["approval", 0],
+            ["permission", 1],
+        ]);
+        expect(blocksByGuard.series[0].values[0]).toBe(1);
+        expect(blocksByGuard.series[2].values[29]).toBe(2);
+        expect(blocksByGuard.series[3].values[24]).toBe(1);
+        expect(blocksByGuard.series[5].values[29]).toBe(1);
+        expect(blocksByGuard.totals.flatMap((count, day) => (count ? [[day, count]] : []))).toEqual([
+            [0, 1],
+            [24, 1],
+            [29, 3],
+        ]);
+        const cells = blocksHeatmap.values.flatMap((hours, day) =>
+            hours.flatMap((count, hour) => (count ? [[day, hour, count]] : [])),
+        );
+        expect(cells).toEqual([
+            [0, 23, 1],
+            [4, 9, 1],
+            [5, 10, 2],
+            [5, 18, 1],
+        ]);
+        expect(blocksHeatmap.hourTotals[10]).toBe(2);
+        expect(blocksHeatmap.total).toBe(5);
+        expect(untrustedLinks).toEqual([]);
     });
 
-    it("counts incidents by the tool that did the damage, ties in name order", async () => {
-        const tools = (await getFleet()).incidentsByTool;
-
-        expect(tools.slice(0, 3)).toEqual([
-            { tool: "pay_invoice", count: 5 },
-            { tool: "send_email", count: 4 },
-            { tool: "create_ticket", count: 1 },
-        ]);
-        expect(tools).toEqual(
-            byCountThenName(
-                tools,
-                (row) => row.count,
-                (row) => row.tool,
+    it("lists the agent links that carried untrusted content, the largest share first", async () => {
+        const id = await project("Main");
+        const [parent, child, root] = [stepOf(2), stepOf(3), stepOf(1)];
+        const at = TODAY + 12 * HOUR;
+        // planner hands work to researcher twice, and once the page it read was untrusted
+        const planned = (runId: string, untrusted: boolean) => [
+            modelCall(runId, root, "planner", at),
+            delegate(runId, parent, "planner", at + SECOND),
+            ...(untrusted ? [webPage(runId, child, "researcher", at + 2 * SECOND)] : []),
+            modelCall(runId, child, "researcher", at + 3 * SECOND, parent),
+        ];
+        const handoff = (runId: string, from: string, to: string, start: number, untrusted: boolean) => [
+            delegate(runId, parent, from, start),
+            ...(untrusted ? [webPage(runId, child, to, start + SECOND)] : []),
+            modelCall(runId, child, to, start + 2 * SECOND, parent),
+        ];
+        await ingestBatch(
+            test.db,
+            id,
+            itemsOf(
+                ...planned(runOf(11), true),
+                ...planned(runOf(12), false),
+                ...handoff(runOf(13), "researcher", "billing", at, true),
+                ...handoff(runOf(14), "support", "billing", at, false),
+                // Before the window
+                ...handoff(runOf(15), "planner", "billing", START_AT - DAY, true),
             ),
         );
-    });
 
-    it("puts the agents named most often at the entry or turning point first", async () => {
-        const points = (await getFleet()).agentPoints;
-        const roles = incidentRoles();
+        const { untrustedLinks, blocksHeatmap } = await getFleet();
 
-        expect(points).toHaveLength(6);
-        expect(points[0]).toEqual({
-            agent: "billing",
-            entry: roles.filter((role) => role.entry === "billing").length,
-            turning: roles.filter((role) => role.turning === "billing").length,
-            damage: roles.filter((role) => role.damage === "billing").length,
-        });
-        const totals = points.map((row) => row.entry + row.turning);
-        expect(totals).toEqual([...totals].sort((a, b) => b - a));
-    });
-
-    it("lists up to six links that carried untrusted content, most first", async () => {
-        const links = (await getFleet()).untrustedLinks;
-        const carried = agentEdges().filter((edge) => edge.untrusted > 0);
-        const top = [...carried].sort((a, b) => b.untrusted - a.untrusted).slice(0, 6);
-
-        expect(carried.length).toBeGreaterThan(6);
-        expect(links).toEqual(
-            top.map(({ from, to, total, untrusted, untrustedShare }) => ({
-                from,
-                to,
-                total,
-                untrusted,
-                untrustedShare,
-            })),
-        );
-    });
-
-    it("counts observe-mode limits as would-stop and block-mode limits as stopped", async () => {
-        const limits = (await getFleet()).runLimits;
-
-        expect(limits.map((limit) => [limit.name, limit.mode, limit.wouldStop, limit.stopped])).toEqual([
-            ["depth", "observe", 7, 0],
-            ["fan-out", "observe", 2, 0],
-            ["loops", "block", 0, 4],
-            ["steps", "observe", 11, 0],
-            ["cost", "observe", 5, 0],
+        expect(untrustedLinks).toEqual([
+            { from: "researcher", to: "billing", delegations: 1, untrusted: 1, untrustedShare: 1 },
+            { from: "planner", to: "researcher", delegations: 2, untrusted: 1, untrustedShare: 0.5 },
         ]);
-        expect(limits[0]).toMatchObject({ limit: 3, unit: "levels" });
+        expect(blocksHeatmap.total).toBe(0);
     });
 
-    it("adds quarantine blocks from listed runs to older attempts", async () => {
-        const [iban, domain, email] = (await getFleet()).quarantine;
-        const [olderIban, olderDomain, olderEmail] = quarantined();
-        const hits = catalogRuns()
-            .flatMap((run) => run.detail.steps)
-            .filter((step) => step.guard?.rule === "fleet-check" && step.guard.reason.startsWith("LT12…1000 is on"))
-            .map((step) => step.startedAt);
+    it("stops at the sign-in redirect for people who are not signed in", async () => {
+        requireSession.mockRejectedValueOnce(new Error("redirect:/sign-in"));
 
-        expect(hits.length).toBeGreaterThan(0);
-        expect(iban).toEqual({
-            ...olderIban,
-            blockedAttempts: olderIban.blockedAttempts + hits.length,
-            lastAttemptAt: Math.max(olderIban.lastAttemptAt, ...hits),
-        });
-        expect(iban.lastAttemptAt).toBeGreaterThan(olderIban.lastAttemptAt);
-        expect(domain).toEqual(olderDomain);
-        expect(email).toEqual(olderEmail);
-    });
-
-    it("shows watched values and the fleet check's settings", async () => {
-        const fleet = await getFleet();
-
-        expect(fleet.watching).toEqual(watched());
-        expect(fleet.fleetCheck).toEqual({
-            fields: ["iban", "to", "url"],
-            newForDays: 7,
-            runsToBlock: 5,
-            withinHours: 24,
-            observeUntil: null,
-        });
-    });
-
-    it("counts nothing by source or tool when no incident has a verdict", async () => {
-        data.noIncidents = true;
-
-        const fleet = await getFleet();
-
-        expect(fleet.incidentsBySource).toEqual([]);
-        expect(fleet.incidentsByTool).toEqual([]);
-        expect(fleet.agentPoints.every((row) => row.entry + row.turning + row.damage === 0)).toBe(true);
+        await expect(getFleet()).rejects.toThrow("redirect:/sign-in");
     });
 });

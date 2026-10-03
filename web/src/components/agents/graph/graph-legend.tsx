@@ -46,7 +46,6 @@ export function GraphLegend() {
             <Group label="Agents">
                 <Item swatch={<NodeSwatch className="bg-signal" />}>Running</Item>
                 <Item swatch={<NodeSwatch className="bg-chart-context" />}>Idle</Item>
-                <Item swatch={<NodeSwatch className="border border-line-strong" />}>Offline</Item>
             </Group>
             <Group label="Untrusted">
                 {SHARE_STYLES.map((style) => (

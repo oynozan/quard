@@ -110,7 +110,7 @@ describe("GraphField links", () => {
         fireEvent.mouseEnter(link("archivist"));
         expect(tooltip()?.textContent).toBe("12messagesresearcher to writer · 75% untrusted");
         fireEvent.blur(field);
-        expect(tooltip()?.textContent).toBe("0runs in 24hIdle · support");
+        expect(tooltip()?.textContent).toBe("0runs in 24hIdle");
     });
 
     it("drops a stale link readout and undims every line when the links change under the pointer", () => {
@@ -125,10 +125,10 @@ describe("GraphField links", () => {
 });
 
 describe("GraphField agents", () => {
-    it("reads out an agent's runs, state, app and roles, and lights its links and neighbors", () => {
+    it("reads out an agent's runs and state, and lights its links and neighbors", () => {
         const { groups, tooltip, announced, link } = renderField();
         fireEvent.mouseEnter(link("planner"));
-        expect(tooltip()?.textContent).toBe("12runs in 24hRunning · support · 1 entry, 2 turning points");
+        expect(tooltip()?.textContent).toBe("12runs in 24hRunning");
         expect((tooltip()?.querySelector("span") as HTMLElement).style.background).toBe("var(--signal)");
         expect((tooltip() as HTMLElement).style.left).not.toBe("");
         expect(announced()).toBe("planner: 12 runs in 24 hours");
@@ -137,20 +137,20 @@ describe("GraphField agents", () => {
         expect(link("archivist").className).toContain("opacity-35");
     });
 
-    it("counts a single role in the singular and places the readout left of a right-hand agent", () => {
+    it("counts a single run in the singular and places the readout left of a right-hand agent", () => {
         const { tooltip, link } = renderField();
         fireEvent.focus(link("researcher"));
-        expect(tooltip()?.textContent).toBe("1run in 24hIdle · support · 1 turning point");
+        expect(tooltip()?.textContent).toBe("1run in 24hIdle");
         expect((tooltip()?.querySelector("span") as HTMLElement).style.background).toBe("var(--chart-context)");
         expect((tooltip() as HTMLElement).style.right).not.toBe("");
         expect(link("planner").className).not.toContain("opacity-35");
         expect(link("writer").className).not.toContain("opacity-35");
     });
 
-    it("leaves the roles out for an agent with none, and clears on blur", () => {
+    it("reads out an idle agent with no runs, and clears on blur", () => {
         const { tooltip, announced, link } = renderField();
         fireEvent.focus(link("writer"));
-        expect(tooltip()?.textContent).toBe("0runs in 24hOffline · support");
+        expect(tooltip()?.textContent).toBe("0runs in 24hIdle");
         expect(announced()).toBe("writer: 0 runs in 24 hours");
         fireEvent.blur(link("writer"));
         expect(tooltip()).toBeNull();

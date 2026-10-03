@@ -5,8 +5,7 @@ import type { SearchMatch } from "@/lib/data/search";
 import type { RunGroup } from "../lib/group";
 import { matchWord, plural, stepName } from "../lib/words";
 
-// One match as a stacked block, so the value and label stay in view on a phone.
-// The whole block opens the step.
+// One match as a block that opens its step, keeping the value and label in view on a phone
 function MatchItem({ match }: { match: SearchMatch }) {
     const step = stepName(match);
     return (
@@ -28,16 +27,18 @@ function MatchItem({ match }: { match: SearchMatch }) {
                     {match.agent} · <span className="mono">{match.field}</span> · {matchWord(match)}
                 </p>
                 <p className="mono mt-2 text-[13px] text-ink-soft wrap-anywhere">{match.value}</p>
-                <div className="mt-2">
-                    <LabelChip label={match.label} />
-                </div>
+                {match.label ? (
+                    <div className="mt-2">
+                        <LabelChip label={match.label} />
+                    </div>
+                ) : null}
             </div>
             <RowChevron className="ml-0" />
         </li>
     );
 }
 
-// The narrow-screen form of the results, grouped by run like the table.
+// The narrow-screen form of the results, grouped by run like the table
 export function SearchList({ groups }: { groups: RunGroup[] }) {
     return (
         <div className="border-t border-line">
@@ -47,22 +48,18 @@ export function SearchList({ groups }: { groups: RunGroup[] }) {
                         <TextLink mono href={`/runs/${runId}`} className="text-[13px]">
                             Run {shortId(runId)}
                         </TextLink>
-                        {run ? <RunStatusLabel status={run.status} /> : null}
+                        <RunStatusLabel status={run.status} />
                         <span className="ml-auto">
                             <span className="mono text-ink-2">{matches.length}</span>{" "}
                             {plural(matches.length, "match", "matches")}
                         </span>
-                        {run ? (
-                            <span className="basis-full">
-                                Started by <span className="text-ink-2">{run.rootAgent}</span>
-                                <span className="mono">
-                                    {" "}
-                                    · {formatShortDate(run.startedAt)}, {formatClock(run.startedAt)}
-                                </span>
+                        <span className="basis-full">
+                            Started by <span className="text-ink-2">{run.rootAgent}</span>
+                            <span className="mono">
+                                {" "}
+                                · {formatShortDate(run.startedAt)}, {formatClock(run.startedAt)}
                             </span>
-                        ) : (
-                            <span className="basis-full text-ink-absent">Run details expired</span>
-                        )}
+                        </span>
                     </header>
                     <ul className="px-[10px]">
                         {matches.map((match) => (

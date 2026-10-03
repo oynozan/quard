@@ -1,80 +1,147 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
-import { ORIGIN_OVERRIDES } from "../labels/origins";
-import { DAY, NOW } from "../rng";
-import { ACCOUNTS } from "../values/people";
-import { agentKeys, RETENTION } from "./fixtures";
-import { getSettings, rulesFromCode } from "./query";
+import { createAgentKey, createProject, ingestBatch } from "@quard/db";
+import { startTestDb, type TestDb } from "@quard/db/testing";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { runId, runStarted } from "../../../../test/settings/events";
+import { DAY, HOUR, MINUTE, NOW } from "../../../../test/time";
+import { retentionRows } from "./retention";
 
-const APPS = ["orchestrator-app", "billing-service", "support-app", "deploy-runner"];
-
-describe("rulesFromCode", () => {
-    it("lists each rule once, joining the tools and apps that share it", () => {
-        const rules = rulesFromCode();
-        const names = rules.map((rule) => rule.name);
-        expect(new Set(names).size).toBe(names.length);
-        expect(rules.find((rule) => rule.name === "fleet-check")).toEqual({
-            name: "fleet-check",
-            guard: "limit",
-            tools: ["pay_invoice", "send_email"],
-            apps: ["billing-service", "support-app"],
-            mode: "block",
-            hash: "71e2d9a05c3f",
-            summary: "Blocks a new IBAN, recipient or domain once a 5th run uses it within 24 hours",
-            source: "product default",
-        });
-    });
-
-    it("keeps an approval rule's mode empty, since it always asks", () => {
-        expect(rulesFromCode().find((rule) => rule.name === "refund_order")).toMatchObject({
-            guard: "approval",
-            mode: null,
-            tools: ["refund_order"],
-            apps: ["support-app"],
-            source: "team",
-        });
-    });
-
-    it("splits run limits into one rule per limit, for every app", () => {
-        const rules = rulesFromCode();
-        expect(rules.some((rule) => rule.name === "run-limits")).toBe(false);
-        const limits = rules.filter((rule) => rule.name.startsWith("run-limits."));
-        expect(limits.map((rule) => [rule.name, rule.tools, rule.summary, rule.mode, rule.source])).toEqual([
-            ["run-limits.depth", ["delegate"], "3 levels per run", "observe", "product default"],
-            ["run-limits.fan-out", ["delegate"], "10 helpers per agent per run", "observe", "product default"],
-            ["run-limits.loops", ["delegate"], "5 handoffs back and forth per run", "block", "team"],
-            ["run-limits.steps", [], "200 model calls per run", "observe", "product default"],
-            ["run-limits.cost", [], "5 USD per run", "observe", "product default"],
-        ]);
-        expect(limits.every((rule) => rule.guard === "limit")).toBe(true);
-        expect(limits.every((rule) => rule.apps.join() === APPS.join())).toBe(true);
-    });
+const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
+const projectSettings = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/session", () => ({ requireSession }));
+vi.mock("next/server", () => ({ connection: vi.fn(async () => {}) }));
+// The real queries, with a way to make the project disappear between reads
+vi.mock("@quard/db", async (importOriginal) => {
+    const real = await importOriginal<typeof import("@quard/db")>();
+    projectSettings.mockImplementation(real.projectSettings);
+    return { ...real, projectSettings };
 });
 
+const { getSettings } = await import("./query");
+const { database } = await import("../runs/live/client");
+
+const EMPTY = { hasProject: false, keys: [], retention: [], origins: [], rules: [], sdks: [] };
+let test: TestDb;
+
+beforeAll(async () => {
+    test = await startTestDb();
+    vi.stubEnv("DATABASE_URL", test.url);
+    vi.stubEnv("QUARD_PROJECT_ID", "");
+}, 60_000);
+
+afterAll(async () => {
+    await database().destroy();
+    vi.unstubAllEnvs();
+    await test.stop();
+});
+
+// A new project, made the one the dashboard reads
+async function project(name: string): Promise<string> {
+    const id = await createProject(test.db, name);
+    vi.stubEnv("QUARD_PROJECT_ID", id);
+    return id;
+}
+
+async function stamp(id: string, times: { created_at: Date; last_used_at?: Date; revoked_at?: Date }) {
+    await test.db.updateTable("agent_keys").set(times).where("id", "=", id).execute();
+}
+
 describe("getSettings", () => {
-    it("gives the keys, accounts, retention, origins and rules", async () => {
-        const settings = await getSettings();
-        expect(settings.keys).toEqual(agentKeys());
-        expect(settings.retention).toBe(RETENTION);
-        expect(settings.origins).toBe(ORIGIN_OVERRIDES);
-        expect(settings.rules).toEqual(rulesFromCode());
-        expect(settings.accounts).toBe(ACCOUNTS);
+    it("is empty on a new install, after checking sign-in", async () => {
+        expect(await getSettings()).toEqual(EMPTY);
+        expect(requireSession).toHaveBeenCalled();
     });
 
-    it("shows each connected SDK with its key prefix instead of the key id", async () => {
-        const { sdks } = await getSettings();
-        expect(sdks.map((sdk) => [sdk.name, sdk.key, sdk.state])).toEqual([
-            ["orchestrator-app", "qk_live_2c8e…", "connected"],
-            ["billing-service", "qk_live_7f31…", "connected"],
-            ["support-app", "qk_live_a40d…", "connected"],
-            ["deploy-runner", "qk_live_91be…", "offline"],
+    it("lists the project's keys newest first, in ms, without their secrets", async () => {
+        const id = await project("Keys");
+        const old = await createAgentKey(test.db, id, "billing");
+        const fresh = await createAgentKey(test.db, id, "support");
+        const elsewhere = await createAgentKey(test.db, await createProject(test.db, "Other"), "other");
+        await stamp(old.id, { created_at: new Date(NOW - 2 * DAY) });
+        await stamp(fresh.id, {
+            created_at: new Date(NOW - DAY),
+            last_used_at: new Date(NOW - 5 * MINUTE),
+            revoked_at: new Date(NOW - MINUTE),
+        });
+
+        const settings = await getSettings();
+        expect(settings.hasProject).toBe(true);
+        expect(settings.keys).toEqual([
+            {
+                id: fresh.id,
+                name: "support",
+                prefix: fresh.prefix,
+                createdAt: NOW - DAY,
+                lastUsedAt: NOW - 5 * MINUTE,
+                revokedAt: NOW - MINUTE,
+            },
+            {
+                id: old.id,
+                name: "billing",
+                prefix: old.prefix,
+                createdAt: NOW - 2 * DAY,
+                lastUsedAt: null,
+                revokedAt: null,
+            },
         ]);
-        expect(sdks.some((sdk) => "keyId" in sdk)).toBe(false);
+        expect(old.prefix).toMatch(/^qk_live_[0-9a-f]{4}$/);
+        expect(JSON.stringify(settings)).not.toContain(old.key);
+        expect(settings.keys.some((key) => key.id === elsewhere.id)).toBe(false);
+        expect(settings.retention).toEqual(retentionRows(30));
+        expect([settings.origins, settings.rules, settings.sdks]).toEqual([[], [], []]);
     });
 
-    it("gives the hash key and the detector in observe mode", async () => {
-        const settings = await getSettings();
-        expect(settings.hashKey).toEqual({ algorithm: "HMAC-SHA-256", setAt: NOW - 52 * DAY, previousKeptUntil: null });
-        expect(settings.detector).toEqual({ name: "Jev", version: "jev-1.13.0", mode: "observe" });
+    it("keeps runs for the project's own number of days", async () => {
+        const id = await project("Retention");
+        await test.db.updateTable("projects").set({ retention_days: 7 }).where("id", "=", id).execute();
+
+        expect((await getSettings()).retention).toEqual(retentionRows(7));
+    });
+
+    it("shows each origin override beside its default, which fills a side it left out", async () => {
+        const id = await project("Origins");
+        await ingestBatch(test.db, id, [
+            runStarted(runId(1), "billing", NOW - 2 * HOUR, {
+                "mcp:crm.internal": { trust: "trusted", sensitivity: "internal" },
+            }),
+            // The newest run that sets an override decides what is in force
+            runStarted(runId(2), "support", NOW - HOUR, { "mcp:crm.internal": { trust: "trusted" } }),
+            runStarted(runId(3), "billing", NOW - 3 * HOUR, { "web:docs.example.com": { sensitivity: "internal" } }),
+            runStarted(runId(4), "support", NOW - MINUTE, {}),
+        ]);
+
+        expect((await getSettings()).origins).toEqual([
+            {
+                origin: "mcp:crm.internal",
+                trust: "trusted",
+                sensitivity: "public",
+                defaultTrust: "untrusted",
+                defaultSensitivity: "public",
+                agents: ["billing", "support"],
+                seenAt: NOW - HOUR,
+            },
+            {
+                origin: "web:docs.example.com",
+                trust: "untrusted",
+                sensitivity: "internal",
+                defaultTrust: "untrusted",
+                defaultSensitivity: "public",
+                agents: ["billing"],
+                seenAt: NOW - 3 * HOUR,
+            },
+        ]);
+    });
+
+    it("is empty when the project is removed between the two reads", async () => {
+        await project("Removed");
+        projectSettings.mockResolvedValueOnce(undefined);
+
+        expect(await getSettings()).toEqual(EMPTY);
+    });
+
+    it("stops at the sign-in redirect for people who are not signed in", async () => {
+        requireSession.mockRejectedValueOnce(new Error("redirect:/sign-in"));
+
+        await expect(getSettings()).rejects.toThrow("redirect:/sign-in");
     });
 });

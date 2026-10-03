@@ -5,7 +5,7 @@ import type { Label } from "../types";
 
 const web: Label = { origin: "web:docs.python.org", trust: "untrusted", sensitivity: "public" };
 const tool: Label = { origin: "tool:lookup_supplier", trust: "trusted", sensitivity: "internal" };
-// A made-up trusted public label: no default or override gives one.
+// A made-up trusted public label, since no default or override gives one
 const published: Label = { origin: "mcp:docs.acme.internal", trust: "trusted", sensitivity: "public" };
 
 describe("originKind", () => {
@@ -19,6 +19,18 @@ describe("originKind", () => {
     it("treats an unknown kind as unknown", () => {
         expect(originKind("ftp:files.example")).toBe("unknown");
         expect(originKind("")).toBe("unknown");
+    });
+
+    it("ignores names every object carries, such as constructor", () => {
+        expect(originKind("constructor:x")).toBe("unknown");
+        expect(originKind("toString")).toBe("unknown");
+    });
+});
+
+describe("DEFAULT_MAPPING", () => {
+    it("trusts system instructions like the SDK does", () => {
+        expect(originKind("system")).toBe("system");
+        expect(DEFAULT_MAPPING.system).toEqual({ trust: "trusted", sensitivity: "internal" });
     });
 });
 

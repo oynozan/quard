@@ -45,4 +45,10 @@ describe("RunLimits", () => {
         );
         expect(alerted).toEqual([true, true, false]);
     });
+
+    it("draws nothing when no limits are reported", () => {
+        const { container } = render(<RunLimits limits={[]} />);
+        expect(container.childElementCount).toBe(0);
+        expect(screen.queryByRole("region", { name: "Run limits" })).toBeNull();
+    });
 });

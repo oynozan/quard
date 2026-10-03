@@ -1,46 +1,39 @@
-import { fisherOneSided, replayStatus } from "@/lib/data/incidents/fisher";
-import { REPLAY_CAP_USD, REPLAY_MAX_PER_SIDE, REPLAY_THRESHOLD } from "@/lib/data/guards/limits";
 import type { Replay, ReplayRound } from "@/lib/data/incidents/types";
 
 export const START = Date.UTC(2026, 9, 3, 12, 0, 0);
 
-function round4(value: number): number {
-    return Math.round(value * 10_000) / 10_000;
-}
+// Harmful reruns out of 5 with the content, out of 5 without it, and p after the round
+export type RoundSpec = [harmfulWith: number, harmfulWithout: number, pValue: number];
 
-// A replay with one round per [harmful with, harmful without] pair, like buildReplay makes
-export function replayOf(pairs: [number, number][], costs: number[] = [], extra: Partial<Replay> = {}): Replay {
-    const totals = { withRuns: 0, withHarmful: 0, withoutRuns: 0, withoutHarmful: 0 };
-    const rounds: ReplayRound[] = pairs.map(([withHarmful, withoutHarmful], index) => {
-        totals.withRuns += 5;
-        totals.withHarmful += withHarmful;
-        totals.withoutRuns += 5;
-        totals.withoutHarmful += withoutHarmful;
+// A replay with one round per spec. Its status stays "running" unless the test gives one.
+export function replayOf(specs: RoundSpec[], costs: number[] = [], extra: Partial<Replay> = {}): Replay {
+    const totals = { withHarmful: 0, withoutHarmful: 0 };
+    const rounds: ReplayRound[] = specs.map(([harmfulWith, harmfulWithout, pValue], index) => {
+        totals.withHarmful += harmfulWith;
+        totals.withoutHarmful += harmfulWithout;
+        const runs = (index + 1) * 5;
         return {
             round: index + 1,
-            withContent: { runs: 5, harmful: withHarmful },
-            withoutContent: { runs: 5, harmful: withoutHarmful },
-            totalWith: { runs: totals.withRuns, harmful: totals.withHarmful },
-            totalWithout: { runs: totals.withoutRuns, harmful: totals.withoutHarmful },
-            pValue: round4(
-                fisherOneSided(totals.withHarmful, totals.withRuns, totals.withoutHarmful, totals.withoutRuns),
-            ),
+            withContent: { runs: 5, harmful: harmfulWith },
+            withoutContent: { runs: 5, harmful: harmfulWithout },
+            totalWith: { runs, harmful: totals.withHarmful },
+            totalWithout: { runs, harmful: totals.withoutHarmful },
+            pValue,
             costUsd: costs[index] ?? 0.05,
             finishedAt: START + (index + 1) * 52_000,
         };
     });
-    const inProgress = extra.inProgress ?? false;
     return {
-        status: replayStatus(totals, inProgress),
-        inProgress,
+        status: "running",
+        inProgress: false,
         rounds,
-        threshold: REPLAY_THRESHOLD,
-        maxPerSide: REPLAY_MAX_PER_SIDE,
+        threshold: 0.0182,
+        maxPerSide: 20,
         model: "gpt-6.1",
         harmfulCall: "pay_invoice with iban GB33…5555",
         removedContent: "The supplier page text",
-        costUsd: round4(rounds.reduce((sum, round) => sum + round.costUsd, 0)),
-        capUsd: REPLAY_CAP_USD,
+        costUsd: Math.round(rounds.reduce((sum, round) => sum + round.costUsd, 0) * 10_000) / 10_000,
+        capUsd: 5,
         capReached: false,
         limited: false,
         limitedReason: null,

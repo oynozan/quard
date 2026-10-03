@@ -4,12 +4,12 @@ import type { AgentStats as Stats } from "@/lib/data/agents";
 import { AgentStats } from "./agent-stats";
 
 const stats: Stats = {
-    runs24h: 40,
     modelCalls24h: 900,
+    influencedShare: 0.423,
     costUsd24h: 1234.5,
+    costKnown: true,
     asked24h: 3,
     blocked24h: 1200,
-    influencedShare: 0.423,
 };
 
 function value(label: string) {
@@ -38,5 +38,11 @@ describe("AgentStats", () => {
         expect(value("Asked").textContent).toBe("0");
         expect(value("Asked").querySelector("svg")).toBeNull();
         expect(value("Blocked").querySelector("svg")).toBeNull();
+    });
+
+    it("shows a dash for the untrusted share without model calls, and for a cost it cannot know", () => {
+        render(<AgentStats stats={{ ...stats, modelCalls24h: 0, influencedShare: null, costKnown: false }} />);
+        expect(value("Calls after untrusted").textContent).toBe("—");
+        expect(value("Est. cost").textContent).toBe("—");
     });
 });

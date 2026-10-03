@@ -1,10 +1,11 @@
 import { DataTable } from "@/components/kit/data-table";
 import { SkeletonRows } from "@/components/kit/table/skeleton-rows";
 import { Skeleton } from "@/components/ui/skeleton";
+import { KEY_HEADERS, KEY_MIN_WIDTH, KEY_WIDTHS } from "./keys/columns";
 import { Cols, Head } from "./shared/table-parts";
 import { SETTINGS_TABS } from "./tabs";
 
-// The settings frame while data loads: real tab labels, skeleton intro and key rows
+// The settings frame while data loads, with real tab labels, a skeleton intro and key rows
 export function SettingsSkeleton() {
     return (
         <div aria-busy="true">
@@ -21,10 +22,10 @@ export function SettingsSkeleton() {
             <div className="mt-[30px] mb-[22px] flex min-h-9 items-center max-[760px]:mt-[25px]">
                 <Skeleton width="min(280px, 70%)" />
             </div>
-            <DataTable minWidth={940} className="text-[14px]">
-                <Cols widths={["22%", "20%", "15%", "8%", "10%", "10%", "15%"]} />
-                <Head first="Key" rest={["Scope and agents", "Owner", "Created", "Last used", "Status", ""]} />
-                <SkeletonRows columns={7} selection label="Loading settings…" />
+            <DataTable minWidth={KEY_MIN_WIDTH} className="text-[14px]">
+                <Cols widths={KEY_WIDTHS} />
+                <Head first="Key" rest={[...KEY_HEADERS, ""]} />
+                <SkeletonRows columns={KEY_WIDTHS.length} selection label="Loading settings…" />
             </DataTable>
         </div>
     );

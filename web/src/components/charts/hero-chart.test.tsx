@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeResizeObserver, observers, resizeAll } from "../../../test/charts-rest/dom";
+import { expectNoChartsOrTables } from "../../../test/empty";
 import { HeroChart } from "./hero-chart";
 
 // 144 ten-minute buckets ending at noon on 1 May: 100 each, a 900 peak at 20:20 and 120 now
@@ -80,12 +81,19 @@ describe("HeroChart", () => {
         expect(xLabels().every((s) => s.style.opacity === "1")).toBe(true);
     });
 
-    it("draws an unlit field and a zero peak before the first call", () => {
-        const { container } = render(<HeroChart greeting="Hello" values={VALUES.map(() => 0)} endsAt={ENDS_AT} />);
-        expect(chart().getAttribute("aria-label")).toBe(
-            "Model calls per 10 min over the last 24 hours. Peak 0 at 12:00, now 0.",
-        );
-        expect(container.querySelector('path[fill="var(--signal)"]')?.getAttribute("d")).toBe("");
+    it("shows only the greeting and one line when no model call came in", () => {
+        for (const values of [VALUES.map(() => 0), []]) {
+            const { container, unmount } = render(<HeroChart greeting="Hello" values={values} endsAt={ENDS_AT} />);
+            const hero = screen.getByRole("region", { name: "Model calls in the last 24 hours" });
+
+            expect(screen.getByRole("heading", { level: 1, name: "Hello" })).toBeTruthy();
+            expect(screen.getByRole("status").textContent).toBe("No model calls in the last 24 hours");
+            expect(hero.textContent).toBe("HelloNo model calls in the last 24 hours");
+            expect(screen.queryByRole("button")).toBeNull();
+            expect(container.querySelector(".cursor-blink")).toBeNull();
+            expectNoChartsOrTables(container);
+            unmount();
+        }
     });
 
     it("merges buckets into 20 minute columns on a narrow screen", () => {

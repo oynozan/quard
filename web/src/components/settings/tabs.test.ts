@@ -7,7 +7,7 @@ describe("SETTINGS_TABS", () => {
     it("lists the four sections in order, agent keys first", () => {
         expect(SETTINGS_TABS.map((tab) => tab.label)).toEqual([
             "Agent keys",
-            "Accounts and roles",
+            "Accounts",
             "Retention",
             "Rules from code",
         ]);

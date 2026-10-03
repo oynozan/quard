@@ -1,30 +1,29 @@
-import type { LimitName } from "../guards/limits";
 import type { GuardMode, GuardType, Label } from "../types";
+
+export type LimitName = "depth" | "fan-out" | "loops" | "steps" | "cost";
 
 export type GuardBlockSeries = { guard: GuardType; values: number[]; total: number };
 
 export type BlocksByGuard = {
+    // UTC midnight of the first day
     startAt: number;
-    // One value per day, oldest first, per guard type.
+    // One value per UTC day, oldest first, per guard type
     series: GuardBlockSeries[];
     totals: number[];
 };
 
 export type BlocksHeatmap = {
-    // Monday first.
-    days: string[];
-    // values[day][hour], blocks summed over the window. Hours are UTC.
+    // values[weekday][hour] with Monday first, summed over the window in UTC
     values: number[][];
-    // The busiest hour for each hour of the day, summed over days.
+    // Blocks in each hour of the day, summed over the weekdays
     hourTotals: number[];
-    max: number;
     total: number;
 };
 
 export type QuarantinedValue = {
     kind: "iban" | "email" | "domain";
     field: string;
-    // Masked like the rest of the dashboard. Domains stay in clear.
+    // Masked like the rest of the dashboard, with domains in clear
     value: string;
     hash: string;
     firstSeenAt: number;
@@ -35,7 +34,7 @@ export type QuarantinedValue = {
     lastAttemptAt: number;
 };
 
-// New values the fleet check is counting, not yet at 5 runs.
+// New values the fleet check is counting, not yet at 5 runs
 export type WatchedValue = {
     kind: "iban" | "email" | "domain";
     field: string;
@@ -51,30 +50,23 @@ export type RunLimitCount = {
     limit: number;
     unit: string;
     mode: GuardMode;
-    // Observe mode: runs that went over and ran anyway.
+    // Runs that went over an observe-mode limit and ran anyway
     wouldStop: number;
-    // Block mode: runs the limit stopped.
+    // Runs a block-mode limit stopped
     stopped: number;
 };
 
 export type FleetData = {
-    windowDays: number;
     startAt: number;
     endAt: number;
     incidentsBySource: { origin: string; label: Label; count: number }[];
     incidentsByTool: { tool: string; count: number }[];
     blocksByGuard: BlocksByGuard;
     blocksHeatmap: BlocksHeatmap;
-    agentPoints: { agent: string; entry: number; turning: number; damage: number }[];
-    untrustedLinks: { from: string; to: string; total: number; untrusted: number; untrustedShare: number }[];
+    agentPoints: { agent: string; entry: number; turning: number }[];
+    // Delegations from one agent to another, and how many of them read untrusted content
+    untrustedLinks: { from: string; to: string; delegations: number; untrusted: number; untrustedShare: number }[];
     runLimits: RunLimitCount[];
     quarantine: QuarantinedValue[];
     watching: WatchedValue[];
-    fleetCheck: {
-        fields: string[];
-        newForDays: number;
-        runsToBlock: number;
-        withinHours: number;
-        observeUntil: number | null;
-    };
 };

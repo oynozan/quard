@@ -30,17 +30,17 @@ describe("SettingsTabs", () => {
         expect(screen.queryByText("Keys panel")).toBeNull();
     });
 
-    it("shows a count only beside tabs that have one, zero included", () => {
+    it("shows a count only when it is above zero", () => {
         render(<SettingsTabs initial="keys" counts={{ keys: 6, code: 0 }} panels={PANELS} />);
         const names = screen.getAllByRole("tab").map((tab) => tab.textContent);
-        expect(names).toEqual(["Agent keys6", "Accounts and roles", "Retention", "Rules from code0"]);
+        expect(names).toEqual(["Agent keys6", "Accounts", "Retention", "Rules from code"]);
     });
 
-    it("shows zero for a count that arrives as null from untyped data", () => {
-        // Typed callers cannot pass null; plain data can
+    it("shows no count for one that arrives as null from untyped data", () => {
+        // Typed callers cannot pass null, but plain data can
         const counts = { accounts: null as unknown as number };
         render(<SettingsTabs initial="keys" counts={counts} panels={PANELS} />);
-        expect(screen.getByRole("tab", { name: /Accounts and roles/ }).textContent).toBe("Accounts and roles0");
+        expect(screen.getByRole("tab", { name: /Accounts/ }).textContent).toBe("Accounts");
     });
 
     it("writes the chosen tab into the address and keeps other parameters", async () => {

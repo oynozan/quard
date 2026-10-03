@@ -3,19 +3,20 @@ import type { RunRow } from "@/lib/data/runs/types";
 
 export type RunGroup = {
     runId: string;
-    // Null when the run has expired or is not in the list any more
-    run: RunRow | null;
+    run: RunRow;
     matches: SearchMatch[];
 };
 
-// Groups matches by run. Matches come newest first, so groups do too.
+// Groups matches by run in match order, leaving out a match whose run is gone
 export function groupByRun(matches: SearchMatch[], runs: RunRow[]): RunGroup[] {
     const byId = new Map(runs.map((run) => [run.id, run]));
     const groups = new Map<string, RunGroup>();
     for (const match of matches) {
+        const run = byId.get(match.runId);
+        if (!run) continue;
         let group = groups.get(match.runId);
         if (!group) {
-            group = { runId: match.runId, run: byId.get(match.runId) ?? null, matches: [] };
+            group = { runId: match.runId, run, matches: [] };
             groups.set(match.runId, group);
         }
         group.matches.push(match);

@@ -4,21 +4,7 @@ import type { AgentCall, AgentEdge, AgentNode } from "@/lib/data/agents";
 export const NOON = Date.UTC(2026, 9, 3, 12, 0, 0);
 
 export function agentNode(name: string, overrides: Partial<AgentNode> = {}): AgentNode {
-    return {
-        name,
-        version: "v3",
-        model: "claude-x",
-        tools: [],
-        state: "idle",
-        app: "support",
-        runs24h: 0,
-        runs30d: 0,
-        entryPoints: 0,
-        turningPoints: 0,
-        damage: 0,
-        lastSeenAt: NOON,
-        ...overrides,
-    };
+    return { name, state: "idle", model: "claude-x", runs24h: 0, lastSeenAt: NOON, ...overrides };
 }
 
 export function agentEdge(from: string, to: string, overrides: Partial<AgentEdge> = {}): AgentEdge {
@@ -38,9 +24,9 @@ export function agentEdge(from: string, to: string, overrides: Partial<AgentEdge
 
 // A planner that delegates to two agents in the second layer, plus one agent with no links
 export const NODES: AgentNode[] = [
-    agentNode("planner", { state: "running", runs24h: 12, entryPoints: 1, turningPoints: 2 }),
-    agentNode("researcher", { runs24h: 1, turningPoints: 1 }),
-    agentNode("writer", { state: "offline" }),
+    agentNode("planner", { state: "running", runs24h: 12 }),
+    agentNode("researcher", { runs24h: 1 }),
+    agentNode("writer", { model: null }),
     agentNode("archivist"),
 ];
 
@@ -61,9 +47,6 @@ export function agentCall(stepId: string, overrides: Partial<AgentCall> = {}): A
         durationMs: 120,
         status: "ok",
         context: { origin: "user", trust: "trusted", sensitivity: "public" },
-        influenced: false,
-        detail: "",
-        costUsd: null,
         outcome: null,
         mode: null,
         ...overrides,

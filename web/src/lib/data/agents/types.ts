@@ -1,23 +1,19 @@
 import type { StepStatus } from "../runs/types";
-import type { Agent, AgentState, GuardMode, Label, Outcome, StepKind } from "../types";
+import type { GuardMode, Label, Outcome, StepKind } from "../types";
+
+// Offline needs the SDK connection state, which is not stored yet
+export type AgentState = "running" | "idle";
 
 export type AgentNode = {
     name: string;
-    version: string;
-    model: string;
-    tools: string[];
     state: AgentState;
-    app: string;
+    // The model of its newest model call in the window, if it made one
+    model: string | null;
     runs24h: number;
-    runs30d: number;
-    // Incidents where the root-cause finder named this agent.
-    entryPoints: number;
-    turningPoints: number;
-    damage: number;
     lastSeenAt: number;
 };
 
-// Messages between two agents over the window, by kind, and how many carried untrusted content.
+// Traffic between two agents over the window, which so far holds delegations only
 export type AgentEdge = {
     from: string;
     to: string;
@@ -33,8 +29,6 @@ export type AgentEdge = {
 
 export type AgentGraph = {
     windowDays: number;
-    startAt: number;
-    endAt: number;
     nodes: AgentNode[];
     edges: AgentEdge[];
 };
@@ -53,7 +47,7 @@ export type AgentVersionRow = {
     incidents: string[];
 };
 
-// One call in an agent's timeline. Tool calls carry their strictest guard result.
+// One call in an agent's timeline, with its strictest guard result
 export type AgentCall = {
     runId: string;
     stepId: string;
@@ -63,31 +57,31 @@ export type AgentCall = {
     durationMs: number;
     status: StepStatus;
     context: Label;
-    influenced: boolean;
-    detail: string;
-    costUsd: number | null;
     outcome: Outcome | null;
     mode: GuardMode | null;
 };
 
 export type AgentStats = {
-    runs24h: number;
     modelCalls24h: number;
+    // Share of its model calls that had read untrusted content, or null without model calls
+    influencedShare: number | null;
     costUsd24h: number;
+    // False when a model call that answered has no known price
+    costKnown: boolean;
     asked24h: number;
     blocked24h: number;
-    // Share of its model calls that had read untrusted content, 0 to 1.
-    influencedShare: number;
 };
 
+// Model calls per hour over 24 hours, oldest first
+export type AgentActivity = { startAt: number; perHour: number[] };
+
 export type AgentDetail = {
-    agent: Agent;
-    app: { name: string; rulesHash: string; state: "connected" | "offline"; lastSeenAt: number };
-    versions: AgentVersionRow[];
+    agent: AgentNode;
     stats: AgentStats;
-    // Model calls per hour over the last 24 hours, oldest first.
-    activity: number[];
+    activity: AgentActivity;
     links: AgentEdge[];
+    // Versions and incidents are not recorded yet
+    versions: AgentVersionRow[];
     incidents: { id: string; title: string; roles: ("entry" | "turning" | "damage")[]; openedAt: number }[];
     // Newest first.
     timeline: AgentCall[];

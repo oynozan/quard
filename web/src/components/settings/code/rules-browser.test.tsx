@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { expectNoChartsOrTables } from "../../../../test/empty";
 import { RULES } from "../../../../test/settings/rules";
 import { pickOption } from "../../../../test/settings/select";
 import { RulesBrowser } from "./rules-browser";
@@ -15,20 +16,30 @@ function search(text: string) {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search rules" }), { target: { value: text } });
 }
 
+function liveNote(): string {
+    const note = screen.getAllByRole("status").find((node) => node.getAttribute("aria-live") === "polite");
+    if (!note) throw new Error("The browser has no live note");
+    return note.textContent;
+}
+
+function heading(): string {
+    return screen.getByRole("heading", { level: 2 }).textContent;
+}
+
 describe("RulesBrowser", () => {
     it("shows every rule with the full count and nothing read out", () => {
         render(<RulesBrowser rules={RULES} />);
-        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Rules3");
+        expect(heading()).toBe("Rules3");
         expect(shownRules()).toEqual(["refund-cap", "crm-reads", "payout-approval"]);
-        expect(screen.getByRole("status").textContent).toBe("");
+        expect(liveNote()).toBe("");
     });
 
     it("finds rules by tool name, ignoring case and spaces around the query", () => {
         render(<RulesBrowser rules={RULES} />);
         search("  CRM.LOOKUP ");
         expect(shownRules()).toEqual(["crm-reads"]);
-        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Rules1");
-        expect(screen.getByRole("status").textContent).toBe("1 of 3 rules shown");
+        expect(heading()).toBe("Rules1");
+        expect(liveNote()).toBe("1 of 3 rules shown");
     });
 
     it("finds rules by app and by hash", () => {
@@ -53,14 +64,15 @@ describe("RulesBrowser", () => {
         expect(shownRules()).toEqual(["crm-reads"]);
     });
 
-    it("offers to clear the filters when nothing matches, and clearing shows every rule again", async () => {
+    it("keeps the filters but drops the table and count when nothing matches, and clearing shows every rule", async () => {
         render(<RulesBrowser rules={RULES} />);
         await pickOption("Guard type", "Source");
         await pickOption("Mode", "Block");
         search("crm");
-        expect(screen.getAllByRole("row")).toHaveLength(1);
-        expect(screen.getByRole("heading", { level: 3, name: "No rules match" })).toBeTruthy();
-        expect(screen.getByRole("status").textContent).toBe("0 of 3 rules shown");
+        expect(screen.queryByRole("table")).toBeNull();
+        expect(screen.getByText("No rules match")).toBeTruthy();
+        expect(heading()).toBe("Rules");
+        expect(liveNote()).toBe("0 of 3 rules shown");
 
         fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
         await act(async () => {});
@@ -71,11 +83,13 @@ describe("RulesBrowser", () => {
         expect(screen.queryByText("No rules match")).toBeNull();
     });
 
-    it("hides the search and filters when no rules were reported", () => {
+    it("shows its heading and one line, with no table or filters, when no rules were reported", () => {
         render(<RulesBrowser rules={[]} />);
+        const section = screen.getByRole("region", { name: "Rules" });
+        expect(heading()).toBe("Rules");
+        expect(screen.getByText("No rules reported yet")).toBeTruthy();
         expect(screen.queryByRole("searchbox")).toBeNull();
         expect(screen.queryByRole("combobox")).toBeNull();
-        expect(screen.getByRole("heading", { level: 3, name: "No rules reported" })).toBeTruthy();
-        expect(screen.getByText("They appear when an SDK connects.")).toBeTruthy();
+        expectNoChartsOrTables(section);
     });
 });

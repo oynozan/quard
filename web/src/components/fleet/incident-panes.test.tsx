@@ -1,41 +1,36 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FleetData } from "@/lib/data/fleet";
-import { sampleFleet, stubBrowser } from "../../../test/fleet-shell/env";
+import { expectNoChartsOrTables } from "../../../test/empty";
+import { stubBrowser } from "../../../test/fleet-shell/env";
+import { SOURCES, TOOLS, emptyFleet } from "../../../test/summary/fleet";
 import { IncidentPanes } from "./incident-panes";
 
-const web = { origin: "web page", trust: "untrusted", sensitivity: "public" } as const;
-const user = { origin: "user", trust: "trusted", sensitivity: "internal" } as const;
-
-const SOURCES: FleetData["incidentsBySource"] = [
-    { origin: "web page", label: web, count: 1200 },
-    { origin: "user", label: user, count: 2 },
-    { origin: "email", label: { ...web, origin: "email" }, count: 3 },
-];
-const TOOLS: FleetData["incidentsByTool"] = [{ tool: "send_payment", count: 1205 }];
+function section() {
+    return screen.getByRole("region", { name: "Where incidents start" });
+}
 
 function chart(name: string) {
     return within(screen.getByRole("region", { name })).getByRole("img");
+}
+
+// The section heading, with its count chip when there is one
+function title() {
+    return screen.getByRole("heading", { level: 2, name: /^Where incidents start/ });
+}
+
+// The tile grid sits under the heading
+function grid() {
+    return section().lastElementChild?.className.split(" ") ?? [];
 }
 
 beforeEach(stubBrowser);
 afterEach(() => vi.unstubAllGlobals());
 
 describe("IncidentPanes", () => {
-    it("shows both charts loading and no count while the fleet loads", () => {
-        render(<IncidentPanes fleet={null} />);
-        expect(screen.getByRole("heading", { level: 2, name: "Where incidents start" }).textContent).toBe(
-            "Where incidents start",
-        );
-        expect(chart("By entry source").getAttribute("aria-label")).toBe("By entry source, loading");
-        expect(chart("By damaging tool").getAttribute("aria-label")).toBe("By damaging tool, loading");
-    });
+    it("counts all incidents and the ones that came from untrusted sources, side by side", () => {
+        render(<IncidentPanes fleet={emptyFleet({ incidentsBySource: SOURCES, incidentsByTool: TOOLS })} />);
 
-    it("counts all incidents and the ones that came from untrusted sources", async () => {
-        render(<IncidentPanes fleet={await sampleFleet({ incidentsBySource: SOURCES, incidentsByTool: TOOLS })} />);
-        expect(screen.getByRole("heading", { name: /^Where incidents start/ }).textContent).toBe(
-            "Where incidents start1205",
-        );
+        expect(title().textContent).toBe("Where incidents start1205");
         expect(screen.getByRole("region", { name: "By entry source" }).textContent).toContain(
             "Untrusted1,203incidents",
         );
@@ -45,14 +40,39 @@ describe("IncidentPanes", () => {
         expect(chart("By damaging tool").getAttribute("aria-label")).toBe(
             "Incidents by the tool call that did the damage over the last 30 days. send_payment leads with 1,205 incidents, out of 1.",
         );
+        expect(grid()).toContain("grid-cols-2");
     });
 
-    it("says there were no incidents when the lists are empty", async () => {
-        render(<IncidentPanes fleet={await sampleFleet({ incidentsBySource: [], incidentsByTool: [] })} />);
-        expect(screen.getByRole("heading", { name: /^Where incidents start/ }).textContent).toBe(
-            "Where incidents start0",
-        );
-        expect(screen.getByRole("region", { name: "By entry source" }).textContent).toContain("Untrusted0incidents");
-        expect(chart("By damaging tool").getAttribute("aria-label")).toBe("No incidents in the last 30 days");
+    it("draws only the sources, full width, when no damaging tool is known", () => {
+        render(<IncidentPanes fleet={emptyFleet({ incidentsBySource: SOURCES })} />);
+
+        expect(title().textContent).toBe("Where incidents start1205");
+        expect(chart("By entry source")).toBeTruthy();
+        expect(screen.queryByRole("region", { name: "By damaging tool" })).toBeNull();
+        expect(grid()).not.toContain("grid-cols-2");
+    });
+
+    it("draws only the tools, with no count chip, when no entry source is known", () => {
+        render(<IncidentPanes fleet={emptyFleet({ incidentsByTool: TOOLS })} />);
+
+        expect(title().textContent).toBe("Where incidents start");
+        expect(chart("By damaging tool")).toBeTruthy();
+        expect(screen.queryByRole("region", { name: "By entry source" })).toBeNull();
+    });
+
+    it("shows one line and no charts when there were no incidents", () => {
+        render(<IncidentPanes fleet={emptyFleet()} />);
+
+        expect(title().textContent).toBe("Where incidents start");
+        expect(within(section()).getByRole("status").textContent).toBe("No incidents in the last 30 days");
+        expectNoChartsOrTables(section());
+    });
+
+    it("shows only its title and a small bar while the summary loads", () => {
+        render(<IncidentPanes fleet={null} />);
+
+        expect(section().getAttribute("aria-busy")).toBe("true");
+        expect(title().textContent).toBe("Where incidents start");
+        expect(within(section()).queryByRole("img")).toBeNull();
     });
 });

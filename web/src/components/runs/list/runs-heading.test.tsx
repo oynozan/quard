@@ -7,10 +7,10 @@ function heading() {
 }
 
 describe("RunsHeading", () => {
-    it("shows the title with the number of recent runs", () => {
+    it("shows the title with the number of runs", () => {
         render(<RunsHeading count={42} />);
         expect(heading().textContent).toBe("Runs42");
-        expect(screen.getByTitle("Runs in the last 6 hours").textContent).toBe("42");
+        expect(screen.getByTitle("Runs").textContent).toBe("42");
     });
 
     it("explains that a filtered count is the runs that match", () => {
@@ -27,6 +27,12 @@ describe("RunsHeading", () => {
 
     it("shows only the title when there is no count", () => {
         render(<RunsHeading />);
+        expect(heading().textContent).toBe("Runs");
+        expect(heading().children).toHaveLength(0);
+    });
+
+    it("leaves out a count of zero, even for filters that match nothing", () => {
+        render(<RunsHeading count={0} filtered />);
         expect(heading().textContent).toBe("Runs");
         expect(heading().children).toHaveLength(0);
     });

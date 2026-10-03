@@ -35,6 +35,7 @@ describe("RunGraph", () => {
     it("shows each agent's version, model, steps and cost, with a dash for an unknown price", () => {
         render(<RunGraph graph={{ nodes: [root, child], edges: [delegation] }} startedAt={START} />);
         const [top, nested] = agentRows();
+        expect(screen.getByRole("link", { name: "billing" }).parentElement!.children).toHaveLength(3);
         expect(top.textContent).toContain("billing2.1.0gpt-5.4-mini7 steps$0.0062");
         expect(nested.textContent).toContain("research bot1.0.0gpt-5.4-nano3 steps—untrusted");
     });
@@ -51,6 +52,13 @@ describe("RunGraph", () => {
         render(<RunGraph graph={{ nodes: [root, trusted], edges: [handoff] }} startedAt={START} />);
         expect(screen.getByTitle("Handoff from billing over in-process").textContent).toBe("Handoff · 1.5 s");
         expect(screen.queryByText("untrusted")).toBeNull();
+    });
+
+    it("leaves out a version and a model that are not known", () => {
+        const bare = makeAgent({ name: "billing", version: "", model: "" });
+        render(<RunGraph graph={{ nodes: [bare], edges: [] }} startedAt={START} />);
+        expect(screen.getByRole("link", { name: "billing" }).parentElement!.children).toHaveLength(1);
+        expect(agentRows()[0]!.textContent).toBe("billing0 steps$0.0000");
     });
 
     it("shows a lone agent with no incoming message and no messages below", () => {

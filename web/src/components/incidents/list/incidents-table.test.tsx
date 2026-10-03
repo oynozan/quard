@@ -1,53 +1,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Incident } from "@/lib/data/types";
+import { INCIDENTS } from "../../../../test/incidents/list";
+import { NOW } from "../../../../test/time";
 import { IncidentsTable } from "./incidents-table";
 
-const NOW = Date.UTC(2026, 9, 3, 12, 0, 0);
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-
-const INCIDENTS: Incident[] = [
-    {
-        id: "inc_118",
-        runId: "r118",
-        title: "Payment to an IBAN copied from a supplier page",
-        category: "bad input",
-        entryPoint: "fetch_page · supplier-portal.example",
-        damage: "pay_invoice asked with an untrusted IBAN",
-        entryAgent: "researcher",
-        damageAgent: "billing",
-        replay: "running",
-        openedAt: NOW - 3 * MINUTE,
-    },
-    {
-        id: "inc_117",
-        runId: "r117",
-        title: "Spending cap dropped in a handoff",
-        category: "bad handoff",
-        entryPoint: "delegate · orchestrator to billing",
-        damage: "pay_invoice blocked by the daily cap",
-        entryAgent: "orchestrator",
-        damageAgent: "billing",
-        replay: "confirmed",
-        openedAt: NOW - 5 * HOUR,
-    },
-    {
-        id: "inc_115",
-        runId: "r115",
-        title: "Customer list sent to an unlisted domain",
-        category: "missing guard",
-        entryPoint: "search_docs · docs.acme.internal",
-        damage: "export_contacts ran without an egress guard",
-        entryAgent: "support",
-        damageAgent: "support",
-        replay: "not confirmed",
-        openedAt: NOW - 48 * HOUR,
-    },
-];
-
-function show(initialCategory = "all", incidents = INCIDENTS) {
-    render(<IncidentsTable incidents={incidents} now={NOW} initialCategory={initialCategory} />);
+function show(initialCategory = "all") {
+    render(<IncidentsTable incidents={INCIDENTS} now={NOW} initialCategory={initialCategory} />);
 }
 
 // Opens a filter menu and picks one of its options
@@ -160,13 +118,15 @@ describe("IncidentsTable", () => {
         expect(shownCount()).toBe("1 of 3");
     });
 
-    it("offers to clear the filters when none match, and clears them all", async () => {
+    it("keeps the toolbar but drops the table when no incident matches, and clears every filter", async () => {
         window.history.replaceState(null, "", "/incidents?category=bad+input");
         show("bad input");
         await pick("Replay status", "Confirmed");
         search("cap");
         expect(shownCount()).toBe("0 of 3");
         expect(screen.getByRole("heading", { name: "No incidents match" })).toBeTruthy();
+        expect(screen.queryByRole("table")).toBeNull();
+        expect(screen.getByRole("searchbox", { name: "Search incidents" })).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
         expect(shownCount()).toBe("3 of 3");
@@ -174,14 +134,7 @@ describe("IncidentsTable", () => {
         expect(screen.getByRole("combobox", { name: "Replay status" }).textContent).toBe("Any replay");
         expect(window.location.search).toBe("");
         expect(screen.queryByRole("heading", { name: "No incidents match" })).toBeNull();
-    });
-
-    it("explains an empty list when nothing has opened yet", () => {
-        show("all", []);
-        expect(shownCount()).toBe("0 of 0");
-        expect(screen.getByRole("heading", { name: "No incidents yet" })).toBeTruthy();
-        expect(screen.getByText("Blocked or flagged harm opens one here.")).toBeTruthy();
-        expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+        expect(titles()).toHaveLength(3);
     });
 
     it("still filters when the address bar cannot be written", async () => {

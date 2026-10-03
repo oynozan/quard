@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import * as settings from "./settings";
-import { getSettings, rulesFromCode } from "./settings/query";
+import { getSettings } from "./settings/query";
 
 describe("settings module", () => {
-    it("passes on the settings query functions unchanged", () => {
+    it("passes on only the settings query", () => {
         expect(settings.getSettings).toBe(getSettings);
-        expect(settings.rulesFromCode).toBe(rulesFromCode);
+        expect(Object.keys(settings)).toEqual(["getSettings"]);
     });
 });

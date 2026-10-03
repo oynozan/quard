@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { Absent } from "@/components/kit/detail/detail-list";
+import { EmptyLine } from "@/components/kit/empty";
 import { TextLink } from "@/components/kit/links";
 import { Pane } from "@/components/kit/pane";
-import type { AgentDetail, AgentEdge } from "@/lib/data/agents";
+import type { AgentEdge } from "@/lib/data/agents";
+import { WINDOW_DAYS } from "@/lib/data/agents/live/windows";
 import { formatInt, formatShare } from "@/lib/format";
 import { shareStyle } from "../lib/tones";
 import { plural } from "../lib/words";
@@ -13,18 +15,6 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
             <h3 className="mb-[10px] text-[12px] font-light text-ink-muted">{title}</h3>
             {children}
         </div>
-    );
-}
-
-function ToolChips({ tools }: { tools: string[] }) {
-    return (
-        <ul className="flex flex-wrap gap-[6px]">
-            {tools.map((tool) => (
-                <li key={tool} className="mono rounded-sm bg-tile px-[7px] text-[11px] leading-[20px] text-ink-2">
-                    {tool}
-                </li>
-            ))}
-        </ul>
     );
 }
 
@@ -63,35 +53,37 @@ function PeerList({ peers, word, suffix }: { peers: Peer[]; word: string; suffix
     );
 }
 
-function links(edges: AgentEdge[], pick: (edge: AgentEdge) => number, side: "from" | "to"): Peer[] {
+function peersOf(edges: AgentEdge[], pick: (edge: AgentEdge) => number, side: "from" | "to"): Peer[] {
     return edges
         .map((edge) => ({ agent: edge[side], count: pick(edge), edge }))
         .filter((link) => link.count > 0)
         .sort((a, b) => b.count - a.count);
 }
 
-// The tools it holds, who it delegates to, and who it works for, over the last 30 days
-export function AgentPermissions({ detail }: { detail: AgentDetail }) {
-    const { agent } = detail;
-    const out = detail.links.filter((edge) => edge.from === agent.name);
-    const into = detail.links.filter((edge) => edge.to === agent.name);
-    const delegatesTo = links(out, (edge) => edge.delegations, "to");
-    const delegatedBy = links(into, (edge) => edge.delegations, "from");
-    const handsTo = links(out, (edge) => edge.handoffs, "to");
-    const handsFrom = links(into, (edge) => edge.handoffs, "from");
-    const canDelegate = agent.tools.includes("delegate");
+// Who it delegates to and who it works for, over the same window as the graph
+export function AgentPermissions({ name, links }: { name: string; links: AgentEdge[] }) {
+    const out = links.filter((edge) => edge.from === name);
+    const into = links.filter((edge) => edge.to === name);
+    const delegatesTo = peersOf(out, (edge) => edge.delegations, "to");
+    const delegatedBy = peersOf(into, (edge) => edge.delegations, "from");
+    const handsTo = peersOf(out, (edge) => edge.handoffs, "to");
+    const handsFrom = peersOf(into, (edge) => edge.handoffs, "from");
 
+    if (!delegatesTo.length && !delegatedBy.length && !handsTo.length && !handsFrom.length) {
+        return (
+            <Pane title="Permissions">
+                <EmptyLine inset>{`No delegations in the last ${WINDOW_DAYS} days`}</EmptyLine>
+            </Pane>
+        );
+    }
     return (
-        <Pane title="Permissions" tag="30D">
-            <Block title="Tools">
-                <ToolChips tools={agent.tools} />
-            </Block>
+        <Pane title="Permissions" tag={`${WINDOW_DAYS}D`}>
             <Block title="Delegates to">
                 {delegatesTo.length ? (
                     <PeerList peers={delegatesTo} word="delegation" />
                 ) : (
                     <p className="text-[12px]">
-                        <Absent>{canDelegate ? "None" : "None · no delegate tool"}</Absent>
+                        <Absent>None</Absent>
                     </p>
                 )}
             </Block>

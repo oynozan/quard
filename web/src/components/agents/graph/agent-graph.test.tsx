@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentGraph as Graph } from "@/lib/data/agents";
-import { agentNode, EDGES, NODES, NOON } from "../../../../test/agents-graph-timeline/fixtures";
+import { agentEdge, agentNode, EDGES, NODES } from "../../../../test/agents-graph-timeline/fixtures";
 import { stubResizeObserver } from "../../../../test/agents-graph-timeline/resize";
+import { expectNoChartsOrTables } from "../../../../test/empty";
 import { AgentGraph } from "./agent-graph";
 
 beforeEach(stubResizeObserver);
@@ -13,7 +14,7 @@ afterEach(() => {
 function graphOf(overrides: Partial<Graph> = {}): Graph {
     // Quietest link first, so the pane has to sort them
     const edges = [EDGES[2], EDGES[0], EDGES[1]];
-    return { windowDays: 7, startAt: NOON - 7 * 86_400_000, endAt: NOON, nodes: NODES, edges, ...overrides };
+    return { windowDays: 7, nodes: NODES, edges, ...overrides };
 }
 
 // The legend also says "Untrusted", so pick the label that has a mono value beside it
@@ -54,22 +55,23 @@ describe("AgentGraph", () => {
         ]);
     });
 
-    it("shows a dash for the untrusted share and skips the busiest link when agents never talk", () => {
-        render(<AgentGraph graph={graphOf({ nodes: [agentNode("solo")], edges: [] })} />);
-        expect(readout("Links")).toBe("0");
-        expect(readout("Untrusted")).toBe("—");
+    it("speaks of one agent and one link in the singular", () => {
+        const solo = agentEdge("planner", "researcher", { delegations: 1, total: 1 });
+        render(<AgentGraph graph={graphOf({ nodes: [agentNode("planner")], edges: [solo] })} />);
         const summary =
-            "Agent graph over the last 7 days: 1 agent and 0 links. 0 links carry mostly untrusted content.";
+            "Agent graph over the last 7 days: 1 agent and 1 link. " +
+            "The busiest link is planner to researcher with 1 message. " +
+            "0 links carry mostly untrusted content.";
         expect(screen.getByRole("img", { name: summary })).toBeTruthy();
     });
 
-    it("says no agents reported when the window is empty", () => {
-        render(<AgentGraph graph={graphOf({ windowDays: 30, nodes: [], edges: [] })} />);
-        expect(screen.getByText("No agents reported in the last 30 days")).toBeTruthy();
-        expect(screen.queryByRole("img")).toBeNull();
-        expect(readout("Links")).toBe("—");
-        expect(readout("Messages")).toBe("—");
-        fireEvent.click(screen.getByRole("button", { name: "Table" }));
-        expect(screen.getByText("No messages between agents yet")).toBeTruthy();
+    it("says there are no links yet when agents never talk, with no drawing, readouts or table", () => {
+        render(<AgentGraph graph={graphOf({ nodes: [agentNode("solo")], edges: [] })} />);
+        const pane = screen.getByRole("region", { name: "Agent graph" });
+        expect(within(pane).getByRole("status").textContent).toBe("No links between agents yet");
+        expect(within(pane).queryByText("7D")).toBeNull();
+        expect(screen.queryByText("Links")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
+        expectNoChartsOrTables();
     });
 });

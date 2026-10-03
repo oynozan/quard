@@ -1,11 +1,14 @@
-import type { RunDecision, RunLabel, RunStep } from "@quard/db";
+import type { RunDecision, RunDecisionDetail, RunLabel, RunStep } from "@quard/db";
 import { contextOf, isInfluenced } from "../../labels/context";
 import type { GuardType, Label, Outcome, StepKind } from "../../types";
 import type { Step } from "../types";
 import { argsOf } from "./values";
 
+// Rows read with their own event also say whether they came late and carry a detector score
+type StoredDecision = RunDecision & Partial<Pick<RunDecisionDetail, "degraded" | "score">>;
+
 // Stored steps with their labels and decisions, such as a whole stored run or an agent's recent calls
-export type StepSource = { steps: RunStep[]; labels: RunLabel[]; decisions: RunDecision[] };
+export type StepSource = { steps: RunStep[]; labels: RunLabel[]; decisions: StoredDecision[] };
 
 const GUARDS: ReadonlySet<string> = new Set<GuardType>([
     "source",
@@ -17,7 +20,7 @@ const GUARDS: ReadonlySet<string> = new Set<GuardType>([
 ]);
 
 // Every call passes a permission check, so only the ones that stopped something get a row
-function shown(decision: RunDecision): boolean {
+function shown(decision: StoredDecision): boolean {
     return GUARDS.has(decision.guard) && (decision.guard !== "permission" || decision.decision !== "allow");
 }
 
@@ -150,7 +153,7 @@ function toolStep(
     };
 }
 
-function guardStep(decision: RunDecision, labels: RunLabel[]): Step {
+function guardStep(decision: StoredDecision, labels: RunLabel[]): Step {
     const at = ms(decision.at);
     const context = contextOf(readBefore(labels, at).map(labelOf));
     const guard = decision.guard as GuardType;
@@ -177,10 +180,10 @@ function guardStep(decision: RunDecision, labels: RunLabel[]): Step {
             ruleHash: "",
             rulesHash: "",
             reason,
-            degraded: false,
+            degraded: decision.degraded ?? false,
             scan:
                 guard === "source"
-                    ? { scanned: true, findings: reason ? reason.split(",") : [], jevScore: null }
+                    ? { scanned: true, findings: reason ? reason.split(",") : [], jevScore: decision.score ?? null }
                     : null,
         },
         error: null,

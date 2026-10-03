@@ -1,5 +1,6 @@
 import { Absent } from "@/components/kit/detail/detail-list";
-import { DataTable, QuietEmpty, Td, Th, Tr } from "@/components/kit/data-table";
+import { DataTable, Td, Th, Tr } from "@/components/kit/data-table";
+import { EmptyLine } from "@/components/kit/empty";
 import { SectionHeading } from "@/components/kit/headings";
 import { Badge } from "@/components/kit/labels";
 import { RowChevron, RowLink } from "@/components/kit/links";
@@ -14,6 +15,18 @@ type IncidentsProps = { incidents: Row[]; versions: AgentVersionRow[] };
 // Incidents where the root-cause finder named this agent as the entry or the turning point
 export function AgentIncidents({ incidents, versions }: IncidentsProps) {
     const named = incidents.filter((row) => row.roles.includes("entry") || row.roles.includes("turning"));
+    if (named.length === 0) {
+        return (
+            <section aria-label="Incidents">
+                <SectionHeading title="Incidents" />
+                <EmptyLine>
+                    {incidents.length
+                        ? `Damage only, in ${incidents.length} ${plural(incidents.length, "incident")}`
+                        : "No incidents yet"}
+                </EmptyLine>
+            </section>
+        );
+    }
     const versionOf = (id: string) => versions.find((row) => row.incidents.includes(id))?.version;
     return (
         <section aria-label="Incidents">
@@ -62,13 +75,6 @@ export function AgentIncidents({ incidents, versions }: IncidentsProps) {
                     ))}
                 </tbody>
             </DataTable>
-            {named.length === 0 ? (
-                <QuietEmpty>
-                    {incidents.length
-                        ? `Damage only, in ${incidents.length} ${plural(incidents.length, "incident")}`
-                        : "No incidents"}
-                </QuietEmpty>
-            ) : null}
         </section>
     );
 }

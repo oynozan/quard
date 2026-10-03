@@ -1,8 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { AgentDetail } from "@/lib/data/agents";
-import { NOW } from "@/lib/data/rng";
 import { version } from "../../../../test/agents-lib-detail/fixtures";
+import { expectNoChartsOrTables } from "../../../../test/empty";
+import { NOW } from "../../../../test/time";
 import { AgentIncidents } from "./agent-incidents";
 
 type Row = AgentDetail["incidents"][number];
@@ -52,19 +53,21 @@ describe("AgentIncidents", () => {
         expect(cells).toEqual(["v1", "v2"]);
     });
 
-    it("says the agent only took damage when no incident names it otherwise", () => {
+    it("says the agent only took damage when no incident names it otherwise, with no table", () => {
         const { rerender } = render(<AgentIncidents incidents={[incident("inc-3", ["damage"])]} versions={[]} />);
         expect(screen.getByRole("status").textContent).toBe("Damage only, in 1 incident");
         const two = [incident("inc-3", ["damage"]), incident("inc-4", ["damage"])];
         rerender(<AgentIncidents incidents={two} versions={[]} />);
         expect(screen.getByRole("status").textContent).toBe("Damage only, in 2 incidents");
-        expect(screen.getAllByRole("row")).toHaveLength(1);
+        expectNoChartsOrTables();
     });
 
-    it("says there are no incidents when none touch the agent", () => {
+    it("says there are no incidents yet, with no table, count or link", () => {
         render(<AgentIncidents incidents={[]} versions={[]} />);
-        expect(screen.getByRole("status").textContent).toBe("No incidents");
-        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Incidents0");
+        expect(screen.getByRole("status").textContent).toBe("No incidents yet");
+        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Incidents");
+        expect(screen.queryByRole("link")).toBeNull();
+        expectNoChartsOrTables();
     });
 
     it("dates each incident by when it opened", () => {

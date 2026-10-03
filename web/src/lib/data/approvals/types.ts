@@ -1,4 +1,3 @@
-import type { ApprovalAnswer } from "../runs/build/state";
 import type { GuardDecision, RunRow } from "../runs/types";
 import type { ApprovalArg, ApprovalRequest, Label, PathNode, ValueAppearance, ValueKind } from "../types";
 
@@ -37,7 +36,7 @@ export type ApprovalDetail = {
     run: RunRow;
 };
 
-export type { ApprovalAnswer };
+export type ApprovalAnswer = "approve once" | "always approve" | "deny";
 
 // A past answer. After the decision only the hash and masks are kept.
 export type ApprovalDecision = {

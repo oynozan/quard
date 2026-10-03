@@ -145,7 +145,6 @@ export function makeDetail(fields: Partial<RunDetail> = {}): RunDetail {
         graph: { nodes: agents, edges: [] },
         steps: [makeStep()],
         limits: [makeLimit({ name: "depth" })],
-        rulesHashes: [],
         ...fields,
     };
 }

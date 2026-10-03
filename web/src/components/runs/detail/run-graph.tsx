@@ -39,8 +39,10 @@ function Node({ node, edges, startedAt }: { node: TreeNode; edges: RunEdge[]; st
                     <TextLink href={`/agents/${encodeURIComponent(agent.name)}`} mono className="truncate text-[13px]">
                         {agent.name}
                     </TextLink>
-                    <span className="mono text-[11px] text-ink-muted">{agent.version}</span>
-                    <span className="mono truncate text-[11px] text-ink-faint">{agent.model}</span>
+                    {agent.version ? <span className="mono text-[11px] text-ink-muted">{agent.version}</span> : null}
+                    {agent.model ? (
+                        <span className="mono truncate text-[11px] text-ink-faint">{agent.model}</span>
+                    ) : null}
                 </div>
                 <div className="mono flex shrink-0 items-center gap-3 text-[11px] text-ink-2">
                     <span>

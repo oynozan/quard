@@ -8,12 +8,19 @@ describe("groupByRun", () => {
         const first = matchOf({ runId: RUN_B, stepId: "s9" });
         const second = matchOf({ runId: RUN_A, stepId: "s3" });
         const third = matchOf({ runId: RUN_B, stepId: "s2" });
-        const run = runOf({ id: RUN_B });
-        const groups = groupByRun([first, second, third], [run]);
+        const runA = runOf();
+        const runB = runOf({ id: RUN_B });
+        const groups = groupByRun([first, second, third], [runA, runB]);
         expect(groups).toEqual([
-            { runId: RUN_B, run, matches: [first, third] },
-            { runId: RUN_A, run: null, matches: [second] },
+            { runId: RUN_B, run: runB, matches: [first, third] },
+            { runId: RUN_A, run: runA, matches: [second] },
         ]);
+    });
+
+    it("leaves out matches whose run is gone", () => {
+        const kept = matchOf({ runId: RUN_A });
+        const run = runOf();
+        expect(groupByRun([matchOf({ runId: RUN_B }), kept], [run])).toEqual([{ runId: RUN_A, run, matches: [kept] }]);
     });
 
     it("returns no groups for no matches", () => {
@@ -33,7 +40,7 @@ describe("searchHref", () => {
 
 describe("readQuery", () => {
     it("reads and trims ?q=", () => {
-        expect(readQuery({ q: "  claims-desk.io " })).toBe("claims-desk.io");
+        expect(readQuery({ q: "  example.com " })).toBe("example.com");
     });
 
     it("uses only the first of repeated values", () => {

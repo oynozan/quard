@@ -4,18 +4,15 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { SearchField } from "@/components/ui/search-field";
-import type { SearchKind } from "@/lib/data/search";
 import { searchHref } from "./lib/group";
 
 type SearchBrowserProps = {
     query: string;
-    examples: { query: string; kind: SearchKind }[];
     children: ReactNode;
 };
 
-// The big search field, the example queries and the results under them.
-// The query lives in the URL, so a search can be shared or reloaded.
-export function SearchBrowser({ query, examples, children }: SearchBrowserProps) {
+// The big search field and its results, with the query in the URL to share or reload
+export function SearchBrowser({ query, children }: SearchBrowserProps) {
     const router = useRouter();
     const [pending, startTransition] = useTransition();
     const [value, setValue] = useState(query);
@@ -64,22 +61,6 @@ export function SearchBrowser({ query, examples, children }: SearchBrowserProps)
                     {pending ? "Searching…" : "Search"}
                 </Button>
             </form>
-
-            <div className="mt-[14px] flex flex-wrap items-center gap-[6px] text-[13px]">
-                <span className="mr-1 text-ink-muted">Try</span>
-                {examples.map((example) => (
-                    <button
-                        key={example.query}
-                        type="button"
-                        onClick={() => go(example.query)}
-                        title={example.query}
-                        aria-current={example.query === query ? "true" : undefined}
-                        className="mono max-w-full cursor-pointer truncate rounded-sm bg-tile px-2 py-[3px] text-[12px] text-ink-2 transition-colors hover:bg-highlight hover:text-ink-bright focus-visible:outline-2 focus-visible:outline-signal aria-[current=true]:bg-selected aria-[current=true]:text-ink-bright"
-                    >
-                        {example.query}
-                    </button>
-                ))}
-            </div>
 
             <div
                 aria-busy={pending || undefined}

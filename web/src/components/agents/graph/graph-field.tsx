@@ -14,14 +14,6 @@ import { GraphNode } from "./graph-node";
 
 type Hover = { kind: "edge"; index: number } | { kind: "node"; name: string } | null;
 
-function nodeRoles(agent: AgentNode): string {
-    const parts = [
-        agent.entryPoints ? `${agent.entryPoints} entry` : "",
-        agent.turningPoints ? `${agent.turningPoints} turning` : "",
-    ].filter(Boolean);
-    return parts.length ? `${parts.join(", ")} ${plural(agent.entryPoints + agent.turningPoints, "point")}` : "";
-}
-
 function edgeSentence(edge: AgentEdge): string {
     return `${edge.from} to ${edge.to}: ${formatInt(edge.total)} ${plural(edge.total, "message")}, ${formatShare(edge.untrustedShare)} untrusted`;
 }
@@ -46,7 +38,6 @@ function Tip({ hover, edges, nodes, agents, width }: TipProps) {
     const node = nodes.find((item) => item.name === hover.name)!;
     const agent = agents.get(hover.name)!;
     const right = node.x > width / 2;
-    const roles = nodeRoles(agent);
     return (
         <ChartTooltip
             x={right ? node.x - 16 : node.x + 16}
@@ -54,7 +45,7 @@ function Tip({ hover, edges, nodes, agents, width }: TipProps) {
             alignRight={right}
             value={formatInt(agent.runs24h)}
             unit={`${plural(agent.runs24h, "run")} in 24h`}
-            caption={`${STATE_WORD[agent.state]} · ${agent.app}${roles ? ` · ${roles}` : ""}`}
+            caption={STATE_WORD[agent.state]}
             keyColor={agent.state === "running" ? "var(--signal)" : "var(--chart-context)"}
         />
     );

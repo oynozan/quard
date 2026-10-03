@@ -1,59 +1,83 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SearchState } from "@/lib/data/search";
 import { resolveServer } from "../../../../test/auth-app/server";
-import { catalogRows } from "@/lib/data/runs/catalog";
-import { searchRuns } from "@/lib/data/search";
+import { expectNoChartsOrTables } from "../../../../test/empty";
+import { matchOf, resultOf, RUN_B, runOf } from "../../../../test/incidents-search/search";
 import SearchPage, { metadata } from "./page";
 
-vi.mock("@/lib/data/runs/query", () => ({ listRuns: async () => catalogRows() }));
+const searchRuns = vi.hoisted(() => vi.fn<(query: string) => Promise<SearchState>>());
+vi.mock("@/lib/data/search", () => ({ searchRuns }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined, replace: () => undefined }) }));
 
-async function showPage(q?: string | string[]) {
+async function showPage(state: SearchState, q?: string | string[]) {
+    searchRuns.mockResolvedValue(state);
     const page = await SearchPage({ params: Promise.resolve({}), searchParams: Promise.resolve(q ? { q } : {}) });
     render(await resolveServer(page));
 }
 
 describe("SearchPage", () => {
+    beforeEach(() => {
+        searchRuns.mockReset();
+    });
+
     it("titles the tab", () => {
         expect(metadata.title).toBe("Search");
     });
 
-    it("shows the intro and examples before anything is searched", async () => {
-        await showPage();
+    it("shows only the heading and one line before any run exists, with no search field", async () => {
+        await showPage({ state: "no-runs" }, "billing");
         expect(screen.getByRole("heading", { level: 1, name: "Search" })).toBeTruthy();
+        expect(screen.getByRole("status").textContent).toBe("No runs yet");
+        expect(screen.queryByRole("searchbox")).toBeNull();
+        expect(searchRuns).toHaveBeenCalledWith("billing");
+        expectNoChartsOrTables();
+    });
+
+    it("shows the field and what can be searched before anything is typed", async () => {
+        await showPage({ state: "idle" });
+        expect(searchRuns).toHaveBeenCalledWith("");
+        expect(screen.getByRole("searchbox", { name: "Search all runs" })).toBeTruthy();
         expect(screen.getByRole("heading", { level: 2, name: "What you can search" })).toBeTruthy();
-        expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+        expect(screen.queryByText("Try")).toBeNull();
+        expectNoChartsOrTables();
     });
 
-    it("counts the matches and runs for a search, naming who started each run", async () => {
-        const result = await searchRuns("pay_invoice");
-        expect(result.total).toBeGreaterThan(0);
-        const run = catalogRows().find((row) => row.id === result.matches[0]!.runId)!;
-        await showPage("pay_invoice");
-        const summary = screen.getByText(
-            (_, node) => node?.tagName === "H2" && / in \d+ runs?/.test(node.textContent!),
-        );
-        expect(summary.textContent).toContain(`${result.total} matches in ${result.runs} runs`);
+    it("counts the matches and runs, grouping them under each run", async () => {
+        const matches = [matchOf(), matchOf({ runId: RUN_B, stepId: "s7" })];
+        const runRows = [runOf(), runOf({ id: RUN_B, rootAgent: "support" })];
+        await showPage({ state: "searched", result: resultOf({ matches, runRows, total: 2, runs: 2 }) }, "example.com");
+        expect(screen.getByRole("status").textContent).toBe("2 matches in 2 runs for example.com");
         expect(screen.queryByText("What you can search")).toBeNull();
-        expect(document.body.textContent).toContain(`Started by ${run.rootAgent}`);
+        const table = screen.getByRole("table");
+        expect(within(table).getAllByRole("rowgroup", { name: /^Run / })).toHaveLength(2);
+        expect(document.body.textContent).toContain("Started by support");
+        expect(screen.getAllByRole("region", { name: /^Run / })).toHaveLength(2);
     });
 
-    it("asks for more than two characters of text", async () => {
-        await showPage("ab");
-        expect(screen.getByRole("heading", { level: 3, name: "Type a little more" })).toBeTruthy();
+    it("says nothing matched in one line, with no table header", async () => {
+        await showPage(
+            { state: "searched", result: resultOf({ matches: [], runRows: [], total: 0, runs: 0 }) },
+            "example.org",
+        );
+        expect(screen.getByRole("searchbox", { name: "Search all runs" })).toBeTruthy();
+        expect(screen.getByRole("status").textContent).toBe("No matches");
+        expectNoChartsOrTables();
     });
 
-    it("says nothing matched a longer text, reading only the first value in the address", async () => {
-        await showPage(["zzqqxx", "ab"]);
-        expect(screen.getByRole("heading", { level: 3, name: "No matches" })).toBeTruthy();
-        expect(screen.getByText("Try a shorter value or the main domain.")).toBeTruthy();
+    it.each([
+        ["card", "Card numbers can't be searched"],
+        ["hash-off", "IBAN and email search is offSet QUARD_HASH_KEY to the key your agents use"],
+        ["nothing", "Not an IBAN, email, URL, domain, path, ID, agent or tool"],
+    ] as const)("says why a %s query was not searched", async (state, line) => {
+        await showPage({ state }, "query");
+        expect(screen.getByRole("status").textContent).toBe(line);
+        expectNoChartsOrTables();
     });
 
-    it("says nothing matched an email, which is searched by hash", async () => {
-        const result = await searchRuns("nobody@nowhere.example");
-        expect(result.byHash).toBe(true);
-        await showPage("nobody@nowhere.example");
-        expect(screen.getByRole("heading", { level: 3, name: "No matches" })).toBeTruthy();
-        expect(screen.getByText("Sensitive values match only in full.")).toBeTruthy();
+    it("searches only the first value in the address", async () => {
+        await showPage({ state: "nothing" }, ["first", "second"]);
+        expect(searchRuns).toHaveBeenCalledWith("first");
+        expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("first");
     });
 });

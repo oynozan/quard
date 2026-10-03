@@ -1,6 +1,5 @@
-// Open approval requests, newest first. Built from the runs that asked.
-export { openApprovals } from "./approvals/requests";
-export { getApprovals, getApproval } from "./approvals/query";
+// Approval requests, "always approve" grants and past answers
+export { getApprovals } from "./approvals/query";
 export type {
     AlwaysGrant,
     ApprovalAnswer,

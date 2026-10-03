@@ -15,4 +15,10 @@ describe("AgentSkeleton", () => {
         const headings = screen.getAllByRole("heading", { hidden: true }).map((item) => item.textContent);
         expect(headings).toEqual(["Recent calls", "Permissions"]);
     });
+
+    it("holds a place for the two permission blocks", () => {
+        render(<AgentSkeleton />);
+        const pane = screen.getByRole("heading", { hidden: true, name: "Permissions" }).closest("section");
+        expect(pane?.querySelectorAll(":scope > div")).toHaveLength(2);
+    });
 });

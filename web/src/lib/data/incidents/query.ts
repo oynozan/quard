@@ -8,6 +8,7 @@ import type { RunDetail, Step } from "../runs/types";
 import type { Incident, PathRole } from "../types";
 import type { AcrossAgents, IncidentDetail, VerdictPoint } from "./types";
 
+// Only generated modules use point and incidentDetail, so they go when those go
 function point(run: RunDetail, step: Step, role: PathRole): VerdictPoint {
     const node = nodeOf(run, step, role, role === "entry");
     return {
@@ -70,11 +71,10 @@ export function incidentDetail(id: string): IncidentDetail | null {
     };
 }
 
-// Every incident, newest first.
+// Every incident, newest first. Nothing stores incidents yet
 export async function listIncidents(): Promise<Incident[]> {
-    return allIncidents();
+    return [];
 }
 
-export async function getIncident(id: string): Promise<IncidentDetail | null> {
-    return incidentDetail(id);
-}
+// One incident with its verdict, path, replay and AI explanation. Nothing stores incidents yet
+export const getIncident: (id: string) => Promise<IncidentDetail | null> = async () => null;

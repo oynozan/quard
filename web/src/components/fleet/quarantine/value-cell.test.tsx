@@ -1,14 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import type { QuarantinedValue } from "@/lib/data/fleet";
 import { describe, expect, it } from "vitest";
+import { QUARANTINE } from "../../../../test/summary/fleet";
 import { KIND_NAMES, ValueCell } from "./value-cell";
+
+const [IBAN] = QUARANTINE;
 
 describe("ValueCell", () => {
     it("shows the masked value over its field, titled with the kind", () => {
-        const { container } = render(<ValueCell value={{ kind: "iban", field: "iban", value: "DE89 •••• 3000" }} />);
-        expect(screen.getByText("DE89 •••• 3000").tagName).toBe("STRONG");
-        expect(screen.getByText("iban").tagName).toBe("SMALL");
-        expect(container.firstElementChild?.getAttribute("title")).toBe("IBAN DE89 •••• 3000");
+        const { container } = render(<ValueCell value={IBAN} />);
+        expect(screen.getByText(IBAN.value).tagName).toBe("STRONG");
+        expect(screen.getByText(IBAN.field).tagName).toBe("SMALL");
+        expect(container.firstElementChild?.getAttribute("title")).toBe(`IBAN ${IBAN.value}`);
     });
 
     it("draws a bank for an IBAN, a letter for an email and a globe for a domain", () => {

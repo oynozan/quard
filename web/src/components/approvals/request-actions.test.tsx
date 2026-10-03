@@ -8,7 +8,6 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.useRealTimers();
-    vi.restoreAllMocks();
 });
 
 function renderActions(live = true) {
@@ -29,26 +28,17 @@ async function hover(target: HTMLElement) {
 }
 
 describe("RequestActions", () => {
-    it("approves once after a short busy state that locks the other answers", () => {
+    it("approves once as soon as it is clicked", () => {
         const { onAnswer } = renderActions();
         fireEvent.click(button("Approve once"));
-        const busy = button("Approving…");
-        expect(busy.getAttribute("aria-busy")).toBe("true");
-        expect(button("Always approve").hasAttribute("disabled")).toBe(true);
-        expect(button("Deny").hasAttribute("disabled")).toBe(true);
-        act(() => vi.advanceTimersByTime(449));
-        expect(onAnswer).not.toHaveBeenCalled();
-        act(() => vi.advanceTimersByTime(1));
-        expect(onAnswer).toHaveBeenCalledWith("approve once");
+        expect(onAnswer).toHaveBeenCalledExactlyOnceWith("approve once");
+        expect(vi.getTimerCount()).toBe(0);
     });
 
     it("saves an always-approve grant", () => {
         const { onAnswer } = renderActions();
         fireEvent.click(button("Always approve"));
-        expect(button("Saving grant…").getAttribute("aria-busy")).toBe("true");
-        expect(button("Approve once").hasAttribute("disabled")).toBe(true);
-        act(() => vi.advanceTimersByTime(450));
-        expect(onAnswer).toHaveBeenCalledWith("always approve");
+        expect(onAnswer).toHaveBeenCalledExactlyOnceWith("always approve");
     });
 
     it("asks to confirm a deny and moves focus to the confirm button", () => {
@@ -60,14 +50,11 @@ describe("RequestActions", () => {
         expect(onAnswer).not.toHaveBeenCalled();
     });
 
-    it("denies after the confirm, with cancel locked while it runs", () => {
+    it("denies after the confirm", () => {
         const { onAnswer } = renderActions();
         fireEvent.click(button("Deny"));
         fireEvent.click(button("Deny call"));
-        expect(button("Denying…").getAttribute("aria-busy")).toBe("true");
-        expect(button("Cancel").hasAttribute("disabled")).toBe(true);
-        act(() => vi.advanceTimersByTime(450));
-        expect(onAnswer).toHaveBeenCalledWith("deny");
+        expect(onAnswer).toHaveBeenCalledExactlyOnceWith("deny");
     });
 
     it("cancels the deny and puts focus back on Deny", () => {
@@ -97,21 +84,5 @@ describe("RequestActions", () => {
         act(() => button("Always approve").focus());
         await act(async () => vi.advanceTimersByTime(400));
         expect(screen.getByText("Same agent, tool and exact arguments, in any run, until revoked.")).toBeTruthy();
-    });
-
-    it("drops a pending answer when the card goes away", () => {
-        const { onAnswer, unmount } = renderActions();
-        fireEvent.click(button("Approve once"));
-        unmount();
-        act(() => vi.advanceTimersByTime(450));
-        expect(onAnswer).not.toHaveBeenCalled();
-    });
-
-    it("has no timer to clear when the card goes away unanswered", () => {
-        const { onAnswer, unmount } = renderActions();
-        const clear = vi.spyOn(window, "clearTimeout");
-        unmount();
-        expect(clear).not.toHaveBeenCalled();
-        expect(onAnswer).not.toHaveBeenCalled();
     });
 });
