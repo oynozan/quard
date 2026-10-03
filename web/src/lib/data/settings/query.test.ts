@@ -2,6 +2,7 @@
 import { createAgentKey, createProject, ingestBatch } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { connected, entry } from "../../../../test/settings/connections";
 import { runId, runStarted } from "../../../../test/settings/events";
 import { DAY, HOUR, MINUTE, NOW } from "../../../../test/time";
 import { retentionRows } from "./retention";
@@ -139,6 +140,105 @@ describe("getSettings", () => {
                 defaultSensitivity: "public",
                 agents: ["billing"],
                 seenAt: NOW - 3 * HOUR,
+            },
+        ]);
+    });
+
+    it("lists each app that connected lately with the rules its connections run", async () => {
+        const id = await project("Apps");
+        const billing = await createAgentKey(test.db, id, "billing-service");
+        const deploy = await createAgentKey(test.db, id, "deploy-bot");
+        const archive = await createAgentKey(test.db, id, "archive");
+        const [A, B, C] = ["a", "b", "c"].map((hex) => hex.repeat(16)) as [string, string, string];
+        await connected(test.db, id, billing.id, {
+            host: "web-1",
+            hash: A,
+            rules: [
+                entry("payInvoice", "approval", "approval"),
+                entry("payInvoice", "action", "iban:from"),
+                entry("refund", "approval", "approval"),
+                entry("fetchPage", "source", "source", "observe"),
+            ],
+            at: NOW - DAY,
+        });
+        await connected(test.db, id, deploy.id, {
+            host: "ci-1",
+            hash: B,
+            rules: [entry("fetchPage", "source", "source")],
+            at: NOW - 3 * HOUR,
+            closedAt: NOW - 2 * HOUR,
+        });
+        // Gone longer than the list looks back
+        await connected(test.db, id, archive.id, {
+            host: "old-1",
+            hash: C,
+            rules: [entry("wipeDisk", "action", "never")],
+            at: NOW - 41 * DAY,
+            closedAt: NOW - 40 * DAY,
+        });
+
+        const clock = vi.spyOn(Date, "now").mockReturnValue(NOW);
+        const settings = await getSettings().finally(() => clock.mockRestore());
+
+        expect(settings.sdks).toEqual([
+            {
+                id: billing.id,
+                name: "billing-service",
+                host: "web-1",
+                sdkVersion: "0.4.2",
+                key: billing.prefix,
+                rulesHash: A,
+                lastSeenAt: NOW,
+                state: "connected",
+            },
+            {
+                id: deploy.id,
+                name: "deploy-bot",
+                host: "ci-1",
+                sdkVersion: "0.4.2",
+                key: deploy.prefix,
+                rulesHash: B,
+                lastSeenAt: NOW - 2 * HOUR,
+                state: "offline",
+            },
+        ]);
+        const rule = { summary: "", source: "team" };
+        expect(settings.rules).toEqual([
+            {
+                ...rule,
+                name: "approval",
+                guard: "approval",
+                tools: ["payInvoice", "refund"],
+                apps: ["billing-service"],
+                mode: null,
+                hash: A,
+            },
+            {
+                ...rule,
+                name: "iban:from",
+                guard: "action",
+                tools: ["payInvoice"],
+                apps: ["billing-service"],
+                mode: "block",
+                hash: A,
+            },
+            {
+                ...rule,
+                name: "source",
+                guard: "source",
+                tools: ["fetchPage"],
+                apps: ["deploy-bot"],
+                mode: "block",
+                hash: B,
+            },
+            {
+                ...rule,
+                name: "source",
+                guard: "source",
+                tools: ["fetchPage"],
+                apps: ["billing-service"],
+                mode: "observe",
+                hash: A,
             },
         ]);
     });

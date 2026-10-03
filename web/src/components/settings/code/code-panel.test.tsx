@@ -27,15 +27,7 @@ describe("CodePanel", () => {
         expect(screen.getAllByRole("table")).toHaveLength(3);
 
         expect(heading("Connected apps")).toBe("Connected apps0");
-        expect(headers("Connected apps")).toEqual([
-            "App",
-            "Agents",
-            "SDK",
-            "Agent key",
-            "Rules hash",
-            "Last seen",
-            "State",
-        ]);
+        expect(headers("Connected apps")).toEqual(["App", "SDK", "Agent key", "Rules hash", "Last seen", "State"]);
         expect(within(region("Connected apps")).getByRole("status").textContent).toBe("No SDK connected yet");
 
         expect(heading("Rules")).toBe("Rules0");

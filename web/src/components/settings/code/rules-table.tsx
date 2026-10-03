@@ -30,6 +30,11 @@ function listed(values: string[], none: string): string {
     return values.length > 0 ? values.join(", ") : none;
 }
 
+// The summary, and whether the product set the rule
+function noteOf(rule: RuleRow): string {
+    return [rule.summary, rule.source === "product default" ? "product default" : ""].filter(Boolean).join(" · ");
+}
+
 export function RulesTable({ rules }: { rules: RuleRow[] }) {
     return (
         <DataTable minWidth={940} className="text-[14px]">
@@ -38,19 +43,10 @@ export function RulesTable({ rules }: { rules: RuleRow[] }) {
             <Head first="Rule" rest={["Guard", "Mode", "Tools", "Apps", "Hash"]} />
             <tbody>
                 {rules.map((rule) => (
-                    <Tr key={rule.name}>
+                    <Tr key={`${rule.hash} ${rule.guard} ${rule.name} ${rule.mode}`}>
                         <Td colSpan={2} className={FIRST_CELL}>
-                            <span title={rule.summary} className="block min-w-0">
-                                <NameCell
-                                    mono
-                                    name={rule.name}
-                                    sub={
-                                        <>
-                                            {rule.summary}
-                                            {rule.source === "product default" ? " · product default" : null}
-                                        </>
-                                    }
-                                />
+                            <span title={rule.summary || undefined} className="block min-w-0">
+                                <NameCell mono name={rule.name} sub={noteOf(rule)} />
                             </span>
                         </Td>
                         <Td>

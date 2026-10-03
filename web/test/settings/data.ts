@@ -1,6 +1,8 @@
 import type { RetentionRow, SettingsData } from "@/lib/data/settings";
 import { KEYS } from "./keys";
 import { ORIGINS } from "./origins";
+import { RULES } from "./rules";
+import { SDKS } from "./sdks";
 
 // The run window first, then fixed rules
 export const RETENTION: RetentionRow[] = [
@@ -20,12 +22,12 @@ export const NEW_INSTALL: SettingsData = {
     sdks: [],
 };
 
-// A project with keys and origin overrides, while rules and apps have no source yet
+// A project with keys, origin overrides, and apps that reported their rules
 export const IN_USE: SettingsData = {
     hasProject: true,
     keys: KEYS,
     retention: RETENTION,
     origins: ORIGINS,
-    rules: [],
-    sdks: [],
+    rules: RULES,
+    sdks: SDKS,
 };

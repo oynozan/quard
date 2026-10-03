@@ -33,18 +33,17 @@ export type RuleRow = {
     source: "team" | "product default";
 };
 
-// An app that runs the SDK, as it reports itself when it connects
+// An app that runs the SDK, named by the agent key it connects with
 export type SdkConnection = {
+    // The agent key's id
+    id: string;
     name: string;
-    agents: string[];
+    // Where its newest connection runs
+    host: string;
     sdkVersion: string;
-    runtime: string;
     // The prefix of the agent key it uses
     key: string;
     rulesHash: string;
-    // The hash before the last deploy, and when it changed
-    previousHash: string | null;
-    hashSince: number;
     lastSeenAt: number;
     state: "connected" | "offline";
 };

@@ -1,12 +1,26 @@
 import "server-only";
-import { listAgentKeys, originOverrides, projectSettings, type AgentKeyRow, type OriginOverrideRow } from "@quard/db";
+import {
+    connectedApps,
+    listAgentKeys,
+    originOverrides,
+    projectSettings,
+    ruleSets,
+    type AgentKeyRow,
+    type ConnectedAppRow,
+    type OriginOverrideRow,
+} from "@quard/db";
+import { DAY } from "@/lib/time";
 import { DEFAULT_MAPPING, originKind, type OriginOverride } from "../labels/origins";
 import { projectScope } from "../scope";
 import { retentionRows } from "./retention";
-import type { AgentKey, SettingsData } from "./types";
+import { rulesOf } from "./rules";
+import type { AgentKey, SdkConnection, SettingsData } from "./types";
 
 // Overrides come from the newest runs, the same window the runs list reads
 const RUNS = 200;
+
+// An app offline for longer than this drops off the list, with its rules
+const APP_DAYS = 30;
 
 function empty(): SettingsData {
     return { hasProject: false, keys: [], retention: [], origins: [], rules: [], sdks: [] };
@@ -41,25 +55,41 @@ function overrideOf(row: OriginOverrideRow): OriginOverride {
     };
 }
 
-// The current project's keys, retention and the origin overrides its runs reported
+// Control hears from a connected app right now
+function appOf(row: ConnectedAppRow, now: number): SdkConnection {
+    return {
+        id: row.keyId,
+        name: row.name,
+        host: row.host,
+        sdkVersion: row.sdk,
+        key: row.prefix,
+        rulesHash: row.rulesHash,
+        lastSeenAt: row.disconnectedAt?.getTime() ?? now,
+        state: row.disconnectedAt === null ? "connected" : "offline",
+    };
+}
+
+// The current project's keys, retention, the origin overrides its runs reported, and its apps and their rules
 export async function getSettings(): Promise<SettingsData> {
     const scope = await projectScope();
     if (!scope) return empty();
     const { db, project } = scope;
-    const [keys, settings, origins] = await Promise.all([
+    const now = Date.now();
+    const [keys, settings, origins, apps] = await Promise.all([
         listAgentKeys(db, project.id),
         projectSettings(db, project.id),
         originOverrides(db, project.id, { limit: RUNS }),
+        connectedApps(db, project.id, { since: new Date(now - APP_DAYS * DAY) }),
     ]);
     // The project was removed between the two reads
     if (!settings) return empty();
+    const sets = await ruleSets(db, project.id, [...new Set(apps.flatMap((app) => app.rulesHashes))]);
     return {
         hasProject: true,
         keys: keys.map(keyOf),
         retention: retentionRows(settings.retentionDays),
         origins: origins.map(overrideOf),
-        // Rules and connected apps arrive with the SDK connect step
-        rules: [],
-        sdks: [],
+        rules: rulesOf(sets, apps),
+        sdks: apps.map((app) => appOf(app, now)),
     };
 }

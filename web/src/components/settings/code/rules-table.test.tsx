@@ -1,7 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { RuleRow } from "@/lib/data/settings";
 import { RULES } from "../../../../test/settings/rules";
 import { guardWord, RulesTable } from "./rules-table";
+
+const RULE = RULES[0] as RuleRow;
 
 function cells(name: string): string[] {
     const row = screen.getByText(name).closest("tr") as HTMLElement;
@@ -56,5 +59,26 @@ describe("RulesTable", () => {
         render(<RulesTable rules={RULES} />);
         const name = screen.getByText("payout-approval");
         expect(name.closest("[title]")?.getAttribute("title")).toBe("Payouts always ask");
+    });
+
+    it("shows just the name of a rule that came without a summary", () => {
+        render(<RulesTable rules={[{ ...RULE, summary: "" }]} />);
+        const row = screen.getByText("refund-cap").closest("tr") as HTMLElement;
+        expect(row.querySelector("small")).toBeNull();
+        expect(screen.getByText("refund-cap").closest("[title]")).toBeNull();
+    });
+
+    it("says a product default without a summary is one", () => {
+        render(<RulesTable rules={[{ ...RULE, summary: "", source: "product default" }]} />);
+        expect(cells("refund-cap")[0]).toBe("refund-capproduct default");
+    });
+
+    it("lists rules that share a name, such as one rule in two modes or in two rule sets", () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const rules = [RULE, { ...RULE, mode: "observe" as const }, { ...RULE, hash: "99aa88bb77cc66dd" }];
+        render(<RulesTable rules={rules} />);
+        expect(screen.getAllByText("refund-cap")).toHaveLength(3);
+        expect(error).not.toHaveBeenCalled();
+        error.mockRestore();
     });
 });

@@ -37,7 +37,7 @@ describe("SettingsPage", () => {
         expect(tab(/^Agent keys/).textContent).toBe("Agent keys3");
         expect(tab(/^Accounts/).textContent).toBe("Accounts");
         expect(tab(/^Retention/).textContent).toBe("Retention");
-        expect(tab(/^Rules from code/).textContent).toBe("Rules from code0");
+        expect(tab(/^Rules from code/).textContent).toBe("Rules from code3");
     });
 
     it("counts zero keys when no key is active", async () => {
