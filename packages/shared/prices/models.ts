@@ -36,14 +36,15 @@ export function priceOf(model: string): ModelPrice | undefined {
     return PRICES.get(name) ?? PRICES.get(name.replace(/-\d{4}-\d{2}-\d{2}$/, ""));
 }
 
-// What one model call cost in USD, or null when the model's price is unknown.
-// Cached tokens are part of the input count, billed at the cached price.
+// What one model call cost in USD, to the micro-dollar, or null when the model's price
+// is unknown. Cached tokens are part of the input count, billed at the cached price.
 export function costOf(model: string, usage: TokenUsage): number | null {
     const known = priceOf(model);
     if (known === undefined) {
         return null;
     }
     const fresh = Math.max(0, usage.inputTokens - usage.cachedTokens);
-    const usd = fresh * known.input + usage.cachedTokens * known.cachedInput + usage.outputTokens * known.output;
-    return Math.round(usd / 100) / 10_000;
+    // Prices are per 1M tokens, so this sum is in micro-dollars
+    const micro = fresh * known.input + usage.cachedTokens * known.cachedInput + usage.outputTokens * known.output;
+    return Math.round(micro) / 1_000_000;
 }

@@ -75,9 +75,11 @@ export function formatStepDuration(ms: number): string {
     return formatDuration(ms);
 }
 
-// Model calls often cost less than a cent: "$0.0042".
+const USD_SMALL = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 2 });
+
+// Model calls often cost less than a cent, so those keep two significant digits: "$0.0042", "$0.000031".
 export function formatCost(usd: number): string {
-    if (usd > 0 && usd < 0.01) return `$${usd.toFixed(4)}`;
+    if (usd > 0 && usd < 0.01) return USD_SMALL.format(usd);
     return formatUsd(usd);
 }
 

@@ -1,6 +1,7 @@
 import { TextLink } from "@/components/kit/links";
 import { Pane } from "@/components/kit/pane";
 import type { RunEdge, RunGraph as Graph } from "@/lib/data/runs/types";
+import { formatCost } from "@/lib/format";
 import { agentTree, type TreeNode } from "./lib/tree";
 import { EDGE_WORD, formatOffset } from "./lib/words";
 import { MessageList } from "./message-list";
@@ -48,7 +49,7 @@ function Node({ node, edges, startedAt }: { node: TreeNode; edges: RunEdge[]; st
                     <span>
                         {agent.steps} <span className="font-sans font-light text-ink-muted">steps</span>
                     </span>
-                    <span>{costText(agent.costUsd, agent.costKnown, (usd) => `$${usd.toFixed(4)}`)}</span>
+                    <span>{costText(agent.costUsd, agent.costKnown, formatCost)}</span>
                     {agent.influenced ? <UntrustedChip /> : null}
                 </div>
             </div>

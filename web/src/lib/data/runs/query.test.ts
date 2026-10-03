@@ -42,7 +42,7 @@ describe("runs from Postgres", () => {
         expect(rows.find((row) => row.id === OTHER)).toMatchObject({
             status: "completed",
             durationMs: 4000,
-            costUsd: 0.0031,
+            costUsd: 0.003075,
             costKnown: true,
         });
         expect(rows.find((row) => row.id === RUN)).toMatchObject({

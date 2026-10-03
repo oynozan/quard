@@ -3,7 +3,7 @@ import { OutcomeBar } from "@/components/charts/outcome-bar";
 import { DataTable, NameCell, Td, Tr } from "@/components/kit/data-table";
 import { RunStatusLabel } from "@/components/kit/labels";
 import { RowChevron, RowLink } from "@/components/kit/links";
-import { formatAge, formatDuration, formatInt, formatUsd, shortId } from "@/lib/format";
+import { formatAge, formatCost, formatDuration, formatInt, shortId } from "@/lib/format";
 import type { RunRow } from "@/lib/data/runs/types";
 import { RUNS_MIN_WIDTH, RunsColgroup, RunsHead } from "./runs-columns";
 import { costText } from "../detail/lib/cost";
@@ -48,7 +48,7 @@ function RunRowView({ run, now }: { run: RunRow; now: number }) {
                     <span className="text-[12px] text-ink-absent">None yet</span>
                 )}
             </Td>
-            <Td className="mono text-[12px] text-ink-2">{costText(run.costUsd, run.costKnown, formatUsd)}</Td>
+            <Td className="mono text-[12px] text-ink-2">{costText(run.costUsd, run.costKnown, formatCost)}</Td>
             <Td className="mono text-[12px] text-ink-2">{formatDuration(run.durationMs)}</Td>
             <Td className="text-[12px] text-ink-2">
                 <time dateTime={new Date(run.startedAt).toISOString()}>

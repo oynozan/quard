@@ -6,7 +6,7 @@ import { LabelChip } from "@/components/kit/labels";
 import { ArrowLink } from "@/components/kit/links";
 import { Drawer } from "@/components/ui/drawer";
 import type { Step } from "@/lib/data/runs/types";
-import { formatClock, formatInt } from "@/lib/format";
+import { formatClock, formatCost, formatInt } from "@/lib/format";
 import { contextStyle } from "../lib/context";
 import { KIND_WORD, STATUS_TONE, STATUS_WORD, formatOffset, formatStepDuration } from "../lib/words";
 import { GuardDetails } from "./guard-details";
@@ -17,10 +17,6 @@ type StepDrawerProps = {
     startedAt: number;
     onClose: () => void;
 };
-
-function usd(value: number): string {
-    return `$${value.toFixed(4)}`;
-}
 
 // Everything about one step: timing, cost, context, value labels and the guard decision.
 export function StepDrawer({ step, startedAt, onClose }: StepDrawerProps) {
@@ -112,7 +108,7 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
                             {step.model.costKnown === false ? (
                                 <Absent>No price for this model</Absent>
                             ) : (
-                                usd(step.model.costUsd)
+                                formatCost(step.model.costUsd)
                             )}
                         </DetailRow>
                         <DetailRow term="Asked for" mono>

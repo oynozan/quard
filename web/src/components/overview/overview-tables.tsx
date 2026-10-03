@@ -5,7 +5,7 @@ import { Absent } from "@/components/kit/detail/detail-list";
 import { SectionHeading } from "@/components/kit/headings";
 import { RowChevron, RowLink } from "@/components/kit/links";
 import { Badge, LabelChip, RunStatusLabel, StatusSquare } from "@/components/kit/labels";
-import { formatAge, formatUsd, shortId } from "@/lib/format";
+import { formatAge, formatCost, shortId } from "@/lib/format";
 import type { ApprovalRequest, Incident, RunSummary } from "@/lib/data/types";
 import { REPLAY_TONE } from "@/components/incidents/lib/labels";
 import { costText } from "@/components/runs/detail/lib/cost";
@@ -141,7 +141,7 @@ export function RunsSection({ runs, now }: { runs: RunSummary[]; now: number }) 
                                 )}
                             </Td>
                             <Td className="mono text-[12px] text-ink-2">
-                                {costText(run.costUsd, run.costKnown, formatUsd)}
+                                {costText(run.costUsd, run.costKnown, formatCost)}
                             </Td>
                             <Td className="text-[12px] text-ink-2">
                                 {formatAge(run.startedAt, now)} ago

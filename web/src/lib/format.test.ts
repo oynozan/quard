@@ -116,8 +116,10 @@ describe("formatStepDuration", () => {
 });
 
 describe("formatCost", () => {
-    it("shows four decimals for costs under a cent", () => {
+    it("keeps two significant digits for costs under a cent, however small", () => {
         expect(formatCost(0.0042)).toBe("$0.0042");
+        expect(formatCost(0.000452)).toBe("$0.00045");
+        expect(formatCost(0.000031)).toBe("$0.000031");
     });
 
     it("shows plain dollars for zero and for larger costs", () => {

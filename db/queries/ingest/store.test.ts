@@ -39,7 +39,7 @@ describe("ingestBatch", () => {
             influenced: true,
             flagged: true,
             degraded: false,
-            costUsd: 0.0031,
+            costUsd: 0.003075,
             costKnown: true,
         });
         expect(run?.steps.map((step) => step.kind)).toEqual(["model_call", "tool_call"]);

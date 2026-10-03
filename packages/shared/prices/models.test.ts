@@ -21,12 +21,14 @@ describe("costOf", () => {
         ).toBe(5.325);
     });
 
-    it("rounds a small call to a hundredth of a cent", () => {
-        expect(costOf("gpt-5.4-mini", { inputTokens: 1234, cachedTokens: 0, outputTokens: 56 })).toBe(0.0012);
+    it("keeps a small call to the micro-dollar, so a cheap model call is never free", () => {
+        expect(costOf("gpt-5.4-mini", { inputTokens: 1234, cachedTokens: 0, outputTokens: 56 })).toBe(0.001178);
+        // 138 input and 61 output tokens of gpt-5-nano cost $0.0000313
+        expect(costOf("gpt-5-nano", { inputTokens: 138, cachedTokens: 0, outputTokens: 61 })).toBe(0.000031);
     });
 
-    it("never counts more cached tokens than input tokens", () => {
-        expect(costOf("gpt-5", { inputTokens: 10, cachedTokens: 50, outputTokens: 0 })).toBe(0);
+    it("never bills fresh input below zero when more tokens were cached than sent", () => {
+        expect(costOf("gpt-5", { inputTokens: 10, cachedTokens: 50, outputTokens: 0 })).toBe(0.000006);
     });
 
     it("returns null for a model without a known price", () => {

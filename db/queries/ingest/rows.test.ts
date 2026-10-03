@@ -44,7 +44,7 @@ describe("stepRows", () => {
             duration_ms: 812,
         });
         // 1000 fresh and 1000 cached input tokens, and 500 output tokens, at gpt-5.4-mini prices
-        expect(JSON.parse(String(model?.detail))).toMatchObject({ responseId: "resp_1", costUsd: 0.0031 });
+        expect(JSON.parse(String(model?.detail))).toMatchObject({ responseId: "resp_1", costUsd: 0.003075 });
         expect(tool).toMatchObject({ kind: "tool_call", name: "payInvoice", call_id: "call_1", status: "blocked" });
         expect(JSON.parse(String(tool?.detail))).toMatchObject({ arguments: { amount: 4950 } });
     });
