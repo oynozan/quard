@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { configure, resetConfig } from "../core/config.ts";
 import { takeEvents } from "../core/recorder.ts";
 import { GuardBlockedError, GuardRefusal } from "../core/refusal.ts";
-import { agentScope, currentScope, mayUse, narrowTools, newScope, runScope } from "./scope.ts";
+import { agentScope, childScope, currentScope, mayUse, narrowTools, newScope, runScope } from "./scope.ts";
 
 afterEach(() => {
     resetConfig();
@@ -143,6 +143,31 @@ describe("agentScope", () => {
 
     it("must be inside a run", () => {
         expect(() => agentScope("lost", () => {})).toThrow("quard.agent() must be called inside quard.run()");
+    });
+});
+
+describe("childScope", () => {
+    it("starts a child below the parent's last step and leaves the parent as it was", () => {
+        const parent = newScope({ agent: "orchestrator", tools: ["fetchPage"] });
+        parent.lastStepId = "00f067aa0ba902b7";
+
+        const child = childScope(parent, "billing");
+
+        expect(child).toEqual({
+            run: parent.run,
+            agent: "billing",
+            parentStepId: "00f067aa0ba902b7",
+            tools: parent.tools,
+            lastStepId: undefined,
+            depth: 1,
+        });
+        expect(parent).toMatchObject({ agent: "orchestrator", lastStepId: "00f067aa0ba902b7", depth: 0 });
+    });
+
+    it("narrows the parent's tools to the child's list", () => {
+        const child = childScope(newScope({ tools: ["fetchPage", "payInvoice"] }), "reader", ["fetchPage", "x"]);
+
+        expect([...(child.tools ?? [])]).toEqual(["fetchPage"]);
     });
 });
 

@@ -109,23 +109,25 @@ export function narrowTools(
     return new Set(parent === undefined ? own : own.filter((tool) => parent.has(tool)));
 }
 
+// A child agent in the parent's run, started from the parent's last step
+export function childScope(parent: Scope, agent: string, tools?: string[]): Scope {
+    return {
+        run: parent.run,
+        agent,
+        parentStepId: parent.lastStepId,
+        tools: narrowTools(parent.tools, tools),
+        lastStepId: undefined,
+        depth: parent.depth + 1,
+    };
+}
+
 // quard.agent(): a child agent inside the current run
 export function agentScope<T>(name: string, fn: () => T, options: AgentOptions = {}): T {
     const parent = currentScope();
     if (parent === undefined) {
         throw new Error("quard.agent() must be called inside quard.run()");
     }
-    return withScope(
-        {
-            run: parent.run,
-            agent: name,
-            parentStepId: parent.lastStepId,
-            tools: narrowTools(parent.tools, options.tools),
-            lastStepId: undefined,
-            depth: parent.depth + 1,
-        },
-        fn,
-    );
+    return withScope(childScope(parent, name, options.tools), fn);
 }
 
 export function mayUse(scope: Scope, tool: string): boolean {
