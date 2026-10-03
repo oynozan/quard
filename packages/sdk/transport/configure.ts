@@ -101,7 +101,7 @@ export function uploadsOn(): boolean {
     return uploads !== undefined;
 }
 
-// Stores label records in webhook now. False when uploads are off.
+// Stores label records in webhook now, false when uploads are off
 export function sendLabels(records: LabelRecord[]): Promise<boolean> {
     return uploads?.labels(records) ?? Promise.resolve(false);
 }

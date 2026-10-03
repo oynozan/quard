@@ -36,7 +36,7 @@ function flags(list: readonly string[]): string[] {
     return list.slice(0, MAX_FLAGS).map((flag) => flag.slice(0, MAX_FLAG));
 }
 
-// The record as it is stored, cut to fit. Leaving tools out only narrows them.
+// The record as webhook stores it, cut to fit, where dropped tools only narrow
 export function messageRecordOf(sent: SentMessage): MessageRecord {
     const { label, stepId, tools } = sent;
     return {

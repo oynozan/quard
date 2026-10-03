@@ -27,8 +27,7 @@ function lookupIn(labels: readonly LabelRecord[], message: Extract<ClientMessage
         .slice(0, 20);
 }
 
-// A stand-in for services/control that speaks the protocol over a real
-// WebSocket. Lookups read `labels`, which a webhook stand-in can fill.
+// A stand-in for services/control over a real WebSocket, with lookups read from `labels`
 export async function startControlServer(key = CONTROL_KEY, labels: LabelRecord[] = []) {
     const server = new WebSocketServer({
         host: "127.0.0.1",

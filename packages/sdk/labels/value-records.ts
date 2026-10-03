@@ -14,7 +14,7 @@ export type ValueRecord = {
     stepId: string;
 };
 
-// What leaves the process for each value: its hash, never the value
+// What leaves the process for each value, its hash and never the value
 export function hashValues(values: readonly ValueRecord[]): StoredValue[] {
     return values.flatMap(({ type, value, origin, trust, sensitivity, flags, stepId }) => {
         const hash = valueHash(type, value);

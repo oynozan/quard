@@ -1,7 +1,7 @@
 import type { CountMessage, FleetMessage, LookupMessage, RunCountMessage, ServerMessage } from "@quard/shared";
 import type { Link } from "./link.ts";
 
-// What the SDK asks control. Each answer carries the request's id.
+// What the SDK asks control, each answered with the request's id
 export type Request = CountMessage | RunCountMessage | FleetMessage | LookupMessage;
 
 export type Reply = Extract<ServerMessage, { type: "counted" | "fleet_result" | "labels" }>;

@@ -11,8 +11,7 @@ async function bodyOf(req: IncomingMessage): Promise<unknown> {
     return JSON.parse(text);
 }
 
-// A stand-in for services/webhook. Label records go into `labels`, which
-// a control stand-in can share to answer lookups.
+// A stand-in for services/webhook that keeps label records in `labels` for control to share
 export async function startWebhookServer(labels: LabelRecord[] = [], key = WEBHOOK_KEY) {
     const events: RunEvent[] = [];
     const state = { labelStatus: 201 };

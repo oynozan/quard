@@ -19,7 +19,7 @@ export function toBaggage(carrier: Carrier): string {
         .join(",");
 }
 
-// The carrier fields in a baggage header. Other members and properties are left out.
+// The carrier fields in a baggage header, other members and properties left out
 export function readBaggage(header: string): Record<string, string> {
     const fields: Record<string, string> = {};
     for (const member of header.split(",")) {

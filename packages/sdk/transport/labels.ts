@@ -7,8 +7,7 @@ export function storeLabels(records: LabelRecord[]): Promise<boolean> {
     return records.length === 0 ? Promise.resolve(true) : sendLabels(records);
 }
 
-// The records behind a reference or a print. Undefined when control
-// could not answer in time.
+// The records behind a reference or a print, undefined when control can't answer in time
 export async function lookupLabels(target: LookupMessage["target"]): Promise<LabelRecord[] | undefined> {
     const control = activeControl();
     if (control === undefined) {

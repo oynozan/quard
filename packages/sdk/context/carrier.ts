@@ -34,8 +34,7 @@ export type Incoming = { carrier: Carrier; found: FoundRecord | undefined };
 // What each resumed scope came in with, for receive guards inside it
 const resumed = new WeakMap<Scope, Incoming>();
 
-// A carrier read from a channel, or undefined when it is missing or
-// unreadable. A string is read as a W3C baggage header.
+// A carrier from a channel or a baggage header string, undefined when unreadable
 export function readCarrier(value: unknown): Carrier | undefined {
     if (typeof value === "string") {
         return readCarrier(readBaggage(value));
@@ -67,7 +66,7 @@ function valuesOf(text: string, index: ContentIndex): ValueRecord[] {
     return [...found.values()];
 }
 
-// Where a run starts spanning processes: a message carries it out, or it came in from elsewhere
+// Where a run starts spanning processes, as a message carries it out or brings it in
 function runSpansProcesses(run: RunState): void {
     void run;
 }
@@ -141,8 +140,7 @@ export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOp
     return await withScope(scope, fn);
 }
 
-// What a receive guard reads a message with. A message with no carrier
-// of its own has the one quard.resume() came in with.
+// What a receive guard reads a message with, else what quard.resume() came in with
 export async function incomingMessage(value: unknown, scope: Scope | undefined): Promise<Incoming | undefined> {
     const kept = scope === undefined ? undefined : resumed.get(scope);
     if (value === undefined || value === null) {
