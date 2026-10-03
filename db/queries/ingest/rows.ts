@@ -160,42 +160,39 @@ export function decisionRows(projectId: string, items: RunItem[]): Insertable<De
 // receiving side, so its agent is the receiver.
 export function agentMessageRows(projectId: string, items: RunItem[]): Insertable<AgentMessagesTable>[] {
     return items.flatMap(({ id, event }): Insertable<AgentMessagesTable>[] => {
+        if (event.type !== "message" && event.type !== "handoff") {
+            return [];
+        }
         const row = {
             project_id: projectId,
             event_id: id,
             run_id: event.runId,
+            step_id: event.stepId,
+            trust: event.trust,
+            sensitivity: event.sensitivity,
             at: event.at,
         };
         if (event.type === "message") {
             return [
                 {
                     ...row,
-                    step_id: event.stepId,
                     kind: "message",
                     from_agent: event.from,
                     to_agent: event.agent,
                     parent_step_id: event.parentStepId ?? null,
-                    trust: event.trust,
-                    sensitivity: event.sensitivity,
                     verified: event.verified,
                 },
             ];
         }
-        if (event.type === "handoff") {
-            return [
-                {
-                    ...row,
-                    step_id: event.stepId,
-                    kind: event.via === "tool" ? "tool" : "handoff",
-                    from_agent: event.agent,
-                    to_agent: event.to,
-                    parent_step_id: null,
-                    trust: event.trust,
-                    sensitivity: event.sensitivity,
-                    verified: true,
-                },
-            ];
-        }
-        return [];
+        return [
+            {
+                ...row,
+                kind: event.via === "tool" ? "tool" : "handoff",
+                from_agent: event.agent,
+                to_agent: event.to,
+                parent_step_id: null,
+                verified: true,
+            },
+        ];
     });
 }
