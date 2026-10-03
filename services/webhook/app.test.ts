@@ -8,6 +8,12 @@ describe("webhook app", () => {
         expect(await res.json()).toEqual({ status: "ok", service: "webhook" });
     });
 
+    it("serves events only when it has a database", async () => {
+        const res = await createApp().request("/v1/events", { method: "POST" });
+
+        expect(res.status).toBe(404);
+    });
+
     it("returns 404 for unknown paths", async () => {
         const res = await createApp().request("/nope");
 

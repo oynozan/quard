@@ -365,6 +365,9 @@ importers:
       '@hono/node-server':
         specifier: 'catalog:'
         version: 2.1.3(hono@4.13.12)
+      '@quard/db':
+        specifier: workspace:*
+        version: link:../../db
       '@quard/shared':
         specifier: workspace:*
         version: link:../../packages/shared

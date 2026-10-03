@@ -1,9 +1,16 @@
 import { serve } from "@hono/node-server";
-import { readPort } from "@quard/shared";
+import { connect } from "@quard/db";
 import { createApp } from "./app.ts";
+import { readConfig } from "./config/env.ts";
 
-const port = readPort(process.env.PORT, 4100);
+const config = readConfig(process.env);
 
-serve({ fetch: createApp().fetch, port }, (info) => {
-    console.log(`webhook listening on port ${info.port}`);
-});
+if (typeof config === "string") {
+    console.error(config);
+    process.exitCode = 1;
+} else {
+    const app = createApp({ db: connect(config.databaseUrl), redactor: config.redactor });
+    serve({ fetch: app.fetch, port: config.port }, (info) => {
+        console.log(`webhook listening on port ${info.port}`);
+    });
+}
