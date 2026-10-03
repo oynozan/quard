@@ -11,6 +11,7 @@ import {
     openSources,
     policyOptions,
     policyOrigins,
+    policyRunLimits,
     policyVersion,
     refreshSources,
     signatureFeed,
@@ -45,6 +46,7 @@ describe("without a policy file or feed", () => {
         expect(policyOptions("t")).toBeUndefined();
         expect(policyVersion()).toBeUndefined();
         expect(policyOrigins()).toBeUndefined();
+        expect(policyRunLimits()).toBeUndefined();
         expect(currentPreset()).toBe(PRESETS.balanced);
         expect(effectiveDetectorRules({ flagAt: 0.7 })).toEqual({ mode: "enforce", flagAt: 0.7, stripAt: 0.9 });
         expect(signatureFeed()).toBeUndefined();
@@ -66,11 +68,13 @@ describe("a policy file", () => {
             strictness: "strict",
             origins: { "mcp:crm": { trust: "trusted" } },
             detector: { mode: "enforce" },
+            runLimits: { steps: 20 },
             guards: { pay: [{ type: "approval" }] },
         });
 
         openSources(path, undefined);
 
+        expect(policyRunLimits()).toEqual({ steps: 20 });
         expect(policyOptions("pay")).toEqual([{ type: "approval" }]);
         expect(policyOptions("other")).toBeUndefined();
         expect(policyVersion()).toBe("7");

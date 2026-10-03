@@ -11,8 +11,24 @@ describe("policy file schema", () => {
         expect(Object.keys(policy.guards ?? {})).toEqual(["fetchPage", "sendEmail", "payInvoice", "deleteRecords"]);
     });
 
+    it("keeps run limits and the delegate argument of a limit guard", () => {
+        const policy = policySchema.parse({
+            version: 1,
+            runLimits: { mode: "block", depth: 2, costUsd: 0.5 },
+            guards: { delegate: [{ type: "limit", delegateTo: "to" }] },
+        });
+
+        expect(policy.runLimits).toEqual({ mode: "block", depth: 2, costUsd: 0.5 });
+        expect(policy.guards?.delegate).toEqual([{ type: "limit", delegateTo: "to" }]);
+    });
+
     it.each([
         ["no version", { guards: {} }],
+        ["an empty delegate argument", { version: 1, guards: { t: [{ type: "limit", delegateTo: "" }] } }],
+        ["an unknown run limit", { version: 1, runLimits: { handoffs: 3 } }],
+        ["a run limit that is not a whole number", { version: 1, runLimits: { steps: 2.5 } }],
+        ["a negative cost limit", { version: 1, runLimits: { costUsd: -1 } }],
+        ["an unknown run limit mode", { version: 1, runLimits: { mode: "warn" } }],
         ["an unknown field", { version: 1, rules: [] }],
         ["an unknown guard type", { version: 1, guards: { t: [{ type: "fleet" }] } }],
         ["a typo in a guard option", { version: 1, guards: { t: [{ type: "limit", maxCalls: 3 }] } }],
@@ -46,12 +62,18 @@ describe("configure options", () => {
         expect(configureExtras.safeParse({ detector, detectorRules: { mode: "enforce" } }).success).toBe(true);
     });
 
+    it("accepts run limits with some fields left out", () => {
+        expect(configureExtras.safeParse({ runLimits: { mode: "block", steps: 0, costUsd: 0.25 } }).success).toBe(true);
+    });
+
     it.each([
         ["a detector with no label function", { detector: { name: "fake" } }],
         ["a detector with no name", { detector: { label: async () => ({}) } }],
         ["a detector that is not an object", { detector: "fake" }],
         ["a null detector", { detector: null }],
         ["an empty policy file path", { policyFile: "" }],
+        ["a negative fan-out", { runLimits: { fanOut: -1 } }],
+        ["a typo in the run limits", { runLimits: { maxSteps: 10 } }],
     ])("rejects %s", (_, value) => {
         expect(configureExtras.safeParse(value).success).toBe(false);
     });

@@ -2,10 +2,37 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { policyVersion, signatureFeed } from "../policy/state.ts";
 import { EXAMPLES, tempDir, writeJson } from "../test/files.ts";
-import { configure, getConfig, resetConfig } from "./config.ts";
+import { configure, DEFAULT_RUN_LIMITS, getConfig, resetConfig, runLimits } from "./config.ts";
 
 afterEach(() => {
     resetConfig();
+});
+
+describe("run limits", () => {
+    it("start at the product defaults, in observe mode", () => {
+        expect(runLimits()).toEqual({ mode: "observe", depth: 3, fanOut: 10, loops: 5, steps: 200, costUsd: 5 });
+        expect(runLimits()).toEqual(DEFAULT_RUN_LIMITS);
+    });
+
+    it("take the fields set in code and keep the defaults for the rest", () => {
+        configure({ runLimits: { mode: "block", steps: 50, costUsd: undefined } });
+
+        expect(runLimits()).toEqual({ ...DEFAULT_RUN_LIMITS, mode: "block", steps: 50 });
+    });
+
+    it("take the policy file's fields over the code's, field by field", () => {
+        const path = writeJson(join(tempDir(), "p.json"), { version: 1, runLimits: { steps: 10, depth: 1 } });
+
+        configure({ runLimits: { mode: "block", steps: 50 }, policyFile: path });
+
+        expect(runLimits()).toEqual({ ...DEFAULT_RUN_LIMITS, mode: "block", steps: 10, depth: 1 });
+    });
+
+    it("reject bad values", () => {
+        expect(() => configure({ runLimits: { depth: -1 } })).toThrow("Invalid Quard configuration");
+        expect(() => configure({ runLimits: { mode: "warn" as never } })).toThrow("Invalid Quard configuration");
+        expect(runLimits()).toEqual(DEFAULT_RUN_LIMITS);
+    });
 });
 
 describe("config", () => {

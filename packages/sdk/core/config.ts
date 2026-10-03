@@ -1,8 +1,8 @@
 import type { OriginOverrides, RunEvent } from "@quard/shared";
 import type { Detector, DetectorRules } from "../detectors/detector.ts";
 import type { ArgumentLabel } from "../labels/value-labels.ts";
-import { configureExtras, type SignaturesConfig } from "../policy/schema.ts";
-import { closeSources, openSources, policyOrigins } from "../policy/state.ts";
+import { configureExtras, type RunLimitSettings, type SignaturesConfig } from "../policy/schema.ts";
+import { closeSources, openSources, policyOrigins, policyRunLimits } from "../policy/state.ts";
 import { describeError } from "./errors.ts";
 
 export type ApprovalAnswer = "once" | "always" | "deny";
@@ -14,6 +14,30 @@ export type ApprovalRequest = {
     tool: string;
     input: unknown;
     values: ArgumentLabel[];
+};
+
+export type RunLimits = {
+    // Product defaults start in observe mode
+    mode: "block" | "observe";
+    // Delegation levels below the agent that started the run
+    depth: number;
+    // Distinct helpers one agent delegates to
+    fanOut: number;
+    // Turns back and forth between the same two agents
+    loops: number;
+    // Model calls across all agents
+    steps: number;
+    // Estimated from token usage and the price table
+    costUsd: number;
+};
+
+export const DEFAULT_RUN_LIMITS: RunLimits = {
+    mode: "observe",
+    depth: 3,
+    fanOut: 10,
+    loops: 5,
+    steps: 200,
+    costUsd: 5,
 };
 
 export type QuardConfig = {
@@ -35,6 +59,8 @@ export type QuardConfig = {
     // An AI check on source content, and when it may act
     detector?: Detector;
     detectorRules?: Partial<DetectorRules>;
+    // Fields left out use DEFAULT_RUN_LIMITS
+    runLimits?: Partial<RunLimits>;
 };
 
 let current: QuardConfig = { origins: {} };
@@ -56,6 +82,15 @@ export function configure(options: Partial<QuardConfig>): void {
 export function getConfig(): QuardConfig {
     const fromPolicy = policyOrigins();
     return fromPolicy === undefined ? current : { ...current, origins: { ...current.origins, ...fromPolicy } };
+}
+
+function setFields(settings: RunLimitSettings | undefined): RunLimitSettings {
+    return Object.fromEntries(Object.entries(settings ?? {}).filter(([, value]) => value !== undefined));
+}
+
+// The limits in force: defaults, then code, then the policy file, field by field
+export function runLimits(): RunLimits {
+    return { ...DEFAULT_RUN_LIMITS, ...setFields(current.runLimits), ...setFields(policyRunLimits()) };
 }
 
 export function resetConfig(): void {

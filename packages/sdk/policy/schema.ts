@@ -62,6 +62,7 @@ const limit = z.strictObject({
     maxCallsPerDay: z.number().int().nonnegative().optional(),
     maxAmountPerDay: z.strictObject({ field, max: z.number().nonnegative() }).optional(),
     fleetCheck: z.array(field).min(1).optional(),
+    delegateTo: z.string().min(1).optional(),
 });
 
 export const guardOptionsJson = z.discriminatedUnion("type", [source, action, approval, egress, limit]);
@@ -79,6 +80,17 @@ export const signaturesConfig = z
     .refine((config) => (config.file === undefined) !== (config.url === undefined), "set exactly one of file or url");
 
 const unit = z.number().min(0).max(1);
+const count = z.number().int().nonnegative().optional();
+
+// Per-run limits on delegation, model calls and cost
+export const runLimitSettings = z.strictObject({
+    mode,
+    depth: count,
+    fanOut: count,
+    loops: count,
+    steps: count,
+    costUsd: z.number().nonnegative().optional(),
+});
 
 export const detectorRules = z.strictObject({
     mode: z.enum(["observe", "enforce"]).optional(),
@@ -102,6 +114,8 @@ export const policySchema = z.strictObject({
     // file, url and refreshSeconds are read at startup; mode applies live
     signatures: signaturesConfig.optional(),
     detector: detectorRules.optional(),
+    // Each field set here wins over the same field set in code
+    runLimits: runLimitSettings.optional(),
     // Tool name to its guard options. A tool listed here ignores its code options.
     guards: z.record(z.string().min(1), z.array(guardOptionsJson)).optional(),
 });
@@ -121,10 +135,12 @@ export const configureExtras = z.object({
         )
         .optional(),
     detectorRules: detectorRules.optional(),
+    runLimits: runLimitSettings.optional(),
 });
 
 export type PolicyFile = z.infer<typeof policySchema>;
 export type SignaturesConfig = z.infer<typeof signaturesConfig>;
+export type RunLimitSettings = z.infer<typeof runLimitSettings>;
 
 export function parsePolicy(text: string): PolicyFile {
     return policySchema.parse(JSON.parse(text));

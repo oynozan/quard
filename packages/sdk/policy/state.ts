@@ -9,7 +9,7 @@ import { urlSource } from "../feeds/url-source.ts";
 import type { GuardOptions } from "../guards/options.ts";
 import { parseFeed, type CompiledFeed } from "../signatures/matcher.ts";
 import { PRESETS, type Preset } from "./presets.ts";
-import { parsePolicy, type PolicyFile, type SignaturesConfig } from "./schema.ts";
+import { parsePolicy, type PolicyFile, type RunLimitSettings, type SignaturesConfig } from "./schema.ts";
 
 const DEFAULT_REFRESH_SECONDS = 300;
 
@@ -109,6 +109,10 @@ export function policyVersion(): string | undefined {
 
 export function policyOrigins(): OriginOverrides | undefined {
     return currentPolicy()?.origins;
+}
+
+export function policyRunLimits(): RunLimitSettings | undefined {
+    return currentPolicy()?.runLimits;
 }
 
 export function currentPreset(): Preset {
