@@ -420,6 +420,9 @@ importers:
       '@quard/db':
         specifier: workspace:*
         version: link:../db
+      '@quard/shared':
+        specifier: workspace:*
+        version: link:../packages/shared
       openai:
         specifier: 'catalog:'
         version: 7.27.0(undici@8.11.2)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.6.5)

@@ -100,6 +100,7 @@ These run with or without it:
 | `18-origins-and-trust.ts`         | Full origins, `from` versus trust, origin overrides, `originOf` and `allowDomains`                     |
 | `19-ai-detector.ts`               | An AI detector catches a reworded attack the built-in checks miss: observe, enforce, tuning            |
 | `20-signature-feeds.ts`           | Known-bad patterns from a file or URL: block, observe, updates without a restart                       |
+| `21-streaming-and-model-calls.ts` | Streamed answers and tool calls, tokens and cost, agent versions, unrecorded Chat Completions          |
 
 ## How it fits together
 

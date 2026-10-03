@@ -8,6 +8,7 @@
     },
     "dependencies": {
         "@quard/db": "workspace:*",
+        "@quard/shared": "workspace:*",
         "openai": "catalog:",
         "quard": "link:lib/quard"
     },
