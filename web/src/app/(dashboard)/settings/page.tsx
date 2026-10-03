@@ -4,7 +4,6 @@ import { AccountsPanel } from "@/components/settings/accounts/accounts-panel";
 import { CodePanel } from "@/components/settings/code/code-panel";
 import { KeysPanel } from "@/components/settings/keys/keys-panel";
 import { RetentionPanel } from "@/components/settings/retention/retention-panel";
-import { ProjectTag } from "@/components/settings/project-tag";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { pickTab, SETTINGS_CONTAINER } from "@/components/settings/tabs";
 import { NOW } from "@/lib/data/rng";
@@ -22,7 +21,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
     return (
         <div className={SETTINGS_CONTAINER}>
-            <PageHeading title="Settings" actions={<ProjectTag id={data.project.id} name={data.project.name} />} />
+            <PageHeading title="Settings" />
             <div className="reveal">
                 <SettingsTabs
                     initial={pickTab(params.tab)}

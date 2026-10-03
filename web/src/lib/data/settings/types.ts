@@ -42,7 +42,6 @@ export type RuleRow = {
 export type SdkConnection = Omit<SdkApp, "keyId"> & { key: string };
 
 export type SettingsData = {
-    project: { id: string; name: string };
     keys: AgentKey[];
     accounts: Account[];
     retention: RetentionRow[];

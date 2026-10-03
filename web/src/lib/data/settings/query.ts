@@ -49,7 +49,6 @@ export function rulesFromCode(): RuleRow[] {
 // Agent keys, accounts, retention, and the read-only origins and rules from code.
 export async function getSettings(): Promise<SettingsData> {
     return {
-        project: { id: "prj_acme_prod", name: "acme-prod" },
         keys: agentKeys(),
         accounts: ACCOUNTS,
         retention: RETENTION,
