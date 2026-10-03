@@ -88,7 +88,7 @@ export function timelineLayout(steps: Step[], lanes: string[], available: number
         laneOf,
         cellRect,
         field: pathFor(field),
-        fills: CONTEXTS.map((context) => ({ key: context.key, d: pathFor(byKey.get(context.key) ?? []) })),
+        fills: CONTEXTS.map((context) => ({ key: context.key, d: pathFor(byKey.get(context.key)!) })),
         holes: pathFor(holes),
         marks: [...marks].map(([kind, rects]) => ({ kind, d: pathFor(rects) })),
         links,

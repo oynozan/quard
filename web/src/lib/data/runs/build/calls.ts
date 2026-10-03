@@ -132,8 +132,13 @@ export function modelCall(s: BuildState, agent: string, opts: ModelOptions = {})
 }
 
 // Hosted search runs inside the model call. Its pages are never scanned.
-function hostedSearch(s: BuildState, agent: string, model: Step, search: ModelOptions["search"], mark?: Mark) {
-    if (!search) return;
+function hostedSearch(
+    s: BuildState,
+    agent: string,
+    model: Step,
+    search: NonNullable<ModelOptions["search"]>,
+    mark?: Mark,
+) {
     s.clock = model.startedAt + Math.round(model.durationMs * 0.2);
     toolCall(s, agent, "web_search", {
         args: { query: search.query },

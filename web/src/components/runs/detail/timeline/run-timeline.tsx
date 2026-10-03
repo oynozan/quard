@@ -21,9 +21,10 @@ type RunTimelineProps = {
 function timelineSummary(steps: Step[], lanes: string[]): string {
     const untrusted = steps.filter((step) => step.context.trust === "untrusted");
     const first = untrusted[0];
-    const base = `Timeline of ${steps.length} steps across ${lanes.length} ${lanes.length === 1 ? "agent" : "agents"}, colored by context label.`;
+    const stepWord = (count: number) => (count === 1 ? "step" : "steps");
+    const base = `Timeline of ${steps.length} ${stepWord(steps.length)} across ${lanes.length} ${lanes.length === 1 ? "agent" : "agents"}, colored by context label.`;
     if (!first) return `${base} Every step ran on trusted context.`;
-    return `${base} Context turned untrusted at step ${steps.indexOf(first) + 1} (${first.name}, ${first.agent}); ${untrusted.length} steps ran on untrusted context.`;
+    return `${base} Context turned untrusted at step ${steps.indexOf(first) + 1} (${first.name}, ${first.agent}); ${untrusted.length} ${stepWord(untrusted.length)} ran on untrusted context.`;
 }
 
 // One lane per agent, one cell per step. A step opens in the drawer.
