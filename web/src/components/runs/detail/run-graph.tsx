@@ -63,7 +63,7 @@ function Node({ node, edges, startedAt }: { node: TreeNode; edges: RunEdge[]; st
     );
 }
 
-// The orchestrator at the root, delegated agents as children, then every message in time order.
+// The root agent at the top, delegated agents as children, then every message in time order
 export function RunGraph({ graph, startedAt }: { graph: Graph; startedAt: number }) {
     const tree = agentTree(graph.nodes);
     return (

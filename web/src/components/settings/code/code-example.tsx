@@ -5,7 +5,7 @@ import { Glyph } from "@/components/icons/glyphs";
 import { Hint } from "@/components/ui/hint";
 import { cn } from "@/lib/utils";
 
-// A closed disclosure that shows a short code sample on demand
+// A closed disclosure that shows a short code example on demand
 export function CodeExample({ code }: { code: string }) {
     const [open, setOpen] = useState(false);
     const id = useId();

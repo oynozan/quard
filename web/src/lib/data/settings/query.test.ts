@@ -108,6 +108,8 @@ describe("getSettings", () => {
             runStarted(runId(2), "support", NOW - HOUR, { "mcp:crm.internal": { trust: "trusted" } }),
             runStarted(runId(3), "billing", NOW - 3 * HOUR, { "web:docs.example.com": { sensitivity: "internal" } }),
             runStarted(runId(4), "support", NOW - MINUTE, {}),
+            // The SDK has no search kind, so its default is the unknown one
+            runStarted(runId(5), "research", NOW - 4 * HOUR, { "search:hosted": { trust: "trusted" } }),
         ]);
 
         expect((await getSettings()).origins).toEqual([
@@ -119,6 +121,15 @@ describe("getSettings", () => {
                 defaultSensitivity: "public",
                 agents: ["billing", "support"],
                 seenAt: NOW - HOUR,
+            },
+            {
+                origin: "search:hosted",
+                trust: "trusted",
+                sensitivity: "internal",
+                defaultTrust: "untrusted",
+                defaultSensitivity: "internal",
+                agents: ["research"],
+                seenAt: NOW - 4 * HOUR,
             },
             {
                 origin: "web:docs.example.com",

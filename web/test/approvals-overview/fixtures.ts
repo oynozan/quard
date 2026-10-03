@@ -1,7 +1,6 @@
-import { vi } from "vitest";
 import type { GuardDecision } from "@/lib/data/runs/types";
 
-// One guard result. Tests override the fields they care about.
+// One guard result, with the fields a test cares about overridden
 export function guardDecision(overrides: Partial<GuardDecision> = {}): GuardDecision {
     return {
         guard: "action",
@@ -16,14 +15,4 @@ export function guardDecision(overrides: Partial<GuardDecision> = {}): GuardDeci
         scan: null,
         ...overrides,
     };
-}
-
-// jsdom has no ResizeObserver. Charts keep their starting width.
-class StillObserver {
-    observe() {}
-    disconnect() {}
-}
-
-export function stubResizeObserver() {
-    vi.stubGlobal("ResizeObserver", StillObserver);
 }

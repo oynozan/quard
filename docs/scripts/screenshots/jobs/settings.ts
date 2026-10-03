@@ -14,8 +14,6 @@ function searchAndSettingsJobs(): Job[] {
             marks: [
                 { n: 1, sel: "main input" },
                 { n: 2, sel: "main button", text: "Search" },
-                { n: 3, text: "Try", closest: "div" },
-                { n: 4, text: "What you can search", closest: "section" },
             ],
         },
         {

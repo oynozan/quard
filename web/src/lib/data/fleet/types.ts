@@ -1,6 +1,5 @@
+import type { LimitName } from "../runs/types";
 import type { GuardMode, GuardType, Label } from "../types";
-
-export type LimitName = "depth" | "fan-out" | "loops" | "steps" | "cost";
 
 export type GuardBlockSeries = { guard: GuardType; values: number[]; total: number };
 

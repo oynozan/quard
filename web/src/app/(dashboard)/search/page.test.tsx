@@ -34,11 +34,13 @@ describe("SearchPage", () => {
         expectNoChartsOrTables();
     });
 
-    it("shows the field and what can be searched before anything is typed", async () => {
+    it("shows only the field before anything is typed, since its placeholder says what can be searched", async () => {
         await showPage({ state: "idle" });
         expect(searchRuns).toHaveBeenCalledWith("");
-        expect(screen.getByRole("searchbox", { name: "Search all runs" })).toBeTruthy();
-        expect(screen.getByRole("heading", { level: 2, name: "What you can search" })).toBeTruthy();
+        const field = screen.getByRole("searchbox", { name: "Search all runs" });
+        expect(field.getAttribute("placeholder")).toBe("Domain, URL, IBAN, email, file path, ID, agent or tool");
+        expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+        expect(screen.queryByRole("status")).toBeNull();
         expect(screen.queryByText("Try")).toBeNull();
         expectNoChartsOrTables();
     });
@@ -48,7 +50,6 @@ describe("SearchPage", () => {
         const runRows = [runOf(), runOf({ id: RUN_B, rootAgent: "support" })];
         await showPage({ state: "searched", result: resultOf({ matches, runRows, total: 2, runs: 2 }) }, "example.com");
         expect(screen.getByRole("status").textContent).toBe("2 matches in 2 runs for example.com");
-        expect(screen.queryByText("What you can search")).toBeNull();
         const table = screen.getByRole("table");
         expect(within(table).getAllByRole("rowgroup", { name: /^Run / })).toHaveLength(2);
         expect(document.body.textContent).toContain("Started by support");
@@ -67,8 +68,8 @@ describe("SearchPage", () => {
 
     it.each([
         ["card", "Card numbers can't be searched"],
-        ["hash-off", "IBAN and email search is offSet QUARD_HASH_KEY to the key your agents use"],
-        ["nothing", "Not an IBAN, email, URL, domain, path, ID, agent or tool"],
+        ["hash-off", "IBAN and email search needs QUARD_HASH_KEY"],
+        ["nothing", "No matches"],
     ] as const)("says why a %s query was not searched", async (state, line) => {
         await showPage({ state }, "query");
         expect(screen.getByRole("status").textContent).toBe(line);

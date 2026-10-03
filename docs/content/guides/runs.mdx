@@ -2,6 +2,8 @@
 
 A run is one task from start to finish, across every agent that worked on it. The Runs page lists them, and each run has its own page with a timeline of every step.
 
+Until your agents send their first run, the page shows only **No runs yet**.
+
 ## Find a run
 
 ![The run list](/images/guides/runs-list.webp)
@@ -9,7 +11,7 @@ A run is one task from start to finish, across every agent that worked on it. Th
 1. **Search.** Find runs by run id, agent, tool or status. Press `/` to jump to the field.
 2. **Agent.** Show the runs of one agent.
 3. **Status.** Show runs that are running, waiting, completed, failed or blocked.
-4. **Decision colors.** In the **Guard decisions** column, each cell is one decision: grey when it allowed the call, amber when it asked a person and red when it blocked it.
+4. **Decision colors.** In the **Guard decisions** column, each cell is one decision: grey when it allowed the call, amber when it asked a person and red when it blocked it. A run with no guard decisions shows **None yet**.
 5. **A run.** The agent that started it, the short run id, how many agents and steps it has, its status, cost, duration and start time. Click the row to open the run.
 
 | Status    | Meaning                                  |
@@ -20,15 +22,17 @@ A run is one task from start to finish, across every agent that worked on it. Th
 | Failed    | Stopped by an error                      |
 | Blocked   | A guard blocked a call in this run       |
 
+When the search and filters match no run, the page shows **No runs match**. **Clear filters** shows every run again.
+
 ## Read a run
 
 ![A run page](/images/guides/run.webp)
 
 1. **Header.** The run id with a copy button, the status, when the run started and how long it has taken. **Open incident** appears when the run is tied to an incident. When a call is waiting for a person, a note says so, with a link to answer it.
 2. **Summary.** How many agents and steps the run has, its estimated cost and its guard decisions. **Would block** counts decisions by rules in observe mode, which record but never stop a call.
-3. **Timeline.** One lane per agent and one cell per step, in time order. A cell's color is the label of everything the agent had read before that step: grey for trusted and public, blue for trusted and internal, light peach for untrusted and public, and copper for untrusted and internal. Untrusted cells also have a hole in the middle, so you can tell them apart without color. A mark under a cell shows a decision: amber while a person is asked, red when a call was blocked, and an outline for a rule in observe mode. A thin line between lanes is a handoff or a message to another agent.
-4. **Run graph.** Who delegated to whom. Each agent shows its version, model, steps and cost. **untrusted** marks an agent or a handoff that carried untrusted content. Open the **messages** list to see every message between agents.
-5. **Run limits.** How close the run came to each limit: delegation depth, fan-out, loops, model calls and cost. **Observe** means the limit only records. **Enforced** means it stops the run.
+3. **Timeline.** One lane per agent and one cell per step, in time order. A cell's color is the label of everything the agent had read before that step: grey for trusted and public, blue for trusted and internal, light peach for untrusted and public, and copper for untrusted and internal. Untrusted cells also have a hole in the middle, so you can tell them apart without color. A mark under a cell shows a decision: amber while a person is asked, red when a call was blocked, and an outline for a rule in observe mode. A thin line between lanes is a handoff or a message to another agent. A run that has not recorded a step yet shows **No steps yet**.
+4. **Run graph.** Who delegated to whom. Each agent shows its version and model when they are known, and its steps and cost. **untrusted** marks an agent or a handoff that carried untrusted content. Open the **messages** list to see every message between agents.
+5. **Run limits.** How close the run came to each limit: delegation depth, fan-out, loops, model calls and cost. **Observe** means the limit only records. **Enforced** means it stops the run. This part appears only when the run reports its limits.
 
 **Untrusted context** above the timeline counts the steps that ran after the agent had read untrusted content. In the timeline, the arrow keys move between steps, Enter opens one and Escape clears. **Table** shows the same steps as a table.
 

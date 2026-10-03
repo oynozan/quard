@@ -1,23 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { contextOf, EMPTY_CONTEXT, isInfluenced, uniqueLabels } from "./context";
+import { contextOf, EMPTY_CONTEXT, isInfluenced } from "./context";
 import type { Label } from "../types";
 
 const user: Label = { origin: "user", trust: "trusted", sensitivity: "internal" };
-const docs: Label = { origin: "mcp:docs.acme.internal", trust: "trusted", sensitivity: "public" };
+const docs: Label = { origin: "mcp:docs.internal", trust: "trusted", sensitivity: "public" };
 const web: Label = { origin: "web:supplier-portal.example", trust: "untrusted", sensitivity: "public" };
 const mail: Label = { origin: "email:gmail.com", trust: "untrusted", sensitivity: "public" };
-
-describe("uniqueLabels", () => {
-    it("keeps the first label for each origin, in order", () => {
-        const later = { ...web, sensitivity: "internal" as const };
-        expect(uniqueLabels([web, user, later, mail, user])).toEqual([web, user, mail]);
-    });
-
-    it("returns an empty list for no labels", () => {
-        expect(uniqueLabels([])).toEqual([]);
-    });
-});
 
 describe("contextOf", () => {
     it("starts as trusted public instructions before anything is read", () => {
@@ -38,7 +27,7 @@ describe("contextOf", () => {
     });
 
     it("falls back to the first label when everything is trusted and public", () => {
-        const notes = { ...docs, origin: "mcp:notes.acme.internal" };
+        const notes = { ...docs, origin: "mcp:notes.internal" };
         expect(contextOf([docs, notes])).toEqual(docs);
     });
 

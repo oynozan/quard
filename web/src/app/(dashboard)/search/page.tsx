@@ -7,7 +7,7 @@ import { SearchList } from "@/components/search/results/search-list";
 import { SearchResults } from "@/components/search/results/search-results";
 import { SearchSummary } from "@/components/search/results/search-summary";
 import { SearchBrowser } from "@/components/search/search-browser";
-import { SearchIntro, SearchStopped } from "@/components/search/states/search-states";
+import { SearchStopped } from "@/components/search/states/search-states";
 import { searchRuns, type SearchState } from "@/lib/data/search";
 
 export const metadata: Metadata = { title: "Search" };
@@ -31,7 +31,8 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
 }
 
 function SearchOutcome({ search }: { search: Exclude<SearchState, { state: "no-runs" }> }) {
-    if (search.state === "idle") return <SearchIntro />;
+    // The field's placeholder already says what can be searched
+    if (search.state === "idle") return null;
     if (search.state !== "searched") return <SearchStopped reason={search.state} />;
 
     const { result } = search;

@@ -8,7 +8,7 @@ const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1",
 vi.mock("@/lib/auth/session", () => ({ requireSession }));
 vi.mock("next/server", () => ({ connection: vi.fn(async () => {}) }));
 
-const { getRun, listRuns, requestTime } = await import("./query");
+const { getRun, listRuns } = await import("./query");
 const { database } = await import("./live/client");
 
 const RUN = "b".repeat(32);
@@ -78,11 +78,5 @@ describe("runs from Postgres", () => {
             ["action", false, undefined],
             ["source", true, 0.87],
         ]);
-    });
-
-    it("tells the time of the request", async () => {
-        const before = Date.now();
-
-        expect(await requestTime()).toBeGreaterThanOrEqual(before);
     });
 });

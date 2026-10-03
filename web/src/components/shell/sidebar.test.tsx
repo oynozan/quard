@@ -71,7 +71,6 @@ describe("Sidebar", () => {
         expect(workspace.textContent).toBe("Settings");
         expect(workspace.getAttribute("aria-current")).toBe("page");
 
-        expect(screen.queryByText("acme-prod")).toBeNull();
         expect(screen.getByText("dana@acme.com").closest("a")?.textContent).toBe("dana@acme.comAdmin");
         expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
     });

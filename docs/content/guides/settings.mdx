@@ -1,6 +1,6 @@
 # Settings
 
-Settings has four tabs: agent keys, accounts and roles, retention, and the rules your code reports. Admins manage settings.
+Settings has four tabs: agent keys, accounts, retention, and the rules your code reports.
 
 ## Agent keys
 
@@ -8,31 +8,38 @@ The SDK sends events to Quard with an agent key.
 
 ![Agent keys](/images/guides/settings-keys.webp)
 
-1. **Tabs.** Switch between the four parts of settings.
-2. **Project.** The project these settings belong to.
-3. **Create key.** Opens the form for a new key.
-4. **A key.** Its name and prefix, its scope and agents, who created it and when, when it was last used and its status.
-5. **Revoke.** Turns the key off after you confirm. The SDK can no longer send events with it.
-6. **A revoked key.** Revoked keys stay in the list, dimmed, with when they were revoked.
+1. **Tabs.** Switch between the four parts of settings. **Agent keys** shows how many keys are active.
+2. **Create key.** Opens the form for a new key.
+3. **A key.** Its name and prefix, when it was created, when it was last used and its status.
+4. **Revoke.** Turns the key off after you confirm. The SDK can no longer send events with it.
+5. **A revoked key.** Revoked keys stay in the list, dimmed, with when they were revoked.
+
+Until you create one, the tab shows **No agent keys yet** under **Create key**.
 
 ### Create a key
 
 ![Creating a key](/images/guides/settings-create-key.webp)
 
-1. **Name.** A name you will recognize, such as the app or service that uses it.
-2. **Environment.** Live keys start with `qk_live_` and test keys with `qk_test_`.
-3. **Scope.** One app with several agents, or a single agent. Then pick the agents that may use the key.
-4. **Create key.** Creates the key.
+1. **Name.** A name you will recognize, such as the app or service that uses it. It can be up to 48 characters, and no two active keys can share a name.
+2. **Create key.** Creates the key.
 
-The full key is shown once, right after you create it. Copy it then and store it as a secret. After you click **I saved the key**, only its prefix is shown.
+The full key is shown once, right after you create it. Copy it then and store it as a secret. After you click **I saved the key**, only its prefix is shown. Keys start with `qk_live_`.
 
-## Accounts and roles
+The drawer also shows how to pass the key to the SDK, together with the webhook address and the hash key:
 
-![Accounts and roles](/images/guides/settings-accounts.webp)
+```ts
+quard.configure({
+    key: process.env.QUARD_AGENT_KEY,
+    webhookUrl: process.env.QUARD_WEBHOOK_URL,
+    hashKey: process.env.QUARD_HASH_KEY,
+});
+```
 
-1. **Invite.** Invites someone by email as an admin or an approver. They sign in with a code sent to that email, or with GitHub.
-2. **An admin.** Admins answer approvals and also manage settings.
-3. **An approver.** Approvers answer approvals only.
+## Accounts
+
+![Accounts](/images/guides/settings-accounts.webp)
+
+There is nothing to manage here. Anyone who signs in with email or GitHub can use Quard, so there are no invites and no roles.
 
 ## Retention
 
@@ -40,9 +47,10 @@ What Quard keeps, and for how long.
 
 ![Retention](/images/guides/settings-retention.webp)
 
-1. **Retention.** Runs are kept for 30 days. Runs tied to an incident are kept for 1 year, so their verdict and replay keep working. Memory labels are kept, so shared memory keeps its labels in later runs. The fleet's first-seen index is kept for 1 year, so old values don't look new again. Approval arguments are kept only until the request is answered.
+1. **Retention.** Runs are kept for 30 days unless your project sets another number, and the table shows the number in use. Runs tied to an incident are kept for 1 year, so their verdict and replay keep working. Memory labels are kept, so shared memory keeps its labels in later runs. The fleet's first-seen index is kept for 1 year, so old values don't look new again. Approval arguments are kept only until the request is answered.
 2. **Redaction.** IBANs, card numbers, emails and secrets are never stored in clear. Secrets are removed before anything leaves your app. IBANs, cards and emails become keyed hashes plus a mask, such as `DE89…3000`, so search and value tracing still work. The hash key belongs to your install and never leaves it.
-3. **Detector.** The AI detector that scores content for hidden instructions. It runs in observe mode: it saves its scores but never changes a decision.
+
+Before your install has a project, this tab shows **No project yet**. Creating the first agent key sets up the project.
 
 ## Rules from code
 
@@ -56,11 +64,13 @@ Rules live in your code, not in the dashboard. This tab shows what each connecte
 
 Every guard decision records the hash of the rules that made it, so you can always tell which version of a rule ran.
 
+Until your apps report something, the tab shows only **Nothing reported yet** and the note on how to change a rule. After that, a part with nothing to list says so in one line, such as **No rules reported yet**. When your search and filters match no rule, **Clear filters** shows them all again.
+
 ### Origin overrides
 
 Teams can change the trust or sensitivity of one origin in code, for example to trust their own MCP server.
 
 ![Origin overrides](/images/guides/settings-overrides.webp)
 
-1. **An override.** The origin and its new label, the default it replaces, why it was changed, the app that sets it and where in the code.
+1. **An override.** The origin and its new label, the default it replaces, the agents whose runs reported it and when it was last seen.
 2. **Another override.** Every override is listed, so nothing changes trust without a trace.

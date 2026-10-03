@@ -34,7 +34,7 @@ export function SearchBrowser({ query, children }: SearchBrowserProps) {
             <form
                 role="search"
                 aria-label="Search all runs"
-                className="flex max-w-[860px] gap-2 max-[760px]:flex-col"
+                className="flex max-w-[760px] gap-2 max-[760px]:flex-col"
                 onSubmit={(event) => {
                     event.preventDefault();
                     go(value);
@@ -57,7 +57,8 @@ export function SearchBrowser({ query, children }: SearchBrowserProps) {
                     boxClassName="h-[46px] max-w-none gap-[10px] px-[13px] max-[760px]:h-[46px] max-[760px]:flex-none"
                     className="mono text-[15px] placeholder:font-sans placeholder:text-[14px]"
                 />
-                <Button type="submit" variant="default" size="tall" busy={pending} className="min-w-[112px]">
+                {/* A tonal button, so the field leads */}
+                <Button type="submit" variant="outline" size="tall" busy={pending} className="min-w-[96px]">
                     {pending ? "Searching…" : "Search"}
                 </Button>
             </form>

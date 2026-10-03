@@ -3,8 +3,6 @@ import { projectScope } from "../scope";
 import { runDetailOf, runRowOf } from "./live/detail";
 import type { RunDetail, RunQuery, RunRow } from "./types";
 
-export { requestTime } from "../scope";
-
 // The newest runs the list filters over
 const WINDOW = 200;
 
