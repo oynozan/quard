@@ -26,7 +26,8 @@ export function AgentRoster({ agents }: { agents: AgentNode[] }) {
                                 <span className="sr-only">, {STATE_WORD[agent.state]}</span>
                             </span>
                             <span className="text-right text-[11px] font-light text-ink-faint">
-                                <span className="mono text-ink-muted">{formatInt(agent.runs24h)}</span> runs 24h
+                                <span className="mono text-ink-muted">{formatInt(agent.runs24h)}</span>{" "}
+                                {agent.runs24h === 1 ? "run" : "runs"} 24h
                             </span>
                             <RowChevron className="ml-0" />
                         </Link>

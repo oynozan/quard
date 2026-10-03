@@ -24,7 +24,7 @@ export default async function OverviewPage() {
     if (!data) {
         return (
             <div className={PAGE_WIDE}>
-                <Greeting text={greetingFor(now, 0)} className="mb-[18px]" />
+                <Greeting text={greetingFor(now)} className="mb-[18px]" />
                 <EmptyLine>No activity yet</EmptyLine>
             </div>
         );

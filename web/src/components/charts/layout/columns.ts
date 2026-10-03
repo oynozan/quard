@@ -1,4 +1,13 @@
-import { columnField, columnOverlay, gridlineY, niceScale, GAP, type ColumnField, type Rect } from "@/lib/charts/cells";
+import {
+    allWhole,
+    columnField,
+    columnOverlay,
+    gridlineY,
+    niceScale,
+    GAP,
+    type ColumnField,
+    type Rect,
+} from "@/lib/charts/cells";
 import { DAY } from "@/lib/time";
 import { formatClock, formatShortDate } from "@/lib/format";
 import { fitCells } from "./fit";
@@ -50,7 +59,7 @@ export function columnsLayout(input: ColumnsInput): ColumnsLayout {
     const pitch = cell + GAP;
     const lit = span >= 3 ? span - 1 : span;
     const highest = Math.max(0, ...groups);
-    const { max, step } = niceScale(highest);
+    const { max, step } = niceScale(highest, 3, allWhole(groups));
     const unit = max / dataRows;
 
     const perColumn = groups.flatMap((value) => Array.from({ length: span }, (_, i) => (i < lit ? value : 0)));

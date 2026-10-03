@@ -48,11 +48,9 @@ describe("OverviewPage", () => {
         data.listRuns.mockResolvedValue([]);
         const { container } = render(await OverviewPage());
 
-        expect(screen.getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
-            "Good evening. No agents are running.",
-        ]);
+        expect(screen.getAllByRole("heading").map((heading) => heading.textContent)).toEqual(["Good evening."]);
         expect(screen.getByRole("status").textContent).toBe("No activity yet");
-        expect(container.textContent).toBe("Good evening. No agents are running.No activity yet");
+        expect(container.textContent).toBe("Good evening.No activity yet");
         expectNoChartsOrTables(container);
     });
 

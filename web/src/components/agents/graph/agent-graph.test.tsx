@@ -28,7 +28,7 @@ describe("AgentGraph", () => {
         render(<AgentGraph graph={graphOf()} />);
         expect(screen.getByRole("region", { name: "Agent graph" }).textContent).toContain("7D");
         expect(readout("Links")).toBe("3");
-        expect(readout("Messages")).toBe("352");
+        expect(readout("Delegations")).toBe("352");
         expect(readout("Untrusted")).toBe("7%");
     });
 

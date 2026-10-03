@@ -21,6 +21,11 @@ describe("AgentRoster", () => {
         ]);
     });
 
+    it("says run for a single run", () => {
+        render(<AgentRoster agents={[node("billing", { state: "idle", runs24h: 1 })]} />);
+        expect(screen.getByRole("link").textContent).toBe("billing, Idle1 run 24h");
+    });
+
     it("opens each agent's page, with the name escaped for the URL", () => {
         render(<AgentRoster agents={[node("inbox triage/v2")]} />);
         expect(screen.getByRole("link").getAttribute("href")).toBe("/agents/inbox%20triage%2Fv2");

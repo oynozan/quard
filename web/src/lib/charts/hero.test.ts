@@ -93,9 +93,10 @@ describe("heroLayout on narrower screens", () => {
 });
 
 describe("heroLayout with no traffic", () => {
-    it("still draws a scale and lights nothing", () => {
+    it("still draws a whole-number scale and lights nothing", () => {
         const hero = heroLayout(zeros(), 1300);
-        expect(hero.max).toBe(1.2);
+        expect(hero.max).toBe(3);
+        expect(hero.step).toBe(1);
         expect(hero.field.lit).toEqual({});
         expect(hero.peak).toEqual({ index: 0, value: 0 });
     });

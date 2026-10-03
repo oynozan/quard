@@ -43,7 +43,7 @@ export function AgentGraph({ graph }: { graph: Graph }) {
                 { label: "From", align: "left" },
                 { label: "To", align: "left" },
                 { label: "Mostly", align: "left" },
-                { label: "Messages" },
+                { label: "Delegations" },
                 { label: "Untrusted" },
                 { label: "Share" },
                 { label: "Last seen" },
@@ -69,7 +69,7 @@ export function AgentGraph({ graph }: { graph: Graph }) {
             tag={`${graph.windowDays}D`}
             readouts={[
                 { label: "Links", value: formatInt(edges.length) },
-                { label: "Messages", value: formatInt(total) },
+                { label: "Delegations", value: formatInt(total) },
                 { label: "Untrusted", value: formatShare(untrusted / total) },
             ]}
             table={table}

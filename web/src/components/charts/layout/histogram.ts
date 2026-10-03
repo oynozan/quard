@@ -2,6 +2,7 @@ import {
     columnField,
     columnOverlay,
     gridlineY,
+    allWhole,
     niceScale,
     overlaps,
     pathFor,
@@ -48,7 +49,7 @@ export function histogramLayout({
     const pitch = cell + GAP;
     const perColumn = bins.flatMap((value) => Array.from({ length: span }, () => value));
     const total = perColumn.length;
-    const { max, step } = niceScale(Math.max(0, ...bins));
+    const { max, step } = niceScale(Math.max(0, ...bins), 3, allWhole(bins));
     const unit = max / dataRows;
     const bandHeight = BAND_ROWS * pitch - GAP;
 

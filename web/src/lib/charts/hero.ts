@@ -1,4 +1,4 @@
-import { columnField, gridlineY, niceScale, GAP, type ColumnField, type Rect } from "./cells";
+import { allWhole, columnField, gridlineY, niceScale, GAP, type ColumnField, type Rect } from "./cells";
 
 export const HERO_DATA_ROWS = 30;
 export const HERO_BAND_ROWS = 4;
@@ -45,7 +45,7 @@ export function heroLayout(values: number[], width: number): HeroLayout {
     const spare = Math.max(0, width + GAP - totalColumns * pitch);
     const columnWidths = Array.from({ length: totalColumns }, (_, i) => cell + (i >= totalColumns - spare ? 1 : 0));
     const highest = Math.max(...buckets);
-    const { max, step } = niceScale(highest);
+    const { max, step } = niceScale(highest, 3, allWhole(buckets));
     const unit = max / HERO_DATA_ROWS;
 
     const field = columnField({

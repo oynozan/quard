@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+    allWhole,
     columnField,
     columnOverlay,
     GAP,
@@ -48,6 +49,21 @@ describe("niceScale", () => {
 
     it("still gives a usable scale with no data, without float noise", () => {
         expect(niceScale(0)).toEqual({ max: 1.2, step: 0.4 });
+    });
+
+    it("steps counts by whole numbers, so small counts get distinct ticks", () => {
+        expect(niceScale(1, 3, true)).toEqual({ max: 3, step: 1 });
+        expect(niceScale(2, 3, true)).toEqual({ max: 3, step: 1 });
+        expect(niceScale(4, 3, true)).toEqual({ max: 6, step: 2 });
+        expect(niceScale(140, 3, true)).toEqual({ max: 150, step: 50 });
+    });
+});
+
+describe("allWhole", () => {
+    it("is true only when every value is a whole number", () => {
+        expect(allWhole([0, 3, 12])).toBe(true);
+        expect(allWhole([])).toBe(true);
+        expect(allWhole([1, 2.5])).toBe(false);
     });
 });
 

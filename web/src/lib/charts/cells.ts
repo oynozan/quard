@@ -17,11 +17,18 @@ export function snap(value: number): number {
 }
 
 // A scale with three clean steps, for example 0 / 50 / 100 / 150.
-export function niceScale(highest: number, steps = 3): { max: number; step: number } {
+// Counts step by whole numbers, so small counts never label two ticks "1".
+export function niceScale(highest: number, steps = 3, whole = false): { max: number; step: number } {
     const top = Math.max(1, highest);
     const magnitude = 10 ** Math.floor(Math.log10(top / steps));
-    const step = Math.max(magnitude, Math.ceil(top / steps / magnitude) * magnitude);
+    const nice = Math.max(magnitude, Math.ceil(top / steps / magnitude) * magnitude);
+    const step = whole ? Math.ceil(nice) : nice;
     return { max: +(step * steps).toFixed(6), step: +step.toFixed(6) };
+}
+
+// True when every value is a whole number, as counts are
+export function allWhole(values: number[]): boolean {
+    return values.every(Number.isInteger);
 }
 
 // Cell widths that span a track exactly: leftover pixels go to evenly spaced cells.
