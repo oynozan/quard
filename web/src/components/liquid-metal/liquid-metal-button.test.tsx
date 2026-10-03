@@ -158,6 +158,16 @@ describe("LiquidMetalButton", () => {
         expect(shader.setSpeed).not.toHaveBeenCalled();
     });
 
+    it("clears the timers a click started when it goes away", async () => {
+        const { unmount } = render(<LiquidMetalButton label="Deploy" />);
+        await mounted();
+        vi.useFakeTimers();
+        fireEvent.click(surface());
+        expect(vi.getTimerCount()).toBe(2);
+        unmount();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
     it("keeps the rim still and skips the ripple for reduced motion", async () => {
         stubMotion(true);
         const onClick = vi.fn();

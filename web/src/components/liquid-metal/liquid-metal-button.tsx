@@ -37,12 +37,15 @@ export function LiquidMetalButton({
     const host = useRef<HTMLDivElement>(null);
     const mount = useRef<Mount | null>(null);
     const hovered = useRef(false);
+    // Timers a click starts, cleared when the button goes away
+    const timers = useRef(new Set<number>());
     const [state, setState] = useState<"rest" | "hover" | "pressed">("rest");
     const [ripples, setRipples] = useState<Ripple[]>([]);
 
     useEffect(() => {
         // The host div always renders, so its ref is set before effects run
         const node = host.current!;
+        const pending = timers.current;
         let cancelled = false;
         const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         import("@paper-design/shaders").then(({ ShaderMount, liquidMetalFragmentShader, LiquidMetalShapes }) => {
@@ -75,6 +78,7 @@ export function LiquidMetalButton({
         });
         return () => {
             cancelled = true;
+            pending.forEach((id) => window.clearTimeout(id));
             mount.current?.dispose();
             mount.current = null;
         };
@@ -85,6 +89,14 @@ export function LiquidMetalButton({
     const speed = (value: number) => {
         if (mount.current !== null && !reducedMotion()) mount.current.setSpeed(value);
     };
+
+    function later(run: () => void, ms: number) {
+        const id = window.setTimeout(() => {
+            timers.current.delete(id);
+            run();
+        }, ms);
+        timers.current.add(id);
+    }
 
     // React sends no mouse events to a disabled button, so enter and press need no check
     function enter() {
@@ -101,12 +113,12 @@ export function LiquidMetalButton({
 
     function press(event: MouseEvent<HTMLElement>) {
         speed(2.4);
-        setTimeout(() => speed(hovered.current ? 1 : 0.6), 300);
+        later(() => speed(hovered.current ? 1 : 0.6), 300);
         if (!reducedMotion()) {
             const box = event.currentTarget.getBoundingClientRect();
             const ripple = { id: Date.now(), x: event.clientX - box.left, y: event.clientY - box.top };
             setRipples((list) => [...list, ripple]);
-            setTimeout(() => setRipples((list) => list.filter((r) => r.id !== ripple.id)), 600);
+            later(() => setRipples((list) => list.filter((r) => r.id !== ripple.id)), 600);
         }
         onClick?.();
     }
