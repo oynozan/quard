@@ -30,7 +30,7 @@ vi.mock("./uploader.ts", () => ({
 
 const { getConfig, resetConfig } = await import("../core/config.ts");
 const { activeControl } = await import("./link/active.ts");
-const { configureQuard, flushUploads, stopLink, stopUploads } = await import("./configure.ts");
+const { configureQuard, flushUploads, sendLabels, stopLink, stopUploads, uploadsOn } = await import("./configure.ts");
 
 const SETTINGS = { key: "qk_live_abc", webhookUrl: "http://webhook.test", hashKey: "ab".repeat(32) };
 const LINKED = { key: "qk_live_abc", controlUrl: "https://control.test", hashKey: "ab".repeat(32) };
@@ -60,6 +60,15 @@ describe("configureQuard", () => {
         expect(uploaders[0]?.start).toHaveBeenCalled();
         expect(await flushUploads()).toBe(true);
         expect(uploaders[0]?.flush).toHaveBeenCalled();
+    });
+
+    it("says whether uploads are on, and stores no label records while they are off", async () => {
+        expect(uploadsOn()).toBe(false);
+        expect(await sendLabels([])).toBe(false);
+
+        configureQuard(SETTINGS);
+
+        expect(uploadsOn()).toBe(true);
     });
 
     it("keeps the same uploader when other settings change, and replaces it when uploads change", () => {

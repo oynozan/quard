@@ -1,5 +1,6 @@
-import { createRedactor, parseHashKey } from "@quard/shared";
+import { createRedactor, parseHashKey, type LabelRecord } from "@quard/shared";
 import { configure, getConfig, type QuardConfig } from "../core/config.ts";
+import { createLabelSender, type LabelSender } from "./label-sender.ts";
 import { setActiveControl } from "./link/active.ts";
 import { createControl, type Control } from "./link/control.ts";
 import { controlSocketUrl } from "./link/url.ts";
@@ -8,7 +9,7 @@ import { createUploader, type Uploader } from "./uploader.ts";
 type UploadSettings = { key: string; webhookUrl: string; hashKey: string };
 type LinkSettings = { key: string; url: string; hashKey: string };
 
-let uploads: { settings: string; uploader: Uploader } | undefined;
+let uploads: { settings: string; uploader: Uploader; labels: LabelSender } | undefined;
 let link: { settings: string; control: Control } | undefined;
 let exitHooked = false;
 
@@ -45,9 +46,10 @@ function startUploads(settings: UploadSettings | undefined): void {
     stopUploads();
     if (settings !== undefined) {
         const redactor = createRedactor(parseHashKey(settings.hashKey));
-        const uploader = createUploader({ webhookUrl: settings.webhookUrl, key: settings.key, redactor });
+        const target = { webhookUrl: settings.webhookUrl, key: settings.key, redactor };
+        const uploader = createUploader(target);
         uploader.start();
-        uploads = { settings: id, uploader };
+        uploads = { settings: id, uploader, labels: createLabelSender(target) };
         hookExit();
     }
 }
@@ -93,4 +95,13 @@ export function stopLink(): void {
 // Sends what is buffered now, if uploads are on
 export function flushUploads(): Promise<boolean> {
     return uploads?.uploader.flush() ?? Promise.resolve(true);
+}
+
+export function uploadsOn(): boolean {
+    return uploads !== undefined;
+}
+
+// Stores label records in webhook now. False when uploads are off.
+export function sendLabels(records: LabelRecord[]): Promise<boolean> {
+    return uploads?.labels(records) ?? Promise.resolve(false);
 }

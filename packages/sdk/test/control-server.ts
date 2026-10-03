@@ -3,6 +3,7 @@ import {
     CONTROL_PATH,
     type ApprovalAnswer,
     type ClientMessage,
+    type LabelRecord,
     type QuarantineEntry,
     type ReadyMessage,
     type ServerMessage,
@@ -14,8 +15,21 @@ export const CONTROL_KEY = "qk_live_control_test";
 
 type Waiter = { match: (message: ClientMessage) => boolean; resolve: (message: ClientMessage) => void };
 
-// A stand-in for services/control that speaks the protocol over a real WebSocket
-export async function startControlServer(key = CONTROL_KEY) {
+// The records a lookup finds, like control reading them from Postgres
+function lookupIn(labels: readonly LabelRecord[], message: Extract<ClientMessage, { type: "lookup" }>): LabelRecord[] {
+    const { target } = message;
+    return labels
+        .filter((record) =>
+            target.kind === "message"
+                ? record.kind === "message" && record.ref === target.ref
+                : record.kind === "memory" && record.print === target.print,
+        )
+        .slice(0, 20);
+}
+
+// A stand-in for services/control that speaks the protocol over a real
+// WebSocket. Lookups read `labels`, which a webhook stand-in can fill.
+export async function startControlServer(key = CONTROL_KEY, labels: LabelRecord[] = []) {
     const server = new WebSocketServer({
         host: "127.0.0.1",
         port: 0,
@@ -34,6 +48,7 @@ export async function startControlServer(key = CONTROL_KEY) {
         quarantined: [] as QuarantineEntry[],
         // Answers asks at once instead of waiting for decide()
         autoAnswer: undefined as ApprovalAnswer | undefined,
+        answerLookups: true,
     };
 
     const send = (socket: WebSocket, message: ServerMessage) => socket.send(JSON.stringify(message));
@@ -56,6 +71,8 @@ export async function startControlServer(key = CONTROL_KEY) {
                 counters.set(id, used);
             }
             send(socket, { type: "counted", id: message.id, ok, used: ok ? used : (counters.get(id) ?? 0) });
+        } else if (message.type === "lookup" && state.answerLookups) {
+            send(socket, { type: "labels", id: message.id, records: lookupIn(labels, message) });
         } else if (message.type === "fleet") {
             const quarantined = state.quarantined.filter((entry) => message.values.some((v) => v.key === entry.key));
             send(socket, { type: "fleet_result", id: message.id, quarantined, fleetObserveUntil: null });
@@ -83,6 +100,7 @@ export async function startControlServer(key = CONTROL_KEY) {
     return {
         url: `http://127.0.0.1:${port}`,
         received,
+        labels,
         counters,
         state,
         connections: () => [...server.clients],
