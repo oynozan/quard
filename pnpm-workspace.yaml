@@ -2,6 +2,7 @@ packages:
     - db
     - docs
     - packages/*
+    - sandbox
     - services/*
     - web
 

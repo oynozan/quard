@@ -1,0 +1,17 @@
+{
+    "name": "@quard/sandbox",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "openai": "catalog:",
+        "quard": "link:lib/quard"
+    },
+    "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
+}
