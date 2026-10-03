@@ -48,6 +48,8 @@ services:
         environment:
             PORT: "4200"
             DATABASE_URL: postgres://quard:quard@postgres:5432/quard
+            # 64 hex characters, the same in every agent process
+            QUARD_HASH_KEY: ${QUARD_HASH_KEY:-}
         ports:
             - "4200:4200"
         depends_on:
