@@ -12,6 +12,7 @@ export type ProjectsTable = {
     name: string;
     retention_days: Generated<number>;
     created_at: DefaultTimestamp;
+    fleet_started_at: Timestamp | null;
 };
 
 export type AgentKeysTable = {
@@ -104,6 +105,124 @@ export type DecisionsTable = {
     reason: string | null;
     field: string | null;
     at: Timestamp;
+    rules_hash: string | null;
+    request_id: string | null;
+};
+
+export type ApprovalAnswerColumn = "once" | "always" | "deny";
+
+export type ApprovalRequestsTable = {
+    project_id: string;
+    id: string;
+    run_id: string;
+    step_id: string;
+    agent: string;
+    tool: string;
+    args_hash: string;
+    // Null once decided
+    args: ColumnType<unknown, string | null, string | null>;
+    masked: Json;
+    labels: DefaultJson;
+    context: DefaultJson;
+    reasons: DefaultJson;
+    rules_hash: string | null;
+    opened_at: DefaultTimestamp;
+    answer: ApprovalAnswerColumn | null;
+    decided_by: string | null;
+    decided_at: Timestamp | null;
+    used_by: string | null;
+    used_at: Timestamp | null;
+};
+
+export type ApprovalWaitersTable = {
+    project_id: string;
+    ask_id: string;
+    request_id: string;
+    run_id: string;
+    step_id: string;
+    agent: string;
+    since: DefaultTimestamp;
+    last_beat_at: DefaultTimestamp;
+    done_at: Timestamp | null;
+};
+
+export type ApprovalGrantsTable = {
+    project_id: string;
+    id: string;
+    request_id: string;
+    agent: string;
+    tool: string;
+    args_hash: string;
+    masked: Json;
+    approved_by: string;
+    approved_at: DefaultTimestamp;
+    times_used: Generated<number>;
+    last_used_at: Timestamp | null;
+    revoked_at: Timestamp | null;
+    revoked_by: string | null;
+};
+
+export type DayCountersTable = {
+    project_id: string;
+    // A UTC day, "YYYY-MM-DD"
+    day: ColumnType<Date, string, string>;
+    tool: string;
+    counter: string;
+    used: Generated<number>;
+};
+
+export type FleetValuesTable = {
+    project_id: string;
+    key: string;
+    kind: "iban" | "email" | "domain";
+    field: string;
+    first_seen_at: DefaultTimestamp;
+    quarantined_at: Timestamp | null;
+    observe: Generated<boolean>;
+    known_at: Timestamp | null;
+    known_by: string | null;
+};
+
+export type FleetUsesTable = {
+    id: Generated<string>;
+    project_id: string;
+    key: string;
+    run_id: string;
+    agent: string;
+    tool: string;
+    blocked: boolean;
+    at: DefaultTimestamp;
+};
+
+export type SdkConnectionsTable = {
+    project_id: string;
+    id: string;
+    key_id: string;
+    sdk: string;
+    host: string;
+    pid: number;
+    rules_hash: string | null;
+    connected_at: DefaultTimestamp;
+    disconnected_at: Timestamp | null;
+};
+
+export type RuleSetsTable = {
+    project_id: string;
+    hash: string;
+    rules: Json;
+    first_seen_at: DefaultTimestamp;
+    last_seen_at: DefaultTimestamp;
+};
+
+export type AgentVersionsTable = {
+    project_id: string;
+    agent: string;
+    version: string;
+    model: string;
+    tools: string[];
+    instructions: string | null;
+    first_seen_at: DefaultTimestamp;
+    last_seen_at: DefaultTimestamp;
 };
 
 export type Database = {
@@ -114,4 +233,13 @@ export type Database = {
     events: EventsTable;
     labels: LabelsTable;
     decisions: DecisionsTable;
+    approval_requests: ApprovalRequestsTable;
+    approval_waiters: ApprovalWaitersTable;
+    approval_grants: ApprovalGrantsTable;
+    day_counters: DayCountersTable;
+    fleet_values: FleetValuesTable;
+    fleet_uses: FleetUsesTable;
+    sdk_connections: SdkConnectionsTable;
+    rule_sets: RuleSetsTable;
+    agent_versions: AgentVersionsTable;
 };
