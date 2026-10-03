@@ -9,6 +9,7 @@ import { createLink, LINK_TIMING, type Link, type LinkTiming } from "./link.ts";
 import { createFleetState } from "./quarantine.ts";
 import { createReplays, type Replays } from "./queue.ts";
 import { createRequests, type Requests } from "./requests.ts";
+import { createRunReplays, type RunReplays } from "./run-queue.ts";
 import type { OpenSocket } from "./socket.ts";
 import { SDK_VERSION } from "./version.ts";
 
@@ -46,6 +47,8 @@ export type Control = {
     approvals: Approvals;
     fleet: FleetView;
     replays: Replays;
+    // Counts of runs that span processes, sent again when control missed them
+    runs: RunReplays;
     hashKey: Buffer;
     replyMs: number;
     // Sends the active rules when they changed since control last saw them
@@ -91,6 +94,7 @@ export function createControl(options: ControlOptions): Control {
     const approvals = createApprovals(link, timing.downMs, timing.beatMs);
     const fleet = createFleetState(link, redactor, timing.staleMs);
     const replays = createReplays(link, requests, timing.replyMs);
+    const runs = createRunReplays(link, requests, timing.replyMs);
     const sendAgent = (version: AgentVersion) => {
         link.send(agentMessage(version, redactor));
     };
@@ -109,6 +113,7 @@ export function createControl(options: ControlOptions): Control {
         approvals,
         fleet,
         replays,
+        runs,
         hashKey: options.hashKey,
         replyMs: timing.replyMs,
         syncRules: () => {
