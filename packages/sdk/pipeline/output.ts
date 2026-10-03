@@ -1,10 +1,13 @@
-import { extractValues, labelFor, type Label } from "@quard/shared";
+import { extractValues, labelFor, originKind, type Label } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
+import { resumedCarrier } from "../context/carrier.ts";
 import type { RequestedCall } from "../context/registry.ts";
+import { currentScope } from "../context/scope.ts";
 import type { FailResult, GuardCall } from "../guards/call.ts";
 import type { GuardOptions, SourceOptions } from "../guards/options.ts";
-import { checkSource, originFor } from "../guards/source/source.ts";
+import { checkSource, originFor, receiveMessage, type Received } from "../guards/source/source.ts";
+import type { AddOptions } from "../labels/content-index.ts";
 import { textOf } from "../labels/text-of.ts";
 import { currentPreset } from "../policy/state.ts";
 import { recordDecision } from "./checks.ts";
@@ -67,13 +70,21 @@ function echoedKeys(call: GuardCall): ReadonlySet<string> {
     return new Set(extractValues(textOf(call.input)).flatMap((value) => value.keys));
 }
 
-function indexOutput(call: GuardCall, output: unknown, label: Label): void {
-    const added = call.run.index.add(textOf(output), label, call.stepId, { exclude: echoedKeys(call) });
-    if (added !== undefined) {
+// skipEmpty: content that adds no value keys is not worth an event
+function indexText(
+    call: GuardCall,
+    text: string,
+    label: Label,
+    stepId: string,
+    options: AddOptions,
+    skipEmpty = false,
+): void {
+    const added = call.run.index.add(text, label, stepId, options);
+    if (added !== undefined && !(skipEmpty && added.keys.length === 0)) {
         record({
             type: "content",
             runId: call.runId,
-            stepId: call.stepId,
+            stepId,
             agent: call.agent,
             at: now(),
             contentId: added.id,
@@ -84,6 +95,28 @@ function indexOutput(call: GuardCall, output: unknown, label: Label): void {
             keys: added.keys,
         });
     }
+}
+
+// A message from another agent first brings in the labels its values had
+// in the sender's run, so a web-derived IBAN stays web-derived here
+function indexOutput(call: GuardCall, output: unknown, label: Label, message?: Received): void {
+    for (const { value, key, stepId, ...rest } of message?.values ?? []) {
+        // Only the value's own key: its host and domain take the message's label
+        const exclude = new Set(extractValues(value).flatMap((found) => found.keys.filter((other) => other !== key)));
+        const label = { ...rest, kind: originKind(rest.origin) };
+        indexText(call, value, label, stepId, { exclude, keepEarlier: true }, true);
+    }
+    const options = { exclude: echoedKeys(call), keepEarlier: message !== undefined };
+    indexText(call, textOf(output), label, call.stepId, options);
+}
+
+// For an "agent" source: who sent the message and what the sender vouched for
+function received(source: SourceOptions, call: GuardCall, output: unknown): Received | undefined {
+    if (source.origin !== "agent") {
+        return undefined;
+    }
+    const carrier = source.carrierOf?.(call.input) ?? resumedCarrier(currentScope());
+    return receiveMessage(carrier, output, getConfig().origins);
 }
 
 // Labels, scans and indexes the result before the agent sees it.
@@ -106,7 +139,9 @@ export async function finishOutput(
     }
     // The policy file's strictness sets what suspect content gets, unless the guard says
     const source = { ...found, onSuspect: found.onSuspect ?? currentPreset().onSuspect };
-    const result = checkSource(source, originFor(source, call.input, call.tool), output, overrides);
+    const message = received(source, call, output);
+    const origin = message?.origin ?? originFor(source, call.input, call.tool);
+    const result = checkSource(source, origin, output, message?.overrides ?? overrides);
     const mode = source.mode ?? "block";
     const enforced = mode === "block";
     recordDecision(call, {
@@ -130,6 +165,6 @@ export async function finishOutput(
     if (requested !== undefined) {
         requested.outputLabel = shown.label;
     }
-    indexOutput(call, shown.output, shown.label);
+    indexOutput(call, shown.output, shown.label, message);
     return { output: shown.output };
 }

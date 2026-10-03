@@ -8,6 +8,9 @@ import {
     type Label,
     type OriginOverrides,
 } from "@quard/shared";
+import { readCarrier } from "../../context/carrier.ts";
+import { printOf } from "../../labels/content-index.ts";
+import { findRecord, type ValueRecord } from "../../labels/records.ts";
 import { textOf } from "../../labels/text-of.ts";
 import type { SourceOptions } from "../options.ts";
 import { scanText, type Finding } from "./scan.ts";
@@ -96,4 +99,29 @@ export function checkSource(
         return { decision, output: shown, label: labelFor(origin, overrides, left), findings };
     }
     return { decision, output, label: labelFor(origin, overrides, decision === "flag" ? findings : []), findings };
+}
+
+// What a receive guard learns about a message from another agent
+export type Received = {
+    origin: string;
+    // The origin overrides to label the message with
+    overrides: OriginOverrides;
+    // Values to index first, with the labels they had in the sender's run
+    values: ValueRecord[];
+};
+
+// A message is vouched for only by a record of the same run and the
+// same content. Anything else gets the agent default: untrusted.
+export function receiveMessage(carrier: unknown, output: unknown, overrides: OriginOverrides): Received {
+    const checked = readCarrier(carrier);
+    const found = checked === undefined ? undefined : findRecord(checked.labelRef);
+    const origin = `agent:${found?.sender ?? "unknown"}`;
+    if (found === undefined || found.runId !== checked?.runId || found.print !== printOf(textOf(output))) {
+        const { trust, sensitivity } = labelFor(origin);
+        return { origin, overrides: { ...overrides, [origin]: { trust, sensitivity } }, values: [] };
+    }
+    // A team's override for this exact origin still wins
+    const own = Object.hasOwn(overrides, origin) ? overrides[origin] : undefined;
+    const { trust, sensitivity } = found.label;
+    return { origin, overrides: { ...overrides, [origin]: { trust, sensitivity, ...own } }, values: found.values };
 }
