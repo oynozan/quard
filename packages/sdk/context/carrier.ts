@@ -8,6 +8,7 @@ import { textOf } from "../labels/text-of.ts";
 import { exactOccurrences } from "../labels/value-labels.ts";
 import { uploadsOn } from "../transport/configure.ts";
 import { storeLabels } from "../transport/labels.ts";
+import { readBaggage } from "./baggage.ts";
 import { newRun, type RunState } from "./run.ts";
 import { currentScope, narrowTools, runScope, withScope, type Scope } from "./scope.ts";
 
@@ -33,8 +34,12 @@ export type Incoming = { carrier: Carrier; found: FoundRecord | undefined };
 // What each resumed scope came in with, for receive guards inside it
 const resumed = new WeakMap<Scope, Incoming>();
 
-// A carrier read from a channel, or undefined when it is missing or unreadable
+// A carrier read from a channel, or undefined when it is missing or
+// unreadable. A string is read as a W3C baggage header.
 export function readCarrier(value: unknown): Carrier | undefined {
+    if (typeof value === "string") {
+        return readCarrier(readBaggage(value));
+    }
     if (typeof value !== "object" || value === null) {
         return undefined;
     }

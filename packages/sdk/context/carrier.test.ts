@@ -6,6 +6,7 @@ import { clearRecords, findRecord, forgetRuns } from "../labels/records.ts";
 import { resetAll } from "../test/reset.ts";
 import { startWebhookServer, WEBHOOK_KEY } from "../test/webhook-server.ts";
 import { configureQuard } from "../transport/configure.ts";
+import { toBaggage } from "./baggage.ts";
 import { incomingMessage, inject, readCarrier, resume } from "./carrier.ts";
 import { agentScope, currentScope, runScope } from "./scope.ts";
 
@@ -28,10 +29,17 @@ describe("readCarrier", () => {
         });
     });
 
+    it("reads a carrier from a W3C baggage header", () => {
+        const carrier = { runId: RUN_ID, parentStepId: STEP_ID, labelRef: "0123456789abcdef" };
+
+        expect(readCarrier(`other=1,${toBaggage(carrier)}`)).toEqual(carrier);
+        expect(readCarrier("other=1")).toBeUndefined();
+    });
+
     it.each([
         ["nothing", undefined],
         ["null", null],
-        ["a string", "carrier"],
+        ["a number", 7],
         ["a bad run id", { runId: "abc", labelRef: "r" }],
         ["a run id that is not text", { runId: 7, labelRef: "r" }],
         ["no label reference", { runId: RUN_ID }],
@@ -193,7 +201,7 @@ describe("resume", () => {
         }));
         forgetRuns();
 
-        const seen = await resume(sent.carrier, () => currentScope());
+        const seen = await resume(toBaggage(sent.carrier), () => currentScope());
 
         expect(seen?.run).not.toBe(sent.run);
         expect(seen?.run.runId).toBe(sent.run?.runId);

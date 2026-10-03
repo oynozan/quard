@@ -1,15 +1,17 @@
+import { toBaggage } from "./context/baggage.ts";
 import { inject, resume } from "./context/carrier.ts";
 import { agentScope, runScope } from "./context/scope.ts";
 import { wrap } from "./monitor/wrap.ts";
 import { configureQuard } from "./transport/configure.ts";
 
-// The SDK's main object. inject and resume carry a run between agents.
+// The SDK's main object. inject, resume and toBaggage carry a run between agents.
 export const quard = {
     wrap,
     run: runScope,
     agent: agentScope,
     inject,
     resume,
+    toBaggage,
     configure: configureQuard,
 };
 
