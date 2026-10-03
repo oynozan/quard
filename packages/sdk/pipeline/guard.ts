@@ -39,6 +39,7 @@ function buildCall(tool: string, input: unknown, scope: Scope, stepId: string): 
         context: scope.run.index.context(),
         values: labelArguments(input, scope.run.index),
         run: scope.run,
+        depth: scope.depth,
     };
 }
 

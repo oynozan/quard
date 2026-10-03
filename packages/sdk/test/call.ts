@@ -22,6 +22,7 @@ export function makeCall(
         context: run.index.context(),
         values: labelArguments(input, run.index),
         run,
+        depth: 0,
     };
 }
 
@@ -49,5 +50,6 @@ export function makeAskableCall(
         context: run.index.context(),
         values: labelArguments(input, run.index),
         run,
+        depth: 0,
     };
 }

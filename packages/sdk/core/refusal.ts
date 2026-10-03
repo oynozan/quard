@@ -55,3 +55,12 @@ export class GuardBlockedError extends Error {
         return this.refusal.reason;
     }
 }
+
+// The error type of the 403 the wrapped client answers for a model call over
+// an enforced run limit. The OpenAI client retries anything its fetch throws.
+export const BLOCKED_ERROR_TYPE = "quard_blocked";
+
+// A guard's own throw, or the error the OpenAI client raises for that 403
+export function isBlockedError(error: unknown): boolean {
+    return error instanceof GuardBlockedError || (error as { type?: unknown } | null)?.type === BLOCKED_ERROR_TYPE;
+}

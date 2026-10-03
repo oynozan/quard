@@ -9,6 +9,10 @@ describe("newRun", () => {
         expect(isRunId(run.runId)).toBe(true);
         expect(run.index.size).toBe(0);
         expect(run.counters.size).toBe(0);
+        expect(run.helpers.size).toBe(0);
+        expect(run.turns.size).toBe(0);
+        expect(run.modelCalls).toBe(0);
+        expect(run.costUsd).toBe(0);
     });
 
     it("can use a given id", () => {

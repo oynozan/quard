@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
-import { GuardBlockedError } from "../core/refusal.ts";
+import { isBlockedError } from "../core/refusal.ts";
 import { newRun, type RunState } from "./run.ts";
 
 export type Scope = {
@@ -11,6 +11,8 @@ export type Scope = {
     // undefined means the agent may use every guarded tool
     tools: ReadonlySet<string> | undefined;
     lastStepId: string | undefined;
+    // Delegation levels below the agent that started the run
+    depth: number;
 };
 
 export type RunOptions = {
@@ -37,6 +39,7 @@ export function newScope(options: RunOptions = {}): Scope {
         parentStepId: undefined,
         tools: options.tools === undefined ? undefined : new Set(options.tools),
         lastStepId: undefined,
+        depth: 0,
     };
     record({
         type: "run_started",
@@ -64,7 +67,7 @@ function finishRun(scope: Scope, failure?: { error: unknown }): void {
         runId: scope.run.runId,
         agent: scope.agent,
         at: now(),
-        status: failure === undefined ? "completed" : error instanceof GuardBlockedError ? "blocked" : "failed",
+        status: failure === undefined ? "completed" : isBlockedError(error) ? "blocked" : "failed",
         ...(failure === undefined ? {} : { error: error instanceof Error ? error.message : String(error) }),
     });
 }
@@ -119,6 +122,7 @@ export function agentScope<T>(name: string, fn: () => T, options: AgentOptions =
             parentStepId: parent.lastStepId,
             tools: narrowTools(parent.tools, options.tools),
             lastStepId: undefined,
+            depth: parent.depth + 1,
         },
         fn,
     );

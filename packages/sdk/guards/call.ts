@@ -13,6 +13,8 @@ export type GuardCall = {
     context: ContextLabel;
     values: ArgumentLabel[];
     run: RunState;
+    // Delegation levels below the agent that started the run
+    depth: number;
 };
 
 export type Decision = "allow" | "block" | "ask";

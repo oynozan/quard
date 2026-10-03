@@ -88,6 +88,15 @@ describe("how a run ends", () => {
 
         expect(ends()).toEqual([expect.objectContaining({ status: "blocked" })]);
     });
+
+    it("records a run whose model call a run limit refused as blocked", async () => {
+        // The OpenAI client raises the wrapped client's 403 as an error of this type
+        const refused = Object.assign(new Error("403 Blocked by limit guard"), { type: "quard_blocked" });
+
+        await expect(runScope({}, async () => Promise.reject(refused))).rejects.toBe(refused);
+
+        expect(ends()).toEqual([expect.objectContaining({ status: "blocked" })]);
+    });
 });
 
 describe("agentScope", () => {
@@ -104,6 +113,18 @@ describe("agentScope", () => {
                 expect(child?.agent).toBe("researcher");
                 expect(child?.run).toBe(parent?.run);
                 expect(child?.parentStepId).toBe("00f067aa0ba902b7");
+            });
+        });
+    });
+
+    it("counts how many delegation levels a child agent sits below the first agent", () => {
+        runScope({ agent: "orchestrator" }, () => {
+            expect(currentScope()?.depth).toBe(0);
+            agentScope("researcher", () => {
+                expect(currentScope()?.depth).toBe(1);
+                agentScope("reader", () => {
+                    expect(currentScope()?.depth).toBe(2);
+                });
             });
         });
     });
