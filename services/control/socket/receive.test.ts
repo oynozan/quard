@@ -1,7 +1,16 @@
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { brokenDb, newConnection, newProject, readyConnection, testContext } from "../test/context.ts";
-import { askMessage, countMessage, fleetMessage, helloMessage, IBAN_VALUE, RULES } from "../test/messages.ts";
+import {
+    askMessage,
+    countMessage,
+    fleetMessage,
+    helloMessage,
+    IBAN_VALUE,
+    lookupMessage,
+    RULES,
+    runCountMessage,
+} from "../test/messages.ts";
 import { receive } from "./receive.ts";
 
 let test: TestDb;
@@ -33,8 +42,17 @@ describe("receive", () => {
         await receive(ctx, connection, text({ type: "cancel", askId: ask.askId }));
         await receive(ctx, connection, text(count));
         await receive(ctx, connection, text(fleet));
+        await receive(ctx, connection, text(lookupMessage()));
+        await receive(ctx, connection, text(runCountMessage()));
 
-        expect(socket.sent.map((message) => message.type)).toEqual(["ready", "asked", "counted", "fleet_result"]);
+        expect(socket.sent.map((message) => message.type)).toEqual([
+            "ready",
+            "asked",
+            "counted",
+            "fleet_result",
+            "labels",
+            "counted",
+        ]);
         const stored = await test.db
             .selectFrom("sdk_connections")
             .select("rules_hash")
@@ -111,17 +129,26 @@ describe("receive", () => {
         const { connection, socket } = newConnection(ctx, { keyId: "k", projectId: "p" });
         connection.ready = true;
         const count = countMessage();
+        const lookup = lookupMessage({ kind: "memory", print: "b".repeat(64) });
+        const runCount = runCountMessage();
+        const failed = "Control could not handle the message";
 
         await receive(ctx, connection, text(count));
         await receive(ctx, connection, text({ type: "beat", askIds: [] }));
+        await receive(ctx, connection, text(lookup));
+        await receive(ctx, connection, text(runCount));
 
         expect(socket.sent).toEqual([
-            { type: "error", code: "server_error", message: "Control could not handle the message", id: count.id },
-            { type: "error", code: "server_error", message: "Control could not handle the message" },
+            { type: "error", code: "server_error", message: failed, id: count.id },
+            { type: "error", code: "server_error", message: failed },
+            { type: "error", code: "server_error", message: failed, id: lookup.id },
+            { type: "error", code: "server_error", message: failed, id: runCount.id },
         ]);
         expect(ctx.logs).toEqual([
             expect.stringContaining("control: a count message failed: "),
             expect.stringContaining("control: a beat message failed: "),
+            expect.stringContaining("control: a lookup message failed: "),
+            expect.stringContaining("control: a run_count message failed: "),
         ]);
         await db.destroy();
     });

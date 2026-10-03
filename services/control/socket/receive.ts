@@ -4,7 +4,9 @@ import { ask, beat, cancel } from "../approvals/ask.ts";
 import { hello } from "../connect/hello.ts";
 import { agent, rules } from "../connect/rules.ts";
 import { count } from "../counters/count.ts";
+import { runCount } from "../counters/run-count.ts";
 import { fleet } from "../fleet/record.ts";
+import { lookup } from "../labels/lookup.ts";
 import type { Context } from "../server/context.ts";
 import { parseMessage, replyId } from "./parse.ts";
 import type { Connection } from "./registry.ts";
@@ -28,6 +30,10 @@ function route(ctx: Context, connection: Connection, message: SessionMessage): P
             return count(ctx, connection, message);
         case "fleet":
             return fleet(ctx, connection, message);
+        case "lookup":
+            return lookup(ctx, connection, message);
+        case "run_count":
+            return runCount(ctx, connection, message);
     }
 }
 

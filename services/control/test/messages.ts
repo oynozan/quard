@@ -7,7 +7,9 @@ import {
     type FleetMessage,
     type FleetValue,
     type HelloMessage,
+    type LookupMessage,
     type RulesSnapshot,
+    type RunCountMessage,
 } from "@quard/shared";
 
 export const REDACTOR = createRedactor(parseHashKey("ab".repeat(32)));
@@ -91,4 +93,15 @@ export function fleetMessage(n: number, values: FleetValue[], fields: Partial<Fl
         values,
         ...fields,
     };
+}
+
+// A lookup of the record behind a message's reference
+export function lookupMessage(
+    target: LookupMessage["target"] = { kind: "message", ref: "a".repeat(16) },
+): LookupMessage {
+    return { type: "lookup", id: newEventId(), target };
+}
+
+export function runCountMessage(fields: Partial<RunCountMessage> = {}): RunCountMessage {
+    return { type: "run_count", id: newEventId(), runId: RUN, counter: "steps", add: 1, ...fields };
 }
