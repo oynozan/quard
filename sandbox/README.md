@@ -95,6 +95,7 @@ These run with or without it:
 | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `13-backend-down.ts`              | Backend unreachable: approvals block after 30 s, daily limits count locally, other guards keep working |
 | `14-policy-file.ts`               | Rules in a JSON policy file win over code and change while the app runs                                |
+| `16-your-own-rules.ts`            | Custom check rules, neverSeen that blocks, a per-run amount cap, block beats ask                       |
 
 ## How it fits together
 
