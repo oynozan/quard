@@ -36,12 +36,13 @@ export function KeysPanel({ keys: initial, agents, account, now }: KeysPanelProp
     const active = keys.filter((key) => key.revokedAt === null);
 
     function revoke(id: string) {
-        const key = keys.find((item) => item.id === id);
+        // Only a listed key's row can revoke it
+        const key = keys.find((item) => item.id === id)!;
         setKeys((list) =>
             list.map((item) => (item.id === id ? { ...item, revokedAt: now, revokedBy: account } : item)),
         );
         setFresh(id);
-        setNote(`Key ${key?.name ?? ""} revoked. Agents using it are refused from now on.`);
+        setNote(`Key ${key.name} revoked. Agents using it are refused from now on.`);
     }
 
     function created(key: AgentKey) {
