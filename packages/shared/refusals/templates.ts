@@ -14,7 +14,9 @@ export type ReasonCode =
     | "approval_unavailable"
     | "approval_denied"
     | "content_blocked"
-    | "rule_failed";
+    | "rule_failed"
+    | "signature_matched"
+    | "sensitive_data";
 
 const REASONS: Record<ReasonCode, (field: string) => string> = {
     permission_denied: () => "this agent is not allowed to use this tool",
@@ -30,6 +32,10 @@ const REASONS: Record<ReasonCode, (field: string) => string> = {
     approval_denied: () => "a human denied it",
     content_blocked: () => "the content looked unsafe",
     rule_failed: (field) => `the ${field} value failed a rule`,
+    // field is a signature id from the feed, which only allows A-Z, 0-9 and dashes
+    signature_matched: (field) => `it matched the known attack signature ${field}`,
+    // field is the kind of data found: secret, card number or IBAN
+    sensitive_data: (field) => `the data to send holds a sensitive value (${field})`,
 };
 
 export type RefusalInput = {
