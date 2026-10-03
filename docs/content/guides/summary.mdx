@@ -12,19 +12,21 @@ Use it for a regular review, for example once a week. It answers four questions,
 | Run limits            | How many runs would the default limits stop?                        |
 | Quarantine            | Which new values are blocked everywhere and wait for a person?      |
 
+With no data yet, each chart and table stays in place with a short message, such as **No blocks in the last 30 days**, and each run limit shows a dash.
+
 ## Where incidents start
 
 ![Where incidents start](/images/guides/summary-incidents.webp)
 
-1. **By entry source.** The origins where incidents began, such as an email domain or a web page, with how many incidents each one started.
+1. **By entry source.** The origins where incidents began, such as an email domain or a web page, with how many incidents each one started. **Untrusted** counts the incidents that began from untrusted content.
 2. **By damaging tool.** The tools that did the damage.
 
 ## What guards block
 
 ![What guards block](/images/guides/summary-blocks.webp)
 
-1. **Guard filter.** Show every guard or one kind, with how many calls each one blocked.
-2. **Blocks per day.** Blocks per day over 30 days. Hover a column to read its day.
+1. **Guard filter.** Show every guard or one kind, with how many calls each one blocked. Only guards that blocked something are listed.
+2. **Blocks per day.** Blocks per day over 30 days, with today's count above. Hover a column to read its day.
 3. **Blocks by hour.** Blocks by weekday and hour, in UTC. Brighter cells mean more blocks, and **Busiest hour** names the peak.
 
 ## Agents and links
@@ -33,7 +35,7 @@ Use it for a regular review, for example once a week. It answers four questions,
 
 1. **Entry points.** The agents that most often let untrusted content in.
 2. **Turning points.** The agents whose model calls most often decided to act on it.
-3. **Untrusted links.** The links between agents, ranked by how much untrusted content they carried, with the share of all their messages.
+3. **Untrusted links.** The links between agents that carried untrusted content, with how many of their delegations carried it and what share that is. The largest share comes first.
 
 ## Run limits
 
@@ -55,11 +57,11 @@ Every run has limits on delegation depth, fan-out, loops, steps and cost. They a
 
 ## Quarantine
 
-The fleet check watches recipients, bank accounts and domains that are new to your fleet, first seen less than 7 days ago. Once a fifth separate run uses one within 24 hours, Quard blocks it everywhere and puts it in quarantine. In its first 7 days, the check only records.
+The fleet check watches recipients, bank accounts and domains that are new to your fleet, first seen less than 7 days ago. Once a fifth separate run uses one within 24 hours, Quard blocks it everywhere and puts it in quarantine. In its first 7 days, the check only records: the heading shows **Observe mode until** a date, and each value reads **Would block**.
 
 ![Quarantine](/images/guides/summary-quarantine.webp)
 
-1. **A quarantined value.** The masked value and its field, the agents that used it, when it was quarantined, how many attempts were blocked and the last attempt.
+1. **A quarantined value.** The masked value and its field, the agents that used it, when it was quarantined, how many attempts were blocked and the last attempt. Once more than 6 values wait, a filter shows one kind at a time: IBAN, email or domain.
 2. **Mark as known.** Opens the value so you can release it.
 3. **Watching.** New values on their way to the limit, with how many runs used them out of 5.
 4. **More at 1 run.** Values seen in only one run, folded away. Click to show them.

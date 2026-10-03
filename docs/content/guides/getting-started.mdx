@@ -14,18 +14,17 @@ There are no passwords. Sign in with your GitHub account, or with a one-time cod
 
 Any verified email address or GitHub account can sign in. You stay signed in for 7 days, or until you sign out.
 
-Each account has a role, admin or approver, listed under [Accounts and roles](/guides/settings#accounts-and-roles). Every approval records who answered it.
+Everyone who signs in can use every page and answer approvals. Every approval records who answered it.
 
 ## Find your way around
 
 ![The sidebar](/images/guides/shell.webp)
 
 1. **Main pages.** Overview, Runs, Approvals, Incidents, Agents, Summary and Search. The page you are on has a green label. Approvals shows a count while requests are waiting.
-2. **Settings.** Agent keys, accounts and roles, retention, and the rules your code reports.
-3. **Review approvals.** A shortcut to the requests that are waiting for an answer.
-4. **Project.** The project and how it is hosted.
-5. **Your account.** Who you are signed in as. It opens settings.
-6. **Sign out.** Signs you out of the dashboard.
+2. **Settings.** Agent keys, accounts, retention, and the rules your code reports.
+3. **Review approvals.** A shortcut to the Approvals page. It says how many requests are waiting.
+4. **Your account.** Who you are signed in as, by email or GitHub name. It opens settings.
+5. **Sign out.** Signs you out of the dashboard.
 
 On small screens, the sidebar folds into a menu button at the top of the page.
 
@@ -39,5 +38,6 @@ A few patterns repeat on every page. For any word you don't know, see the [gloss
 - **Charts.** Every chart has a **Table** button that shows the same numbers as a table. Hover a chart, or move through it with the arrow keys, to read exact values.
 - **The drawer.** Details open in a panel on the right. Press Escape or the close button to go back.
 - **Hints.** When a button does more than its label says, hover or focus it to see a short hint.
-- **Masked values.** IBANs, card numbers and emails are shown masked, such as `DE89…3000`. Only an approver sees the full values, and only while a request is open.
+- **Masked values.** IBANs, card numbers and emails are shown masked, such as `DE89…3000`. An open approval request shows the full values, so you see exactly what will run. They are cleared once someone answers it.
 - **Links you can share.** Filters, searches and open steps are part of the page address. Copy the link to share exactly what you see.
+- **Empty pages.** Every page shows real data from your agents. Before the first run, its charts and tables stay in place, drawn empty with a short note such as "No runs yet".

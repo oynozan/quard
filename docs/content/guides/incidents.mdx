@@ -2,13 +2,16 @@
 
 When a guard blocks or flags something harmful, Quard opens an incident. The incident page shows the path from where untrusted content came in to where the harm was done or stopped, a verdict, and a replay that tests the cause.
 
+Until Quard opens its first incident, the list stays in place and reads **No incidents yet**.
+
 ## Incident list
 
 ![The incident list](/images/guides/incidents-list.webp)
 
-1. **Category.** Show one kind of cause.
-2. **Replay.** Show incidents by the state of their replay.
-3. **An incident.** Its title, category, entry point, damage, the agents involved, the state of its replay and when it opened. Click the row to open it.
+1. **Search.** Find incidents by title, entry point, damage or agent.
+2. **Category.** Show one kind of cause. Each kind shows how many incidents it has.
+3. **Replay.** Show incidents by the state of their replay.
+4. **An incident.** Its title, category, entry point, damage, the agents involved, the state of its replay and how long ago it opened. Click the row to open it.
 
 | Category      | What went wrong                                                                       |
 | ------------- | ------------------------------------------------------------------------------------- |
@@ -23,11 +26,10 @@ When a guard blocks or flags something harmful, Quard opens an incident. The inc
 ![An incident](/images/guides/incident.webp)
 
 1. **Incident.** What happened, when the incident opened and the status of its run. **Open run** opens the full run.
-2. **Replay round.** Runs the next round of the replay. When a replay is not allowed, the button is off and its hint says why.
-3. **Path from entry point to damage.** Every step from where untrusted content came in to the harmful call, read left to right. **Entry point** is where untrusted content came in. **Handoff** is where it passed to another agent. **Turning point** is the model call that decided to act on it. **Damage** is the harmful call. Each step shows its agent and origin.
-4. **Replay results.** Replay reruns the turning-point model call in rounds of 5 with the suspect content and 5 without it, up to 20 each. It never runs real tools. Each round shows how many reruns were harmful on each side and the p value so far. The cost covers every model call made for this incident, up to a $5 cap. **Setup** names the model, the call that counts as harmful and the content left out.
-5. **Verdict.** The category and the missing guard. **observe only** means the guard exists but only records. **Agent versions** lists the version of each agent involved.
-6. **AI explanation.** A short explanation in plain words, written by an AI using your own provider key. It only explains: the verdict comes from labels, value tracing and replay.
+2. **Path from entry point to damage.** Every step from where untrusted content came in to the harmful call, read left to right. **Entry point** is where untrusted content came in. **Handoff** is where it passed to another agent. **Turning point** is the model call that decided to act on it. **Damage** is the harmful call. Each step shows its agent and origin.
+3. **Replay results.** Replay reruns the turning-point model call in rounds of 5 with the suspect content and 5 without it, up to 20 each. It never runs real tools. The line at the top says where the replay stands. Each round shows how many reruns were harmful on each side and the p value so far. The cost covers every model call made for this incident, up to a $5 cap. **Setup** names the model, the call that counts as harmful and the content left out. **Table** lists each round with its cost.
+4. **Verdict.** The category and the missing guard. **observe only** means the guard exists but only records. For a bad handoff, it also says what went wrong. **Agent versions** lists the version of each agent involved.
+5. **AI explanation.** A short explanation in plain words, written by an AI using your own provider key. It only explains: the verdict comes from labels, value tracing and replay.
 
 Replay stops as soon as the answer is clear:
 

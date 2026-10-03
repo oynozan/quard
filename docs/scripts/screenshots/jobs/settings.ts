@@ -33,11 +33,10 @@ function searchAndSettingsJobs(): Job[] {
             url: "/settings",
             marks: [
                 { n: 1, sel: '[role="tablist"]' },
-                { n: 2, text: "Project", closest: "div" },
-                { n: 3, sel: "main button", text: "Create key" },
-                { n: 4, sel: "tbody tr", pad: 2 },
-                { n: 5, sel: "main button", text: "Revoke" },
-                { n: 6, sel: "tbody tr", text: "Revoked", pad: 2 },
+                { n: 2, sel: "main button", text: "Create key" },
+                { n: 3, sel: "tbody tr", pad: 2 },
+                { n: 4, sel: "main button", text: "Revoke" },
+                { n: 5, sel: "tbody tr", text: "Revoked", pad: 2 },
             ],
         },
         {
@@ -46,19 +45,13 @@ function searchAndSettingsJobs(): Job[] {
             actions: [{ click: { sel: "main button", text: "Create key" }, wait: 1200 }],
             marks: [
                 { n: 1, sel: `${DIALOG} input`, badge: "l" },
-                { n: 2, sel: `${DIALOG} button`, text: "Live (qk_live_)", badge: "l" },
-                { n: 3, sel: `${DIALOG} button`, text: "One app with several agents", badge: "l" },
-                { n: 4, sel: `${DIALOG} button`, text: "Create key", badge: "l" },
+                { n: 2, sel: `${DIALOG} button`, text: "Create key", badge: "l" },
             ],
         },
         {
             name: "settings-accounts",
             url: "/settings?tab=accounts",
-            marks: [
-                { n: 1, sel: "main button", text: "Invite" },
-                { n: 2, sel: "tbody tr", pad: 2 },
-                { n: 3, sel: "tbody tr", text: "Approver", pad: 2 },
-            ],
+            marks: [{ n: 1, sel: "main h3", text: "No accounts to manage", closest: "div" }],
         },
         {
             name: "settings-retention",
@@ -66,7 +59,6 @@ function searchAndSettingsJobs(): Job[] {
             marks: [
                 { n: 1, sel: "main table" },
                 { n: 2, sel: "main h2, main h3", text: "Redaction", closest: "div:has(> dl)" },
-                { n: 3, sel: "main h2, main h3", text: "Detector", closest: "div:has(> dl)" },
             ],
             full: true,
         },
@@ -75,8 +67,7 @@ function searchAndSettingsJobs(): Job[] {
             url: "/settings?tab=code",
             marks: [
                 { n: 1, sel: section("Connected apps") },
-                { n: 2, sel: `${rules} input`, closest: "label" },
-                { n: 3, sel: `${rules} tbody tr`, pad: 2 },
+                { n: 2, sel: rules },
             ],
             height: 1100,
         },

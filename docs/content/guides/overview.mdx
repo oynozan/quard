@@ -6,20 +6,22 @@ The overview is the home page. It shows how your agents are doing right now and 
 
 ![The top of the overview](/images/guides/overview-top.webp)
 
-1. **Model calls.** Model calls across all agents over the last 24 hours, in 10-minute columns. The heading says how many agents are running. **Live** means the chart updates as calls arrive.
-2. **Runs.** Runs started in the last 24 hours, and the rate per hour.
-3. **Guarded tools.** How many of the tools your agents call are wrapped with a guard, out of every tool Quard has seen. A tool without a guard can only be recorded, never stopped.
-4. **Block rate.** The share of guard decisions that blocked a call, per day over the last 30 days. A day above the dashed line is worth a look.
+1. **Model calls.** Model calls across all agents over the last 24 hours, in 10-minute columns. The greeting above it says how many agents are running.
+2. **Runs.** Runs started in the last 24 hours, with a bar for each hour and the count for the last hour.
+3. **Guarded tools.** How many of the tools your agents used in the last 24 hours are wrapped with a guard. A tool without a guard can only be recorded, never stopped.
+4. **Block rate.** The share of guarded tool calls that a guard blocked, per day over the last 30 days. A day above the dashed line, at 2%, is worth a look.
 5. **Guard decisions.** Calls blocked, and calls that asked a person, in the last 24 hours.
+
+The overview shows the numbers from when you opened it. Reload the page to see newer ones. Before your first run, every chart and list here is drawn empty.
 
 ## What needs attention
 
 ![The lists on the overview](/images/guides/overview-lists.webp)
 
-1. **Approvals waiting.** Calls waiting for a person. **Influenced by** shows the untrusted origin that shaped a call. **No longer waiting** means the process that asked has stopped, but the request is still open. Click a row to answer it.
-2. **Recent runs.** The latest runs, with their status, a strip of their guard decisions and their cost. Click a row to open the run.
+1. **Approvals waiting.** Up to five calls waiting for a person, with the count of every open request beside the title. **Influenced by** shows an untrusted origin that a value in the call came from. **No longer waiting** means the process that asked has stopped, but the request is still open. Click a row to answer it on the Approvals page.
+2. **Recent runs.** The latest runs, with their status, a strip of their guard decisions, their cost and when they started. Click a row to open the run.
 3. **Incidents.** The latest incidents, with their cause and the state of their replay.
-4. **Decision log.** Guard decisions as they happen: the time, the guard and its decision, the agent, the tool and the reason.
-5. **Agents and guards.** Which agents are running, idle or offline, with their version, and how many decisions each kind of guard made.
+4. **Decision log.** The latest guard decisions of the last 24 hours: the time, the guard and its decision, the agent, the tool and the reason.
+5. **Agents and guards.** The agents that ran in the last 30 days, and whether each is running or idle. Below them, how many decisions each kind of guard made in the last 24 hours.
 
 **View all** beside a list opens its full page.
