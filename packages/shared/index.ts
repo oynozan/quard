@@ -3,6 +3,9 @@ export {
     configErrorEvent,
     contentEvent,
     decisionEvent,
+    handoffEvent,
+    memoryEvent,
+    messageEvent,
     modelCallEvent,
     runEvent,
     runFinishedEvent,
@@ -14,6 +17,9 @@ export type {
     ConfigErrorEvent,
     ContentEvent,
     DecisionEvent,
+    HandoffEvent,
+    MemoryEvent,
+    MessageEvent,
     ModelCallEvent,
     RunEvent,
     RunFinishedEvent,
@@ -70,10 +76,31 @@ export type {
     RulesSnapshot,
     ServerMessage,
 } from "./control/protocol.ts";
+export { labelsMessage, lookupMessage, runCountMessage } from "./control/labels.ts";
+export type { LabelsMessage, LookupMessage, RunCountMessage } from "./control/labels.ts";
 export type { UploadBatch, UploadItem } from "./events/upload.ts";
 export { isRunId, isStepId, newEventId, newRunId, newStepId } from "./ids/ids.ts";
 export { combineLabels } from "./labels/combine.ts";
 export { labelFor, originKind } from "./labels/mapping.ts";
+export {
+    contentPrint,
+    contextLabelRecord,
+    labelRecord,
+    labelRef,
+    LABELS_PATH,
+    labelUpload,
+    memoryRecord,
+    messageRecord,
+    valueRecord,
+} from "./labels/records.ts";
+export type {
+    ContextLabelRecord,
+    LabelRecord,
+    LabelUpload,
+    MemoryRecord,
+    MessageRecord,
+    ValueRecord,
+} from "./labels/records.ts";
 export type {
     ContextLabel,
     Label,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { labelsMessage, lookupMessage, runCountMessage } from "./labels.ts";
 
 // Messages between the SDK and control. Each process keeps one WebSocket
 // to CONTROL_PATH, opened with "Authorization: Bearer <agent key>".
@@ -151,6 +152,8 @@ export const clientMessage = z.discriminatedUnion("type", [
     cancelMessage,
     countMessage,
     fleetMessage,
+    lookupMessage,
+    runCountMessage,
 ]);
 
 // --- control to SDK ---
@@ -207,6 +210,7 @@ export const serverMessage = z.discriminatedUnion("type", [
     countedMessage,
     fleetResultMessage,
     quarantineMessage,
+    labelsMessage,
     errorMessage,
 ]);
 

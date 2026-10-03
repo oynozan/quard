@@ -149,6 +149,51 @@ export const chunkLabelEvent = z.object({
     injection: z.number().min(0).max(1).optional(),
 });
 
+// A message from another agent, as the receiving agent's source guard saw
+// it. agent is the receiver and stepId the receive call.
+export const messageEvent = z.object({
+    type: z.literal("message"),
+    ...base,
+    // The sender, or "unknown" when no record vouched for the message
+    from: z.string().min(1),
+    // The sender's step, from the carrier
+    parentStepId: stepId.optional(),
+    labelRef: z
+        .string()
+        .regex(/^[0-9a-f]{16}$/)
+        .optional(),
+    // A record of the same run and the same content was found
+    verified: z.boolean(),
+    trust,
+    sensitivity,
+});
+
+// The OpenAI Agents SDK moved work from one agent to another
+export const handoffEvent = z.object({
+    type: z.literal("handoff"),
+    ...base,
+    to: z.string().min(1),
+    // "handoff" passes the conversation on; "tool" runs the agent as a tool
+    via: z.enum(["handoff", "tool"]),
+    // The run's context label at the handoff
+    trust,
+    sensitivity,
+});
+
+// A read or write through quard.memory()
+export const memoryEvent = z.object({
+    type: z.literal("memory"),
+    ...base,
+    store: z.string().min(1),
+    op: z.enum(["read", "write"]),
+    items: z.number().int().min(0),
+    // Items whose stored labels matched their content
+    verified: z.number().int().min(0),
+    // The least trusted label among the items
+    trust,
+    sensitivity,
+});
+
 export const runEvent = z.discriminatedUnion("type", [
     runStartedEvent,
     runFinishedEvent,
@@ -159,6 +204,9 @@ export const runEvent = z.discriminatedUnion("type", [
     warningEvent,
     chunkLabelEvent,
     configErrorEvent,
+    messageEvent,
+    handoffEvent,
+    memoryEvent,
 ]);
 
 export type RunEvent = z.infer<typeof runEvent>;
@@ -170,3 +218,6 @@ export type DecisionEvent = z.infer<typeof decisionEvent>;
 export type ContentEvent = z.infer<typeof contentEvent>;
 export type WarningEvent = z.infer<typeof warningEvent>;
 export type ConfigErrorEvent = z.infer<typeof configErrorEvent>;
+export type MessageEvent = z.infer<typeof messageEvent>;
+export type HandoffEvent = z.infer<typeof handoffEvent>;
+export type MemoryEvent = z.infer<typeof memoryEvent>;

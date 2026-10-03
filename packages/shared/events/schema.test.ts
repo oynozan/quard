@@ -7,6 +7,27 @@ const base = { runId: RUN, stepId: "b".repeat(16), agent: "default", at: "2026-1
 describe("runEvent", () => {
     it.each([
         {
+            type: "message",
+            ...base,
+            from: "orchestrator",
+            parentStepId: "c".repeat(16),
+            labelRef: "d".repeat(16),
+            verified: true,
+            trust: "untrusted",
+            sensitivity: "public",
+        },
+        { type: "handoff", ...base, to: "billing", via: "tool", trust: "trusted", sensitivity: "internal" },
+        {
+            type: "memory",
+            ...base,
+            store: "notes",
+            op: "read",
+            items: 2,
+            verified: 1,
+            trust: "untrusted",
+            sensitivity: "internal",
+        },
+        {
             type: "model_call",
             ...base,
             model: "gpt",
