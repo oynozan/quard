@@ -17,6 +17,15 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
+// The run limits come first, in observe mode until a team turns them on
+const RUN_RULES = [
+    "* limit max-depth observe",
+    "* limit max-fan-out observe",
+    "* limit max-loops observe",
+    "* limit max-steps observe",
+    "* limit max-cost observe",
+];
+
 describe("rulesSnapshot", () => {
     it("lists each guarded tool's rules by the names their decisions use", () => {
         registerGuardedTool("sendEmail", [{ type: "egress", mode: "observe" }]);
@@ -39,6 +48,7 @@ describe("rulesSnapshot", () => {
 
         expect(snapshotSchema.safeParse(snapshot).success).toBe(true);
         expect(snapshot.list.map(({ tool, guard, rule, mode }) => `${tool} ${guard} ${rule} ${mode}`)).toEqual([
+            ...RUN_RULES,
             "fetchPage source source block",
             "payInvoice approval approval block",
             "payInvoice action iban:from block",
@@ -86,7 +96,9 @@ describe("rulesSnapshot", () => {
         vi.setSystemTime(1000);
         refreshSources(Date.now());
 
-        expect(fromFile.list).toEqual([{ tool: "search", guard: "approval", rule: "approval", mode: "block" }]);
+        expect(fromFile.list.filter((entry) => entry.tool === "search")).toEqual([
+            { tool: "search", guard: "approval", rule: "approval", mode: "block" },
+        ]);
         expect(new Set([fromCode.hash, fromFile.hash, rulesSnapshot().hash]).size).toBe(3);
     });
 
@@ -101,10 +113,26 @@ describe("rulesSnapshot", () => {
         expect(rulesSnapshot().hash).not.toBe(blocking);
     });
 
+    it("lists the run limits, and follows their changes in code and in the policy file", () => {
+        const observing = rulesSnapshot();
+
+        configure({ runLimits: { mode: "block" } });
+        const blocking = rulesSnapshot();
+        configure({ runLimits: { mode: "block", steps: 50 } });
+        const fewerSteps = rulesSnapshot();
+        const path = writeJson(join(tempDir(), "p.json"), { version: 1, runLimits: { mode: "observe" } });
+        configure({ policyFile: path });
+
+        expect(blocking.list.slice(0, 5).map((entry) => entry.mode)).toEqual(Array(5).fill("block"));
+        expect(fewerSteps.list).toEqual(blocking.list);
+        expect(new Set([observing.hash, blocking.hash, fewerSteps.hash, rulesSnapshot().hash]).size).toBe(4);
+        expect(rulesSnapshot().list[0]?.mode).toBe("observe");
+    });
+
     it("keeps names within control's limits", () => {
         registerGuardedTool("t".repeat(250), [{ type: "action", rules: [{ name: "", check: () => "allow" }] }]);
 
-        const [entry] = rulesSnapshot().list;
+        const entry = rulesSnapshot().list.find((found) => found.guard === "action");
 
         expect(entry?.tool).toHaveLength(200);
         expect(entry?.rule).toBe("-");
@@ -114,7 +142,7 @@ describe("rulesSnapshot", () => {
 describe("rulesHash", () => {
     it("is there once a guarded tool exists", () => {
         expect(rulesHash()).toBeUndefined();
-        expect(rulesSnapshot().list).toEqual([]);
+        expect(rulesSnapshot().list.map((entry) => entry.tool)).toEqual(["*", "*", "*", "*", "*"]);
 
         registerGuardedTool("pay", [{ type: "approval" }]);
 

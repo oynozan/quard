@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJson, type RuleEntry, type RulesSnapshot } from "@quard/shared";
+import { runLimits, type RunLimits } from "../core/config.ts";
 import { guardedToolOptions, guardedToolsRevision } from "../context/registry.ts";
 import { ruleName } from "../guards/action/action.ts";
 import { limitRules } from "../guards/limit/limit.ts";
@@ -9,8 +10,11 @@ import { currentPolicy, policyOptions, policyVersion, signatureMode } from "./st
 const MAX_NAME = 200;
 const MAX_ENTRIES = 5000;
 const EGRESS_RULES = ["untrusted-destination", "allowlist", "payload:secrets", "payload:cards", "payload:ibans"];
+const RUN_LIMIT_RULES = ["max-depth", "max-fan-out", "max-loops", "max-steps", "max-cost"];
+// Run limits cover the whole run, not one tool
+const WHOLE_RUN = "*";
 
-type Cached = { tools: number; policy: unknown; signatures: string; snapshot: RulesSnapshot };
+type Cached = { tools: number; policy: unknown; signatures: string; limits: string; snapshot: RulesSnapshot };
 
 let cached: Cached | undefined;
 
@@ -50,7 +54,7 @@ function hashable(options: GuardOptions): unknown {
     return { ...plain, rules: options.rules.map((rule) => ("check" in rule ? { ...rule, check: rule.name } : rule)) };
 }
 
-function build(): RulesSnapshot {
+function build(limits: RunLimits): RulesSnapshot {
     const tools = [...guardedToolOptions()]
         .map(([tool, code]) => [tool, policyOptions(tool) ?? code] as const)
         .sort(([a], [b]) => (a < b ? -1 : 1));
@@ -59,22 +63,32 @@ function build(): RulesSnapshot {
         policy: policyVersion() ?? null,
         strictness: currentPolicy()?.strictness ?? "balanced",
         signatures: signatureMode(),
+        runLimits: limits,
     };
+    const runRules = RUN_LIMIT_RULES.map((rule) => ({ tool: WHOLE_RUN, guard: "limit", rule, mode: limits.mode }));
     return {
         hash: createHash("sha256").update(canonicalJson(effective)).digest("hex").slice(0, 16),
-        list: tools
-            .flatMap(([tool, list]) => list.flatMap((options) => entriesOf(tool, options)))
-            .slice(0, MAX_ENTRIES),
+        list: [
+            ...runRules,
+            ...tools.flatMap(([tool, list]) => list.flatMap((options) => entriesOf(tool, options))),
+        ].slice(0, MAX_ENTRIES),
     };
 }
 
-// The active rules, built again only when a guard registers or the policy changes
+// The active rules, built again only when a guard registers or a setting changes
 export function rulesSnapshot(): RulesSnapshot {
     const tools = guardedToolsRevision();
     const policy = currentPolicy();
     const signatures = signatureMode();
-    if (cached?.tools !== tools || cached.policy !== policy || cached.signatures !== signatures) {
-        cached = { tools, policy, signatures, snapshot: build() };
+    const limits = runLimits();
+    const limitsId = JSON.stringify(limits);
+    if (
+        cached?.tools !== tools ||
+        cached.policy !== policy ||
+        cached.signatures !== signatures ||
+        cached.limits !== limitsId
+    ) {
+        cached = { tools, policy, signatures, limits: limitsId, snapshot: build(limits) };
     }
     return cached.snapshot;
 }
