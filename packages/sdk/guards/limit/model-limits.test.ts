@@ -5,7 +5,7 @@ import { takeEvents } from "../../core/recorder.ts";
 import { newRun } from "../../context/run.ts";
 import { tempDir, writeJson } from "../../test/files.ts";
 import { resetAll } from "../../test/reset.ts";
-import { addModelCost, checkModelCall, countModelCall, type ModelCall } from "./model-limits.ts";
+import { addModelCost, checkModelCall, countModelCall, judgeModelCall, type ModelCall } from "./model-limits.ts";
 
 afterEach(() => {
     resetAll();
@@ -73,6 +73,16 @@ describe("checkModelCall", () => {
         ]);
     });
 
+    it("judges from the steps and cost it is given", () => {
+        configure({ runLimits: { mode: "block", steps: 3, costUsd: 1 } });
+        const call = modelCall();
+
+        expect(judgeModelCall(call, 3, 0.99)).toBeUndefined();
+        expect(judgeModelCall(call, 4, 0)).toBeDefined();
+        expect(judgeModelCall(call, 1, 1)).toBeDefined();
+        expect(takeEvents().map((event) => "rule" in event && event.rule)).toEqual(["max-steps", "max-cost"]);
+    });
+
     it("lets a call through just under the cost limit", () => {
         configure({ runLimits: { mode: "block", costUsd: 0.5 } });
         const call = modelCall();
@@ -88,11 +98,14 @@ describe("counting", () => {
         const usage = { inputTokens: 1_000_000, cachedTokens: 0, outputTokens: 0 };
 
         countModelCall(run);
-        addModelCost(run, "gpt-5.4-mini", usage);
-        addModelCost(run, "my-local-model", usage);
-        addModelCost(run, "gpt-5.4-mini", undefined);
+        const added = [
+            addModelCost(run, "gpt-5.4-mini", usage),
+            addModelCost(run, "my-local-model", usage),
+            addModelCost(run, "gpt-5.4-mini", undefined),
+        ];
 
         expect(run.modelCalls).toBe(1);
         expect(run.costUsd).toBe(0.75);
+        expect(added).toEqual([0.75, 0, 0]);
     });
 });

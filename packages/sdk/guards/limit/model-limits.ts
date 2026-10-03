@@ -11,12 +11,17 @@ export type ModelCall = { run: RunState; agent: string; stepId: string; model: s
 // Records each limit that is over, and returns a refusal when the
 // limits are enforced.
 export function checkModelCall(call: ModelCall): GuardRefusal | undefined {
+    return judgeModelCall(call, call.run.modelCalls + 1, call.run.costUsd);
+}
+
+// The same, from the run's steps with this call and its cost so far
+export function judgeModelCall(call: ModelCall, steps: number, costUsd: number): GuardRefusal | undefined {
     const limits = runLimits();
     const over: string[] = [];
-    if (call.run.modelCalls + 1 > limits.steps) {
+    if (steps > limits.steps) {
         over.push("max-steps");
     }
-    if (call.run.costUsd >= limits.costUsd) {
+    if (costUsd >= limits.costUsd) {
         over.push("max-cost");
     }
     for (const rule of over) {
@@ -47,10 +52,13 @@ export function countModelCall(run: RunState): void {
     run.modelCalls += 1;
 }
 
-// A model with no known price adds nothing; the step limit still caps the run
-export function addModelCost(run: RunState, model: string, usage: TokenUsage | undefined): void {
+// A model with no known price adds nothing; the step limit still caps
+// the run. Returns the cost added.
+export function addModelCost(run: RunState, model: string, usage: TokenUsage | undefined): number {
     const cost = usage === undefined ? null : costOf(model, usage);
-    if (cost !== null) {
-        run.costUsd += cost;
+    if (cost === null) {
+        return 0;
     }
+    run.costUsd += cost;
+    return cost;
 }

@@ -10,7 +10,9 @@ import {
     registerResponse,
 } from "../context/registry.ts";
 import { currentScope, newScope, type Scope } from "../context/scope.ts";
-import { addModelCost, checkModelCall, countModelCall } from "../guards/limit/model-limits.ts";
+import { checkModelCall, countModelCall } from "../guards/limit/model-limits.ts";
+import { isShared } from "../guards/limit/run-counts.ts";
+import { addCost, countSharedModelCall } from "../pipeline/count/steps.ts";
 import { activeControl } from "../transport/link/active.ts";
 import { checkRequestedCalls } from "./check.ts";
 import { asRecord, parseJson } from "./json.ts";
@@ -152,7 +154,7 @@ function finishResponse(
         registerResponse(responseId, step.scope);
     }
     const usage = usageOf(response);
-    addModelCost(step.scope.run, step.request.model, usage);
+    addCost(step.scope.run, step.request.model, usage);
     recordModelCall(step, status, responseId, calls, usage);
 }
 
@@ -207,23 +209,24 @@ export function createMonitorFetch(inner: Fetch): Fetch {
             return inner(input, init);
         }
         const scope = resolveScope(request);
-        const version = versionOf(request.model, request.instructions, request.tools);
-        const step: Step = { scope, stepId: newStepId(), request, started: Date.now(), version };
-        // A call over an enforced run limit never leaves the process
-        const refused = checkModelCall({
-            run: scope.run,
-            agent: scope.agent,
-            stepId: step.stepId,
-            model: request.model,
-        });
+        const stepId = newStepId();
+        // A call over an enforced run limit never leaves the process. A
+        // shared run counts its step through control while checking.
+        const shared = isShared(scope.run);
+        const modelCall = { run: scope.run, agent: scope.agent, stepId, model: request.model };
+        const refused = shared ? await countSharedModelCall(modelCall) : checkModelCall(modelCall);
         if (refused !== undefined) {
             return refusedResponse(refused);
         }
+        const version = versionOf(request.model, request.instructions, request.tools);
+        const step: Step = { scope, stepId, request, started: Date.now(), version };
         scope.lastStepId = step.stepId;
         noteVersion(step);
         labelInput(step);
 
-        countModelCall(scope.run);
+        if (!shared) {
+            countModelCall(scope.run);
+        }
         let response: Response;
         try {
             response = await inner(input, init);
