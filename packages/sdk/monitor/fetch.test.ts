@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { takeEvents } from "../core/recorder.ts";
 import { findCall, findConversation, findResponse, registerCall, registerResponse } from "../context/registry.ts";
 import { currentScope, newScope, runScope } from "../context/scope.ts";
-import { withoutRunStarts } from "../test/call.ts";
+import { withoutRunEdges } from "../test/call.ts";
 import { fakeResponses } from "../test/fake-responses.ts";
 import { resetAll } from "../test/reset.ts";
 import { createMonitorFetch } from "./fetch.ts";
@@ -18,7 +18,7 @@ const post = (body: object): RequestInit => ({ method: "POST", body: JSON.string
 const ok = () => fakeResponses(() => ({ text: "ok" }));
 
 function events() {
-    return withoutRunStarts(takeEvents());
+    return withoutRunEdges(takeEvents());
 }
 
 describe("createMonitorFetch", () => {
@@ -58,6 +58,22 @@ describe("createMonitorFetch", () => {
         expect(findCall(body.output[0]?.call_id as string)).toBeDefined();
         expect(findResponse(body.id)).toBeDefined();
         expect(events().map((event) => event.type)).toEqual(["content", "decision", "warning", "model_call"]);
+    });
+
+    it("records the token usage of plain and streamed responses", async () => {
+        const usage = { input_tokens: 120, output_tokens: 30, input_tokens_details: { cached_tokens: 100 } };
+        const fake = fakeResponses(() => ({ text: "hi", usage }));
+        const monitored = createMonitorFetch(fake.fetch);
+
+        await monitored(URL_RESPONSES, post({ model: "gpt", input: "hi" }));
+        const stream = await monitored(URL_RESPONSES, post({ model: "gpt", input: "hi", stream: true }));
+        await stream.text();
+
+        const calls = events().filter((event) => event.type === "model_call");
+        expect(calls.map((event) => "usage" in event && event.usage)).toEqual([
+            { inputTokens: 120, cachedTokens: 100, outputTokens: 30 },
+            { inputTokens: 120, cachedTokens: 100, outputTokens: 30 },
+        ]);
     });
 
     it("joins the run of the previous response, the conversation or a known tool call", async () => {

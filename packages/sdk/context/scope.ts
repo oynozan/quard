@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
+import { GuardBlockedError } from "../core/refusal.ts";
 import { newRun, type RunState } from "./run.ts";
 
 export type Scope = {
@@ -51,9 +52,47 @@ export function withScope<T>(scope: Scope, fn: () => T): T {
     return storage.run(scope, fn);
 }
 
-// quard.run(): everything inside shares one run
+function isPromise(value: unknown): value is PromiseLike<unknown> {
+    return typeof (value as { then?: unknown } | null)?.then === "function";
+}
+
+// Records how a run's function finished, so the dashboard need not guess
+function finishRun(scope: Scope, failure?: { error: unknown }): void {
+    const error = failure?.error;
+    record({
+        type: "run_finished",
+        runId: scope.run.runId,
+        agent: scope.agent,
+        at: now(),
+        status: failure === undefined ? "completed" : error instanceof GuardBlockedError ? "blocked" : "failed",
+        ...(failure === undefined ? {} : { error: error instanceof Error ? error.message : String(error) }),
+    });
+}
+
+// quard.run(): everything inside shares one run, and its end is recorded
 export function runScope<T>(options: RunOptions, fn: () => T): T {
-    return withScope(newScope(options), fn);
+    const scope = newScope(options);
+    let result: T;
+    try {
+        result = withScope(scope, fn);
+    } catch (error) {
+        finishRun(scope, { error });
+        throw error;
+    }
+    if (!isPromise(result)) {
+        finishRun(scope);
+        return result;
+    }
+    return result.then(
+        (value) => {
+            finishRun(scope);
+            return value;
+        },
+        (error: unknown) => {
+            finishRun(scope, { error });
+            throw error;
+        },
+    ) as T;
 }
 
 // Delegation can only narrow what an agent may use

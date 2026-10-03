@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { takeEvents } from "../core/recorder.ts";
 import { findCall, registerGuardedTool } from "../context/registry.ts";
 import { newScope } from "../context/scope.ts";
-import { withoutRunStarts } from "../test/call.ts";
+import { withoutRunEdges } from "../test/call.ts";
 import { resetAll } from "../test/reset.ts";
 import { checkRequestedCalls } from "./check.ts";
 
@@ -27,7 +27,7 @@ describe("checkRequestedCalls", () => {
         expect(findCall("c1")).toMatchObject({ argsKey: '{"url":"https://a.com"}', blocked: undefined });
         expect(findCall("c2")?.argsKey).toBe('"not json"');
         expect(
-            withoutRunStarts(takeEvents()).map((event) => [event.type, event.type === "warning" ? event.tool : ""]),
+            withoutRunEdges(takeEvents()).map((event) => [event.type, event.type === "warning" ? event.tool : ""]),
         ).toEqual([
             ["decision", ""],
             ["decision", ""],
@@ -41,6 +41,6 @@ describe("checkRequestedCalls", () => {
         checkRequestedCalls([{ callId: "c3", name: "payInvoice", arguments: "{}" }], newScope({ tools: [] }), "s1");
 
         expect(findCall("c3")?.blocked).toEqual({ guard: "permission", reason: "permission_denied" });
-        expect(withoutRunStarts(takeEvents())[0]).toMatchObject({ decision: "block", reason: "permission_denied" });
+        expect(withoutRunEdges(takeEvents())[0]).toMatchObject({ decision: "block", reason: "permission_denied" });
     });
 });

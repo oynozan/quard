@@ -3,6 +3,8 @@
 export type Turn = {
     calls?: Array<{ name: string; args: object }>;
     text?: string;
+    // Token counts as the API reports them
+    usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens: number } };
 };
 
 type Body = Record<string, unknown>;
@@ -43,6 +45,7 @@ export function responseBody(turn: Turn): object {
         parallel_tool_calls: true,
         tool_choice: "auto",
         tools: [],
+        ...(turn.usage === undefined ? {} : { usage: turn.usage }),
     };
 }
 

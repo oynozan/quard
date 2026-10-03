@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { configure, resetConfig } from "../core/config.ts";
 import { takeEvents } from "../core/recorder.ts";
+import { GuardBlockedError, GuardRefusal } from "../core/refusal.ts";
 import { agentScope, currentScope, mayUse, narrowTools, newScope, runScope } from "./scope.ts";
 
 afterEach(() => {
@@ -50,6 +51,42 @@ describe("runScope", () => {
         expect(mayUse(scope, "fetchPage")).toBe(true);
         expect(mayUse(scope, "payInvoice")).toBe(false);
         expect(scope.run.runId).toBe("4bf92f3577b34da6a3ce929d0e0e4736");
+    });
+});
+
+describe("how a run ends", () => {
+    const ends = () => takeEvents().filter((event) => event.type === "run_finished");
+
+    it("records a run that returns, sync or async", async () => {
+        expect(runScope({ agent: "billing" }, () => 1)).toBe(1);
+        expect(await runScope({}, async () => 2)).toBe(2);
+
+        expect(ends()).toEqual([
+            expect.objectContaining({ type: "run_finished", agent: "billing", status: "completed" }),
+            expect.objectContaining({ agent: "default", status: "completed" }),
+        ]);
+    });
+
+    it("records a run that throws, sync or async, and passes the error on", async () => {
+        expect(() =>
+            runScope({}, () => {
+                throw new Error("boom");
+            }),
+        ).toThrow("boom");
+        await expect(runScope({}, async () => Promise.reject("plain"))).rejects.toBe("plain");
+
+        expect(ends().map((end) => [end.type === "run_finished" && end.status, "error" in end && end.error])).toEqual([
+            ["failed", "boom"],
+            ["failed", "plain"],
+        ]);
+    });
+
+    it("records a run stopped by a guard that throws as blocked", async () => {
+        const refusal = new GuardRefusal({ guard: "limit", tool: "sendSms", reason: "limit_reached" });
+
+        await expect(runScope({}, async () => Promise.reject(new GuardBlockedError(refusal)))).rejects.toThrow();
+
+        expect(ends()).toEqual([expect.objectContaining({ status: "blocked" })]);
     });
 });
 

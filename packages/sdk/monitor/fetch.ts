@@ -1,4 +1,4 @@
-import { labelFor, newStepId } from "@quard/shared";
+import { labelFor, newStepId, type TokenUsage } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import {
@@ -12,7 +12,7 @@ import { currentScope, newScope, type Scope } from "../context/scope.ts";
 import { checkRequestedCalls } from "./check.ts";
 import { asRecord, parseJson } from "./json.ts";
 import { readResponsesRequest, type ResponsesRequest } from "./request.ts";
-import { functionCallOf, functionCallsOf, responseIdOf, type FunctionCall } from "./response.ts";
+import { functionCallOf, functionCallsOf, responseIdOf, usageOf, type FunctionCall } from "./response.ts";
 import { tapSse } from "./sse.ts";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -93,7 +93,13 @@ function labelInput(step: Step): void {
     }
 }
 
-function recordModelCall(step: Step, status: "ok" | "error", responseId?: string, calls: FunctionCall[] = []): void {
+function recordModelCall(
+    step: Step,
+    status: "ok" | "error",
+    responseId?: string,
+    calls: FunctionCall[] = [],
+    usage?: TokenUsage,
+): void {
     record({
         type: "model_call",
         runId: step.scope.run.runId,
@@ -106,6 +112,7 @@ function recordModelCall(step: Step, status: "ok" | "error", responseId?: string
         toolCalls: calls.map((call) => ({ callId: call.callId, name: call.name, arguments: call.arguments })),
         status,
         durationMs: Date.now() - step.started,
+        ...(usage === undefined ? {} : { usage }),
     });
 }
 
@@ -121,7 +128,7 @@ function finishResponse(
     if (responseId !== undefined) {
         registerResponse(responseId, step.scope);
     }
-    recordModelCall(step, status, responseId, calls);
+    recordModelCall(step, status, responseId, calls, usageOf(response));
 }
 
 // Each tool call is checked once, when its last event arrives

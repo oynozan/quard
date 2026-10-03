@@ -4,7 +4,7 @@ import { takeEvents } from "../core/recorder.ts";
 import { GuardBlockedError, isGuardRefusal } from "../core/refusal.ts";
 import { findCall, registerCall } from "../context/registry.ts";
 import { agentScope, currentScope, newScope, runScope } from "../context/scope.ts";
-import { withoutRunStarts } from "../test/call.ts";
+import { withoutRunEdges } from "../test/call.ts";
 import { resetAll } from "../test/reset.ts";
 import { guard } from "./guard.ts";
 
@@ -32,7 +32,7 @@ describe("guard()", () => {
         const output = await runScope({ agent: "billing" }, () => getSupplier("acme"));
 
         expect(output).toBe(`IBAN for acme: ${IBAN}`);
-        expect(withoutRunStarts(takeEvents()).map((event) => event.type)).toEqual(["decision", "tool_call", "content"]);
+        expect(withoutRunEdges(takeEvents()).map((event) => event.type)).toEqual(["decision", "tool_call", "content"]);
     });
 
     it("passes several arguments through as a list", async () => {
@@ -74,7 +74,7 @@ describe("guard()", () => {
         const output = await pay({ iban: IBAN });
 
         expect(isGuardRefusal(output)).toBe(true);
-        expect(withoutRunStarts(takeEvents())[0]).toMatchObject({
+        expect(withoutRunEdges(takeEvents())[0]).toMatchObject({
             runId: scope.run.runId,
             agent: "worker",
             decision: "block",

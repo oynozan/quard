@@ -25,7 +25,7 @@ export function makeCall(
     };
 }
 
-// Events without the run_started record every new run begins with
-export function withoutRunStarts<T extends { type: string }>(events: T[]): T[] {
-    return events.filter((event) => event.type !== "run_started");
+// Events without the start and end records that every run adds
+export function withoutRunEdges<T extends { type: string }>(events: T[]): T[] {
+    return events.filter((event) => event.type !== "run_started" && event.type !== "run_finished");
 }
