@@ -1,15 +1,13 @@
 import { NOW, MINUTE } from "./rng";
 import { catalogRuns } from "./runs/catalog";
-import type { Step } from "./runs/types";
+import type { GuardDecision, Step } from "./runs/types";
 import type { DecisionEvent } from "./types";
 
 const WINDOW = 10 * MINUTE;
 const LINES = 12;
 
 // A short line for the log. Observe-mode results say what they would have done.
-function detailOf(step: Step, call: Step | undefined): string {
-    const guard = step.guard;
-    if (!guard) return step.detail;
+function detailOf(guard: GuardDecision, call: Step | undefined): string {
     let text = guard.reason;
     if (guard.guard === "source" && call?.output) {
         const origin = call.output.label.origin;
@@ -44,7 +42,7 @@ export function latestDecisions(): DecisionEvent[] {
                 // In observe mode the call ran, so the log shows what happened.
                 outcome: observed ? (step.guard.guard === "source" ? "pass" : "allow") : step.guard.outcome,
                 runId: run.detail.summary.id,
-                detail: detailOf(step, steps.get(step.parentId ?? "")),
+                detail: detailOf(step.guard, steps.get(step.parentId ?? "")),
             });
         }
     }

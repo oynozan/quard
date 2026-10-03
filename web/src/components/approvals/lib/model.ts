@@ -1,6 +1,7 @@
 import type { AlwaysGrant, ApprovalAnswer, ApprovalDecision, ApprovalDetail } from "@/lib/data/approvals/types";
 import type { GuardDecision } from "@/lib/data/runs/types";
 import { SIGNED_IN } from "@/lib/data/session";
+import { formatOutcome } from "@/lib/format";
 
 // Live requests first, because a process is blocked on them right now.
 // Inside each group the longest wait sits on top, so nobody is skipped.
@@ -61,13 +62,12 @@ export function answerMessage(answer: ApprovalAnswer, tool: string): string {
 // Guard checks in plain words. Observe mode ran the call anyway.
 type CheckTone = "context" | "warning" | "danger";
 export function checkWord(decision: GuardDecision): { word: string; tone: CheckTone } {
-    if (decision.outcome === "ask") return { word: "Asks a human", tone: "warning" };
-    if (decision.mode === "observe" && decision.outcome === "block") return { word: "Would block", tone: "warning" };
+    const observe = decision.mode === "observe";
     if (decision.outcome === "allow" || decision.outcome === "pass") return { word: "Allowed", tone: "context" };
-    const word = decision.outcome.charAt(0).toUpperCase() + decision.outcome.slice(1);
+    if (decision.outcome === "ask" && !observe) return { word: "Asks a human", tone: "warning" };
     return {
-        word: decision.outcome === "block" ? "Blocked" : word,
-        tone: decision.outcome === "block" ? "danger" : "warning",
+        word: formatOutcome(decision.outcome, decision.mode),
+        tone: decision.outcome === "block" && !observe ? "danger" : "warning",
     };
 }
 
