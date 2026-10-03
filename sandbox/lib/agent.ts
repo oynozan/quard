@@ -13,7 +13,7 @@ const MAX_TURNS = 8;
 
 // A plain agent loop: ask the model, run the tools it asks for, repeat.
 // The tool definitions the model sees come from lib/tools.ts.
-export async function runAgent(client: OpenAI, prompt: string, tools: Tools): Promise<void> {
+export async function runAgent(client: OpenAI, prompt: string, tools: Tools): Promise<string> {
     console.log(`  User: ${prompt}`);
     const request = { model: MODEL, instructions: INSTRUCTIONS, tools: definitions(Object.keys(tools)) };
     let response = await client.responses.create({ ...request, input: prompt });
@@ -30,6 +30,7 @@ export async function runAgent(client: OpenAI, prompt: string, tools: Tools): Pr
         response = await client.responses.create({ ...request, previous_response_id: response.id, input: results });
     }
     console.log(`  Model: ${response.output_text}`);
+    return response.output_text;
 }
 
 // Runs one tool call and returns what the model gets to read
