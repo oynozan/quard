@@ -5,7 +5,10 @@ export default defineConfig({
     format: "esm",
     platform: "node",
     target: "node22.12",
-    dts: true,
-    // Bundle shared code so users install one package
-    noExternal: ["@quard/shared"],
+    dts: { eager: true },
+    // Bundle shared code and its types so users install one package
+    deps: {
+        alwaysBundle: ["@quard/shared"],
+        dts: { alwaysBundle: ["@quard/shared"] },
+    },
 });

@@ -3,6 +3,15 @@ import * as sdk from "./index.ts";
 
 describe("quard", () => {
     it("exports its public API", () => {
-        expect(Object.keys(sdk).sort()).toEqual(["GUARD_TYPES", "isGuardType"]);
+        expect(Object.keys(sdk).sort()).toEqual([
+            "GUARD_TYPES",
+            "GuardBlockedError",
+            "GuardRefusal",
+            "guard",
+            "isGuardRefusal",
+            "isGuardType",
+            "quard",
+        ]);
+        expect(Object.keys(sdk.quard)).toEqual(["wrap", "run", "agent", "configure"]);
     });
 });
