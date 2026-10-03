@@ -35,6 +35,7 @@ const TOOLS = [
         partner: ["string", "Partner name, such as globex or initech"],
         message: ["string", "Message text"],
     }),
+    define("crmLookup", "Look up a company in our CRM", { company: ["string", "Company name"] }),
 ];
 
 export function definitions(names: string[]): OpenAI.Responses.FunctionTool[] {

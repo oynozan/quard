@@ -97,6 +97,7 @@ These run with or without it:
 | `14-policy-file.ts`               | Rules in a JSON policy file win over code and change while the app runs                                |
 | `16-your-own-rules.ts`            | Custom check rules, neverSeen that blocks, a per-run amount cap, block beats ask                       |
 | `17-sensitive-data-going-out.ts`  | Egress payload rules (mask, block, allow), strictness presets, `destinations`, `onFail: "ask"`         |
+| `18-origins-and-trust.ts`         | Full origins, `from` versus trust, origin overrides, `originOf` and `allowDomains`                     |
 
 ## How it fits together
 
