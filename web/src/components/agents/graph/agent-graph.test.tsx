@@ -22,7 +22,7 @@ function readout(label: string): string | null | undefined {
     return value.find((item) => item?.classList.contains("mono"))?.textContent;
 }
 
-const COLUMNS = ["From", "To", "Mostly", "Delegations", "Untrusted", "Share", "Last seen"];
+const COLUMNS = ["From", "To", "Mostly", "Messages", "Untrusted", "Share", "Last seen"];
 
 // Opens the Table view and checks it keeps its header over the empty line
 function expectEmptyTable(days: number) {
@@ -34,7 +34,7 @@ function expectEmptyTable(days: number) {
             .map((cell) => cell.textContent),
     ).toEqual(COLUMNS);
     expect(within(table).getAllByRole("row")).toHaveLength(1);
-    expect(screen.getByText("No delegations between agents yet")).toBeTruthy();
+    expect(screen.getByText("No messages between agents yet")).toBeTruthy();
 }
 
 describe("AgentGraph", () => {
@@ -42,7 +42,7 @@ describe("AgentGraph", () => {
         render(<AgentGraph graph={graphOf()} />);
         expect(screen.getByRole("region", { name: "Agent graph" }).textContent).toContain("7D");
         expect(readout("Links")).toBe("3");
-        expect(readout("Delegations")).toBe("352");
+        expect(readout("Messages")).toBe("352");
         expect(readout("Untrusted")).toBe("7%");
     });
 
@@ -82,7 +82,7 @@ describe("AgentGraph", () => {
     it("draws agents that never talk with no links, zero counts and a dash for the untrusted share", () => {
         render(<AgentGraph graph={graphOf({ nodes: [agentNode("solo")], edges: [] })} />);
         expect(readout("Links")).toBe("0");
-        expect(readout("Delegations")).toBe("0");
+        expect(readout("Messages")).toBe("0");
         expect(readout("Untrusted")).toBe("—");
         const summary =
             "Agent graph over the last 7 days: 1 agent and 0 links. 0 links carry mostly untrusted content.";
@@ -101,7 +101,7 @@ describe("AgentGraph", () => {
         expect(field?.className).toContain("bg-chart-field");
         expect(screen.queryByRole("img")).toBeNull();
         expect(screen.queryByText("60%+")).toBeNull();
-        for (const label of ["Links", "Delegations", "Untrusted"]) expect(readout(label)).toBe("—");
+        for (const label of ["Links", "Messages", "Untrusted"]) expect(readout(label)).toBe("—");
         expectEmptyTable(30);
     });
 });

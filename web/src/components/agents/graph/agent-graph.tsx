@@ -33,12 +33,12 @@ export function AgentGraph({ graph }: { graph: Graph }) {
         <ChartTable
             caption={`Links between agents over the last ${graph.windowDays} days`}
             height={340}
-            emptyText="No delegations between agents yet"
+            emptyText="No messages between agents yet"
             columns={[
                 { label: "From", align: "left" },
                 { label: "To", align: "left" },
                 { label: "Mostly", align: "left" },
-                { label: "Delegations" },
+                { label: "Messages" },
                 { label: "Untrusted" },
                 { label: "Share" },
                 { label: "Last seen" },
@@ -65,7 +65,7 @@ export function AgentGraph({ graph }: { graph: Graph }) {
             state={empty ? "empty" : "ready"}
             readouts={[
                 { label: "Links", value: formatInt(edges.length) },
-                { label: "Delegations", value: formatInt(total) },
+                { label: "Messages", value: formatInt(total) },
                 { label: "Untrusted", value: total ? formatShare(untrusted / total) : "—" },
             ]}
             table={table}
