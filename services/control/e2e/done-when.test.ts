@@ -151,8 +151,15 @@ describe("approvals from the dashboard", { timeout: 30_000 }, () => {
             request: request.id,
             rules: request.rulesHash,
         });
+        // The run limits come first, for the whole run, in observe mode
+        const runLimits = ["max-depth", "max-fan-out", "max-loops", "max-steps", "max-cost"].map((name) => ({
+            tool: "*",
+            guard: "limit",
+            rule: name,
+            mode: "observe",
+        }));
         const rule = { tool: "payInvoice", guard: "approval", rule: "approval", mode: "block" };
-        expect(await connectedRules()).toEqual([{ hash: request.rulesHash, rules: [rule] }]);
+        expect(await connectedRules()).toEqual([{ hash: request.rulesHash, rules: [...runLimits, rule] }]);
     });
 
     it("passes identical calls on an always approve, and asks again once it is revoked", async () => {
