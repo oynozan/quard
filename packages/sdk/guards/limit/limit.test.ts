@@ -114,6 +114,21 @@ describe("countLimit", () => {
         expect(call.run.helpers.get("default")).toEqual(new Set());
         expect(call.run.turns.size).toBe(0);
     });
+
+    it("counts only delegation when control keeps the run's counters", () => {
+        const call = makeCall({ to: "billing", amount: 30 });
+        const options = {
+            type: "limit" as const,
+            maxCallsPerRun: 5,
+            maxAmountPerRun: { field: "amount", max: 100 },
+            delegateTo: "to",
+        };
+
+        countLimit(call, options, false);
+
+        expect(call.run.counters.size).toBe(0);
+        expect(call.run.helpers.get("default")).toEqual(new Set(["billing"]));
+    });
 });
 
 describe("limitRules", () => {

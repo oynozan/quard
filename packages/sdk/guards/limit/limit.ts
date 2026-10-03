@@ -53,18 +53,20 @@ export function limitRules(options: LimitOptions): string[] {
     return rules.filter(([option]) => option !== undefined).map(([, rule]) => rule);
 }
 
-// Counts a call about to run, and returns a way to take the count back
-export function countLimit(call: GuardCall, options: LimitOptions): () => void {
+// Counts a call about to run, and returns a way to take the count back.
+// Without perRun, only delegation is counted: control keeps the run's
+// other counters.
+export function countLimit(call: GuardCall, options: LimitOptions, perRun = true): () => void {
     const counters = call.run.counters;
     const added: Array<[string, number]> = [];
     const add = (key: string, amount: number) => {
         counters.set(key, (counters.get(key) ?? 0) + amount);
         added.push([key, amount]);
     };
-    if (options.maxCallsPerRun !== undefined) {
+    if (perRun && options.maxCallsPerRun !== undefined) {
         add(callsKey(call.tool), 1);
     }
-    if (options.maxAmountPerRun !== undefined) {
+    if (perRun && options.maxAmountPerRun !== undefined) {
         const amount = readAmount(call.input, options.maxAmountPerRun.field) ?? 0;
         // Observe mode lets bad amounts run, but they never lower the count
         add(amountKey(call.tool, options.maxAmountPerRun.field), Number.isFinite(amount) ? Math.max(0, amount) : 0);
