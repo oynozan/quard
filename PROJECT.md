@@ -374,7 +374,7 @@ Decided by Q23.
 | Per-day limits | Count locally and block once the local count reaches the cap |
 | Fleet check and quarantine lists | Use the last synced copy, up to 24 h old |
 | Label lookups | A label that can't be looked up counts as untrusted |
-| Jev detector | Skipped and noted; detectors only tighten |
+| Jev detector | What it could not check is flagged `detector:unchecked`, and a warning says why |
 | Decision records | Buffered, up to 10,000, and retried every 1 s to 60 s |
 
 If the buffer fills, the oldest allow records are dropped first, and the number lost is recorded. Records sent late carry `degraded: true`.
@@ -558,17 +558,18 @@ Decided by the spec, Q25, Q26 and Q27, and by the owner's content-label decision
 
 - **AI never sets origin, trust or sensitivity.** Content judged by a model can argue its way to trusted, so origin stays a recorded fact.
 - **AI adds content labels.** Jev, and an AI for what Jev can't place, label what content is, such as `invoice` or `payment_fraud`. (**Owner**)
-- **Detectors only tighten.** A risky label can flag content or strip a prompt injection out of it. It can never allow what a rule blocked, or raise trust.
+- **Detectors only tighten.** A risky label can flag content, or strip the chunk, up to 4,000 characters, that holds a likely prompt injection. It can never allow what a rule blocked, or raise trust.
 
 ### Detector
 
 Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner**.
 
 - Jev from TypeSafe, pinned to `jev-1.13.0`, behind a small detector interface. Other detectors can be swapped in later.
-- For each chunk of public content, Jev answers one choice question: which label from a fixed list fits best. It gives the chance of every label. The list includes `none`.
-- Before a chunk leaves the process, secrets are removed and emails, IBANs and card numbers are masked.
-- It acts by default: the SDK waits up to 5 s for Jev, then flags or strips. A team can switch it to observe, in code or in the policy file. Observe saves the labels without waiting, so it adds no delay.
-- Jev is a hosted API only. The content and the longest question must fit in 32,000 tokens together, so long pages are cleaned and split first.
+- For each chunk of public content, Jev answers two questions in one request: which label from a fixed list fits best, with the chance of every label, and yes or no, does any part of it try to instruct the AI agent reading it. The list includes `none`.
+- Before a chunk leaves the process, secrets are removed and emails, IBANs and card numbers are masked. Values of fields named like secrets, such as `password` or `client_secret`, are never sent.
+- It acts by default: the SDK waits up to 5 s in total for Jev, with at most 8 requests in flight per process, then flags or strips. A busy or unreachable API gets one retry. A team can switch it to observe, in code or in the policy file. Observe saves the labels without waiting, so it adds no delay.
+- A chunk that fails or answers late is unchecked. The SDK still acts on the chunks that answered, and flags the content `detector:unchecked`, so values from it can't pay or send anything without a person. A warning gives the reason, such as `http_401` or `timeout`. (**Owner**)
+- Jev is a hosted API only. The content and the longest question must fit in 32,000 tokens together, so content is split first. Short values, and keys that read like text, are packed together. Long texts are cut into chunks of up to 4,000 characters at line breaks, sentence ends or spaces, never inside an IBAN, card number, email or secret.
 - TypeSafe quotes 70 to 500 ms per call ([InfoQ](https://www.infoq.com/news/2026/10/typesafe-ai-jev-released/)). Its own docs say most calls take about 100 ms. See [TypeSafe's models page](https://docs.typesafe.ai/models).
 - It can return a wrong but valid answer, and its docs warn that injected text can move its answer. Test it on the team's own injection examples.
 - Jev leans toward the options it reads first, so the risky labels come first in the list.
@@ -595,7 +596,7 @@ Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner*
 | `data_records` | no | Table rows, JSON from an API, CRM or database entries |
 | `none` | no | Nothing else fits, so the AI fallback labels it |
 
-- A chunk's risk is the sum of the chances of its risky labels. Content whose risk reaches the flag threshold gets a flag such as `detector:payment_fraud`. A value from flagged content no longer counts as coming from its origin, and never-seen rules ask a person about it.
+- A chunk's risk is the sum of the chances of its risky labels. Content with a chunk whose risk reaches the flag threshold gets a flag named after the most likely risky label, such as `detector:payment_fraud`. A value from flagged content no longer counts as coming from its origin, and never-seen rules ask a person about it.
 - The other labels change nothing. They show what agents read, in the run view and the review queue.
 - The exact wording Jev reads is in `packages/sdk/detectors/labels.ts`.
 
@@ -612,7 +613,7 @@ Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner*
 Q26, **Claude's pick**.
 
 - Internal run data goes only to the provider the agents already use, which also runs the AI reviewer. Secrets are removed, and emails and IBANs become placeholders.
-- Jev is run by another company. By default it gets only content labeled public, such as web pages, outside email and MCP results. Content from an origin marked internal is never sent to it.
+- Jev is run by another company. By default it gets only content labeled public, such as web pages, outside email and MCP results. Intranet hosts and a team's own MCP servers count as public too until the team marks them internal. Content from an origin marked internal is never sent to it. Names, street addresses and phone numbers are sent as written.
 - The AI fallback gets the same redacted public chunks that Jev got, through the team's own provider.
 - The pasted-content and task-match questions need internal data: the user's message, the task and the tool's arguments. They stay off until a team turns them on and adds the detector to its `egress` allowlist.
 - A short description of the app, written by the team, may be sent as context. It holds no user data.
@@ -624,9 +625,11 @@ Q27, **Claude's pick**.
 | Check | Flag | Ask | Block or strip |
 | --- | --- | --- | --- |
 | Risky labels, added up | 0.50 | — | — |
-| `prompt_injection` | — | — | strip the chunk at 0.90 |
+| Injection: the yes or no answer, or the `prompt_injection` chance | — | — | strip the chunk at 0.90 |
 | Pasted outside content (planned) | 0.50 | — | — |
 | Tool call doesn't match the task (planned) | 0.50 | 0.80 | never |
+
+A strip removes the whole chunk, ordinary text in it included, and the agent is not told. The yes or no answer catches an injection that a label misses: one buried in a long chunk, or one Jev splits between `prompt_injection` and `payment_fraud`. A key can't be removed, so a key that holds an injection only flags the content.
 
 Jev acts with these thresholds by default. Check them on at least 200 reviewed examples per risky label from the review queue, tune them where needed, and keep the model version pinned.
 
@@ -733,7 +736,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | Q24 | Approval time limits | No time limit; approve once or always approve (same agent, tool and arguments, until revoked) | Owner |
 | Q25 | AI detector | Jev, swappable; labels public content; acts by default, can be switched to observe | Claude's pick, Owner |
 | Q26 | Data for AI models | Internal data only to the team's own provider, masked; Jev gets public content only | Claude's pick |
-| Q27 | Detector thresholds | Flag at 0.5 on the risky labels added up; strip injections at 0.9; tune before enforce | Claude's pick |
+| Q27 | Detector thresholds | Flag at 0.5 on the risky labels added up; strip at 0.9 on the yes or no injection answer or the label's chance; tune before enforce | Claude's pick |
 | — | Repo layout | The owner's tree; TypeScript in one pnpm workspace | Owner, Claude's pick |
 | — | Where guards run | In-process; the backend for shared state | Spec |
 | — | Database and queue | Postgres only, with pg-boss | Claude's pick |
@@ -753,6 +756,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Content labels | Jev picks one label from a fixed list for public content; `none` goes to an AI | Owner |
 | — | Label list | Four risky labels, eight others and `none` | Claude's pick |
 | — | Jev acting in v1 | Yes: enforce by default; a team can switch it to observe | Owner |
+| — | Detector failures | While acting, what the detector could not check is flagged `detector:unchecked` | Owner |
 | — | Text for review | Store redacted public chunks for a review queue | Owner |
 
 ## Changes to the spec

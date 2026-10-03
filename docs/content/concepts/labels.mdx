@@ -31,7 +31,7 @@ Trust and sensitivity follow from the origin.
 
 ## Changing the defaults
 
-Teams change the trust or sensitivity of one origin at a time, in code. For example, a team can trust its own MCP server because it only serves the team's own CRM data. Every change is recorded in the run, and the dashboard lists them all under [Origin overrides](/guides/settings#origin-overrides).
+Teams change the trust or sensitivity of one origin at a time, in code. For example, a team can trust its own MCP server and mark it internal, because it only serves the team's own CRM data. Every change is recorded in the run, and the dashboard lists them all under [Origin overrides](/guides/settings#origin-overrides).
 
 Apps open to the public can mark the user as untrusted.
 
@@ -54,6 +54,6 @@ Content keeps its labels when it moves between agents. A brief from another agen
 
 AI never decides where content came from, or how far Quard trusts it. Content that a model judges could argue its way to trusted, so the origin stays a recorded fact.
 
-An AI detector adds a label that says what the content is, such as `invoice`, `article` or `payment_fraud`. Quard's detector, Jev, labels public content only. When its risky labels are likely enough, the content gets a flag such as `detector:payment_fraud`. A value from flagged content no longer counts as coming from its origin, so rules for sensitive actions treat it with suspicion.
+An AI detector adds a label that says what the content is, such as `invoice`, `article` or `payment_fraud`. Quard's detector, Jev, labels public content only. Web pages, outside email and MCP results count as public, intranet hosts included, so mark your own servers internal to keep their data away from it. When its risky labels are likely enough, the content gets a flag such as `detector:payment_fraud`. A value from flagged content no longer counts as coming from its origin, so rules for sensitive actions treat it with suspicion.
 
-AI detectors can only make things stricter. A risky label can flag content, or strip a prompt injection out of it. It can never allow what a rule blocked, or raise trust. The detector acts by default. A team can switch it to observe mode, where it only saves its labels.
+AI detectors can only make things stricter. A risky label can flag content, or strip the chunk, up to 4,000 characters, that holds a likely prompt injection. It can never allow what a rule blocked, or raise trust. Content the detector could not check, because it failed or answered late, is flagged `detector:unchecked`. The detector acts by default. A team can switch it to observe mode, where it only saves its labels.
