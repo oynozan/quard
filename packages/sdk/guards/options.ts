@@ -12,6 +12,8 @@ export type SourceOptions = Common & {
     // A kind such as "web", or a full origin such as "mcp:crm"
     origin: string;
     originOf?: (input: unknown) => string | undefined;
+    // For origin "agent": where the message keeps what quard.inject() returned
+    carrierOf?: (input: unknown) => unknown;
     blockDomains?: string[];
     allowDomains?: string[];
     onSuspect?: "flag" | "strip" | "block";
@@ -62,6 +64,8 @@ export type LimitOptions = Common & {
     maxAmountPerDay?: { field: string; max: number };
     // Fields whose IBANs, emails and domains the fleet check watches
     fleetCheck?: string[];
+    // For a send or delegate tool: the argument that names the receiving agent
+    delegateTo?: string;
 };
 
 export type GuardOptions = SourceOptions | ActionOptions | ApprovalOptions | EgressOptions | LimitOptions;

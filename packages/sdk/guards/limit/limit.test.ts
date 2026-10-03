@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { configure, resetConfig } from "../../core/config.ts";
 import { makeCall } from "../../test/call.ts";
 import { checkLimit, countLimit, limitRules } from "./limit.ts";
+
+afterEach(() => {
+    resetConfig();
+});
 
 describe("checkLimit", () => {
     it("allows calls until the per-run count is reached", () => {
@@ -57,6 +62,29 @@ describe("checkLimit", () => {
         expect(call.run.counters.get("amount:testTool:amount")).toBe(0);
     });
 
+    it("checks delegation in the run limits' mode, next to its own limits", () => {
+        const options = { type: "limit" as const, maxCallsPerRun: 1, delegateTo: "to" };
+        const call = { ...makeCall({ to: "billing" }), depth: 3 };
+
+        expect(checkLimit(call, options).map((r) => [r.rule, r.decision, r.mode])).toEqual([
+            ["max-calls-per-run", "allow", "block"],
+            ["max-depth", "block", "observe"],
+            ["max-fan-out", "allow", "observe"],
+            ["max-loops", "allow", "observe"],
+        ]);
+
+        configure({ runLimits: { mode: "block" } });
+        expect(checkLimit(call, options)[1]).toMatchObject({ rule: "max-depth", mode: "block" });
+    });
+
+    it("counts the helper of a delegation", () => {
+        const call = makeCall({ to: "billing" });
+
+        countLimit(call, { type: "limit", delegateTo: "to" });
+
+        expect(call.run.helpers.get("default")).toEqual(new Set(["billing"]));
+    });
+
     it("does nothing without limits", () => {
         const call = makeCall({});
         countLimit(call, { type: "limit" });
@@ -76,6 +104,15 @@ describe("countLimit", () => {
         takeBack();
 
         expect([...call.run.counters.values()]).toEqual([1, 30]);
+    });
+
+    it("takes a delegation back too, when control stops the call", () => {
+        const call = makeCall({ to: "billing" });
+
+        countLimit(call, { type: "limit", delegateTo: "to" })();
+
+        expect(call.run.helpers.get("default")).toEqual(new Set());
+        expect(call.run.turns.size).toBe(0);
     });
 });
 

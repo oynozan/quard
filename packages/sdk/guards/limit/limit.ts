@@ -1,8 +1,11 @@
+import { runLimits } from "../../core/config.ts";
 import { readAmount } from "../action/action.ts";
 import type { GuardCall, Mode, RuleResult } from "../call.ts";
 import type { LimitOptions } from "../options.ts";
 import { checkDaily } from "./daily.ts";
+import { checkDelegation, countDelegation } from "./delegation.ts";
 import { checkFleet, type FleetView } from "./fleet.ts";
+import { limitResult } from "./result.ts";
 
 function callsKey(tool: string): string {
     return `calls:${tool}`;
@@ -12,18 +15,13 @@ function amountKey(tool: string, field: string): string {
     return `amount:${tool}:${field}`;
 }
 
-function result(rule: string, mode: Mode, over: boolean): RuleResult {
-    return over
-        ? { guard: "limit", rule, decision: "block", mode, reason: "limit_reached" }
-        : { guard: "limit", rule, decision: "allow", mode };
-}
-
+// Delegation limits follow the run limits' mode, not the guard's
 function checkRun(call: GuardCall, options: LimitOptions, mode: Mode): RuleResult[] {
     const counters = call.run.counters;
     const results: RuleResult[] = [];
     if (options.maxCallsPerRun !== undefined) {
         const used = counters.get(callsKey(call.tool)) ?? 0;
-        results.push(result("max-calls-per-run", mode, used + 1 > options.maxCallsPerRun));
+        results.push(limitResult("max-calls-per-run", mode, used + 1 > options.maxCallsPerRun));
     }
     if (options.maxAmountPerRun !== undefined) {
         const { field, max } = options.maxAmountPerRun;
@@ -31,7 +29,10 @@ function checkRun(call: GuardCall, options: LimitOptions, mode: Mode): RuleResul
         const used = counters.get(amountKey(call.tool, field)) ?? 0;
         // A negative or broken amount could lower the count, so it is blocked
         const bad = !Number.isFinite(amount) || amount < 0;
-        results.push(result("max-amount-per-run", mode, bad || used + amount > max));
+        results.push(limitResult("max-amount-per-run", mode, bad || used + amount > max));
+    }
+    if (options.delegateTo !== undefined) {
+        results.push(...checkDelegation(call, options.delegateTo, runLimits()));
     }
     return results;
 }
@@ -46,7 +47,8 @@ export function checkLimit(call: GuardCall, options: LimitOptions, fleet?: Fleet
     ];
 }
 
-// The rule names a limit guard's results use
+// The rule names a limit guard's results use. The delegation limits are
+// left out: they follow the run limits' settings, not this guard's mode.
 export function limitRules(options: LimitOptions): string[] {
     const rules: Array<[unknown, string]> = [
         [options.maxCallsPerRun, "max-calls-per-run"],
@@ -74,9 +76,11 @@ export function countLimit(call: GuardCall, options: LimitOptions): () => void {
         // Observe mode lets bad amounts run, but they never lower the count
         add(amountKey(call.tool, options.maxAmountPerRun.field), Number.isFinite(amount) ? Math.max(0, amount) : 0);
     }
+    const delegation = options.delegateTo === undefined ? undefined : countDelegation(call, options.delegateTo);
     return () => {
         for (const [key, amount] of added) {
             counters.set(key, (counters.get(key) as number) - amount);
         }
+        delegation?.();
     };
 }
