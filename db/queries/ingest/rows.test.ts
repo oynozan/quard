@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { RunItem } from "./rows.ts";
-import { content, decision, finished, item, modelCall, RUN, started, toolCall, warning } from "../../test/events.ts";
-import { decisionRows, eventRows, labelRows, runRows, stepRows } from "./rows.ts";
+import {
+    content,
+    decision,
+    finished,
+    handoff,
+    item,
+    memory,
+    message,
+    modelCall,
+    RUN,
+    started,
+    STEP,
+    toolCall,
+    warning,
+} from "../../test/events.ts";
+import { agentMessageRows, decisionRows, eventRows, labelRows, runRows, stepRows } from "./rows.ts";
 
 const PROJECT = "00000000-0000-0000-0000-000000000001";
 
@@ -98,5 +112,57 @@ describe("labelRows and decisionRows", () => {
             rules_hash: "a".repeat(16),
             request_id: "apr_0123456789abcdef",
         });
+    });
+});
+
+describe("agentMessageRows", () => {
+    it("turns a message into an edge from the sender to the receiver", () => {
+        const received = item(message());
+
+        expect(agentMessageRows(PROJECT, [received])).toEqual([
+            {
+                project_id: PROJECT,
+                event_id: received.id,
+                run_id: RUN,
+                step_id: "5".repeat(16),
+                kind: "message",
+                from_agent: "orchestrator",
+                to_agent: "billing",
+                parent_step_id: STEP,
+                trust: "untrusted",
+                sensitivity: "public",
+                verified: true,
+                at: "2026-10-03T12:00:04.000Z",
+            },
+        ]);
+    });
+
+    it("keeps an unverified message from an unknown sender with no parent step", () => {
+        const unknown = { ...message(), from: "unknown", parentStepId: undefined, verified: false };
+
+        expect(agentMessageRows(PROJECT, [item(unknown as RunItem["event"])])[0]).toMatchObject({
+            from_agent: "unknown",
+            parent_step_id: null,
+            verified: false,
+        });
+    });
+
+    it("turns handoffs and agents run as tools into edges from the agent", () => {
+        const [passed, asTool] = agentMessageRows(PROJECT, [item(handoff()), item(handoff("tool"))]);
+
+        expect(passed).toMatchObject({
+            kind: "handoff",
+            from_agent: "billing",
+            to_agent: "refunds",
+            parent_step_id: null,
+            trust: "trusted",
+            sensitivity: "internal",
+            verified: true,
+        });
+        expect(asTool).toMatchObject({ kind: "tool", from_agent: "billing", to_agent: "refunds" });
+    });
+
+    it("skips every other event, memory included", () => {
+        expect(agentMessageRows(PROJECT, [item(started()), item(memory()), item(modelCall())])).toEqual([]);
     });
 });

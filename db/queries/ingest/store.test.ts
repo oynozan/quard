@@ -1,11 +1,26 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { content, decision, finished, item, modelCall, RUN, started, toolCall, warning } from "../../test/events.ts";
+import {
+    content,
+    decision,
+    finished,
+    handoff,
+    item,
+    memory,
+    message,
+    modelCall,
+    RUN,
+    started,
+    toolCall,
+    warning,
+} from "../../test/events.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
 import { getRun } from "../runs.ts";
 import { ingestBatch } from "./store.ts";
 
 let test: TestDb;
+
+const LATER = "2026-10-03T12:00:05.500Z";
 
 beforeAll(async () => {
     test = await startTestDb();
@@ -98,6 +113,48 @@ describe("ingestBatch", () => {
         expect(run).toMatchObject({ agent: "billing", blocked: 0, degraded: true, flagged: false });
         expect(run?.startedAt.toISOString()).toBe("2026-10-03T12:00:00.000Z");
         expect(run?.lastEventAt.toISOString()).toBe("2026-10-03T12:00:09.000Z");
+    });
+
+    it("names the run after run_started when a receiving process uploads first", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const received = { ...message("2026-10-03T12:00:01.000Z"), agent: "helper" };
+        await ingestBatch(test.db, projectId, [item(received)]);
+        expect(await getRun(test.db, projectId, RUN)).toMatchObject({ agent: "helper" });
+
+        await ingestBatch(test.db, projectId, [item({ ...started(), agent: "orchestrator" })]);
+        expect(await getRun(test.db, projectId, RUN)).toMatchObject({ agent: "orchestrator" });
+
+        // Later uploads from the receiver leave the name alone
+        await ingestBatch(test.db, projectId, [item({ ...modelCall(), agent: "helper" })]);
+        expect(await getRun(test.db, projectId, RUN)).toMatchObject({ agent: "orchestrator" });
+    });
+
+    it("stores messages and handoffs as agent messages once, and memory events as events", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const received = item(message());
+        const batch = [item(started()), received, item(handoff()), item(handoff("tool", LATER)), item(memory())];
+
+        expect(await ingestBatch(test.db, projectId, batch)).toBe(5);
+        expect(await ingestBatch(test.db, projectId, batch)).toBe(0);
+
+        const edges = await test.db
+            .selectFrom("agent_messages")
+            .select(["event_id", "kind", "from_agent", "to_agent", "verified"])
+            .where("project_id", "=", projectId)
+            .orderBy("at")
+            .execute();
+        expect(edges).toEqual([
+            { event_id: received.id, kind: "message", from_agent: "orchestrator", to_agent: "billing", verified: true },
+            expect.objectContaining({ kind: "handoff", from_agent: "billing", to_agent: "refunds" }),
+            expect.objectContaining({ kind: "tool", from_agent: "billing", to_agent: "refunds" }),
+        ]);
+        const stored = await test.db
+            .selectFrom("events")
+            .select("type")
+            .where("project_id", "=", projectId)
+            .where("type", "=", "memory")
+            .execute();
+        expect(stored).toEqual([{ type: "memory" }]);
     });
 
     it("records how a run finished, with its error", async () => {

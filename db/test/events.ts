@@ -94,3 +94,38 @@ export const warning = (at = "2026-10-03T12:00:03.000Z"): RunEvent => ({
     code: "unwrapped_tool",
     tool: "deleteFiles",
 });
+
+// A message the billing agent received from the orchestrator
+export const message = (at = "2026-10-03T12:00:04.000Z"): RunEvent => ({
+    type: "message",
+    ...base(at),
+    stepId: "5".repeat(16),
+    from: "orchestrator",
+    parentStepId: STEP,
+    labelRef: "a".repeat(16),
+    verified: true,
+    trust: "untrusted",
+    sensitivity: "public",
+});
+
+export const handoff = (via: "handoff" | "tool" = "handoff", at = "2026-10-03T12:00:05.000Z"): RunEvent => ({
+    type: "handoff",
+    ...base(at),
+    stepId: "6".repeat(16),
+    to: "refunds",
+    via,
+    trust: "trusted",
+    sensitivity: "internal",
+});
+
+export const memory = (at = "2026-10-03T12:00:06.000Z"): RunEvent => ({
+    type: "memory",
+    ...base(at),
+    stepId: "7".repeat(16),
+    store: "notes",
+    op: "read",
+    items: 2,
+    verified: 1,
+    trust: "untrusted",
+    sensitivity: "internal",
+});

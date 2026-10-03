@@ -1,6 +1,13 @@
 import { costOf, type RunEvent, type UploadItem } from "@quard/shared";
 import type { Insertable } from "kysely";
-import type { DecisionsTable, EventsTable, LabelsTable, RunsTable, StepsTable } from "../../schema/database.ts";
+import type {
+    AgentMessagesTable,
+    DecisionsTable,
+    EventsTable,
+    LabelsTable,
+    RunsTable,
+    StepsTable,
+} from "../../schema/database.ts";
 
 // An event that belongs to a run. Config errors from a policy file or a
 // signature feed belong to none, so they are not stored with runs.
@@ -147,4 +154,48 @@ export function decisionRows(projectId: string, items: RunItem[]): Insertable<De
               ]
             : [],
     );
+}
+
+// Messages and handoffs between agents. A message is stored on the
+// receiving side, so its agent is the receiver.
+export function agentMessageRows(projectId: string, items: RunItem[]): Insertable<AgentMessagesTable>[] {
+    return items.flatMap(({ id, event }): Insertable<AgentMessagesTable>[] => {
+        const row = {
+            project_id: projectId,
+            event_id: id,
+            run_id: event.runId,
+            at: event.at,
+        };
+        if (event.type === "message") {
+            return [
+                {
+                    ...row,
+                    step_id: event.stepId,
+                    kind: "message",
+                    from_agent: event.from,
+                    to_agent: event.agent,
+                    parent_step_id: event.parentStepId ?? null,
+                    trust: event.trust,
+                    sensitivity: event.sensitivity,
+                    verified: event.verified,
+                },
+            ];
+        }
+        if (event.type === "handoff") {
+            return [
+                {
+                    ...row,
+                    step_id: event.stepId,
+                    kind: event.via === "tool" ? "tool" : "handoff",
+                    from_agent: event.agent,
+                    to_agent: event.to,
+                    parent_step_id: null,
+                    trust: event.trust,
+                    sensitivity: event.sensitivity,
+                    verified: true,
+                },
+            ];
+        }
+        return [];
+    });
 }

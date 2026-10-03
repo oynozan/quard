@@ -2,7 +2,16 @@ import type { UploadItem } from "@quard/shared";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import type { Database } from "../../schema/database.ts";
-import { decisionRows, eventRows, isRunItem, labelRows, runRows, stepRows, type RunItem } from "./rows.ts";
+import {
+    agentMessageRows,
+    decisionRows,
+    eventRows,
+    isRunItem,
+    labelRows,
+    runRows,
+    stepRows,
+    type RunItem,
+} from "./rows.ts";
 
 type Trx = Transaction<Database>;
 
@@ -79,6 +88,7 @@ export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]
         const steps = stepRows(projectId, added);
         const labels = labelRows(projectId, added);
         const decisions = decisionRows(projectId, added);
+        const messages = agentMessageRows(projectId, added);
         if (steps.length > 0) {
             await trx
                 .insertInto("steps")
@@ -97,6 +107,13 @@ export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]
             await trx
                 .insertInto("decisions")
                 .values(decisions)
+                .onConflict((c) => c.doNothing())
+                .execute();
+        }
+        if (messages.length > 0) {
+            await trx
+                .insertInto("agent_messages")
+                .values(messages)
                 .onConflict((c) => c.doNothing())
                 .execute();
         }
