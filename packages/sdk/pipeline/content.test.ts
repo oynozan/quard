@@ -131,6 +131,20 @@ describe("detectContent", () => {
         expect(sent[0]).not.toContain("AKIAIOSFODNN7EXAMPLE");
     });
 
+    it("masks a value where a chunk ends, and sends no half characters", async () => {
+        const detector = fake(() => ARTICLE);
+        configure({ detector });
+        // The IBAN sits across the 4,000th character, where a fixed cut would split it
+        const text = `${"Weather report. ".repeat(249)}Pay DE89 3704 0044 0532 0130 00 now \ud83d`;
+
+        await detectContent(makeCall({}), web(text), true);
+
+        const sent = detector.label.mock.calls.map(([chunk]) => chunk).join("\n");
+        expect(sent).toContain("DE89…3000");
+        expect(sent).not.toContain("0532");
+        expect(sent).toContain("now �");
+    });
+
     it("records labels in observe mode without waiting or changing the content", async () => {
         configure({ detector: fake(risky), detectorRules: { mode: "observe" } });
         const shown = web(PAGE);

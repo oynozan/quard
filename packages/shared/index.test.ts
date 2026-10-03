@@ -35,6 +35,7 @@ describe("@quard/shared", () => {
             "decidedMessage",
             "decisionEvent",
             "emailHost",
+            "emailSpans",
             "errorMessage",
             "extractValues",
             "findEmails",

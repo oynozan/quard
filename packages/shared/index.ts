@@ -84,7 +84,7 @@ export type {
     Trust,
 } from "./labels/types.ts";
 export { findHosts, hostMatches, mainDomain, normalizeHost } from "./normalize/domain.ts";
-export { emailHost, findEmails, normalizeEmail, replaceEmails } from "./normalize/email.ts";
+export { emailHost, emailSpans, findEmails, normalizeEmail, replaceEmails } from "./normalize/email.ts";
 export { findIbans, isValidIban, normalizeIban, replaceIbans } from "./normalize/iban.ts";
 export { findIds, isIdentifierLike } from "./normalize/identifier.ts";
 export { findPaths, normalizePath } from "./normalize/path.ts";

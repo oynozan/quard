@@ -1,7 +1,7 @@
 import { flattenArgs, redactText, type Label } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
-import { chunkText } from "../detectors/detector.ts";
+import { chunkSpans, wellFormed, withoutSpans, type ChunkSpan } from "../detectors/chunks.ts";
 import { checkAnswer, riskOf, topRisk, type DetectorAnswer } from "../detectors/labels.ts";
 import type { FailResult, GuardCall } from "../guards/call.ts";
 import { mapStrings } from "../guards/source/strip.ts";
@@ -48,8 +48,8 @@ export function signContent(call: GuardCall, shown: Shown, enforced: boolean): S
     );
 }
 
-// One chunk as the agent would read it, as it was sent, and its label
-type Asked = { raw: string; sent: string; answer: DetectorAnswer };
+// Where one chunk sits in its text, what was sent, and its label
+type Asked = { span: ChunkSpan; sent: string; answer: DetectorAnswer };
 type Labeled = { text: string; asked: Asked[] };
 
 const injection = ({ answer }: Asked): number => answer.probabilities.prompt_injection ?? 0;
@@ -76,13 +76,16 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
     const rules = effectiveDetectorRules(detectorRules);
     const acts = enforced && rules.mode === "enforce";
     // Text leaves without secrets, and with emails, IBANs and cards masked
-    const ask = async (raw: string): Promise<Asked> => {
-        const sent = redactText(raw);
-        return { raw, sent, answer: checkAnswer(await detector.label(sent)) };
+    const ask = async (text: string, span: ChunkSpan): Promise<Asked> => {
+        const sent = wellFormed(redactText(text.slice(span.start, span.end)));
+        return { span, sent, answer: checkAnswer(await detector.label(sent)) };
     };
     const texts = [...new Set(flattenArgs(shown.output).map((item) => item.value))];
     const labeling = Promise.all(
-        texts.map(async (text): Promise<Labeled> => ({ text, asked: await Promise.all(chunkText(text).map(ask)) })),
+        texts.map(async (text): Promise<Labeled> => ({
+            text,
+            asked: await Promise.all(chunkSpans(text).map((span) => ask(text, span))),
+        })),
     );
     const { runId, stepId, agent, tool } = call;
     // Records the decision and each chunk's label, and returns the flags it adds
@@ -134,14 +137,12 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
         // Each text with a likely injection, without those chunks
         const kept = new Map(
             labeled
-                .filter((item) => item.asked.some((chunk) => injection(chunk) >= rules.stripAt))
-                .map((item) => [
-                    item.text,
-                    item.asked
-                        .filter((chunk) => injection(chunk) < rules.stripAt)
-                        .map((chunk) => chunk.raw)
-                        .join("\n\n"),
-                ]),
+                .map((item) => ({
+                    text: item.text,
+                    spans: item.asked.filter((chunk) => injection(chunk) >= rules.stripAt).map((chunk) => chunk.span),
+                }))
+                .filter((item) => item.spans.length > 0)
+                .map((item) => [item.text, withoutSpans(item.text, item.spans)]),
         );
         const output = kept.size === 0 ? shown.output : mapStrings(shown.output, (text) => kept.get(text) ?? text);
         return withFlags({ output, label: shown.label }, flags);

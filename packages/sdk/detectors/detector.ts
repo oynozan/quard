@@ -17,24 +17,3 @@ export type DetectorRules = {
 };
 
 export const DEFAULT_DETECTOR_RULES: DetectorRules = { mode: "enforce", flagAt: 0.5, stripAt: 0.9 };
-
-const MAX_CHUNK = 4000;
-
-// Splits at blank lines, cuts paragraphs longer than `max`, then packs
-// the pieces into chunks of at most `max` characters.
-export function chunkText(text: string, max = MAX_CHUNK): string[] {
-    const pieces = text
-        .split(/\n\s*\n/)
-        .filter((p) => p.trim().length > 0)
-        .flatMap((p) => Array.from({ length: Math.ceil(p.length / max) }, (_, i) => p.slice(i * max, (i + 1) * max)));
-    const chunks: string[] = [];
-    for (const piece of pieces) {
-        const last = chunks.at(-1);
-        if (last !== undefined && last.length + 2 + piece.length <= max) {
-            chunks[chunks.length - 1] = `${last}\n\n${piece}`;
-        } else {
-            chunks.push(piece);
-        }
-    }
-    return chunks;
-}

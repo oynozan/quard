@@ -1,3 +1,5 @@
+import type { Span } from "../redact/spans.ts";
+
 // Bounded parts keep matching fast on long tokens
 const EMAIL_IN_TEXT = /[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,253}\.[A-Z]{2,63}/gi;
 
@@ -7,6 +9,15 @@ export function normalizeEmail(value: string): string {
 
 export function findEmails(text: string): string[] {
     return [...text.matchAll(EMAIL_IN_TEXT)].map((match) => normalizeEmail(match[0]));
+}
+
+// Where each email address is written, as typed
+export function emailSpans(text: string): Span[] {
+    return [...text.matchAll(EMAIL_IN_TEXT)].map((match) => ({
+        start: match.index,
+        end: match.index + match[0].length,
+        value: match[0],
+    }));
 }
 
 // Replaces each email address in a text, given in normalized form
