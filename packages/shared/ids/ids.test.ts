@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isRunId, isStepId, newRunId, newStepId } from "./ids.ts";
+import { isRunId, isStepId, newEventId, newRunId, newStepId } from "./ids.ts";
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -61,5 +61,11 @@ describe("isStepId", () => {
         ["all zeros", "0000000000000000"],
     ])("rejects an id that is %s", (_, value) => {
         expect(isStepId(value)).toBe(false);
+    });
+});
+
+describe("newEventId", () => {
+    it("makes a 16-hex id", () => {
+        expect(newEventId()).toMatch(/^[0-9a-f]{16}$/);
     });
 });

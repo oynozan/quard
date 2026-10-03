@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emailHost, findEmails, normalizeEmail } from "./email.ts";
+import { emailHost, findEmails, normalizeEmail, replaceEmails } from "./email.ts";
 
 describe("email", () => {
     it("normalizes case and spaces", () => {
@@ -17,6 +17,10 @@ describe("email", () => {
         const started = Date.now();
         findEmails("ab1".repeat(40_000));
         expect(Date.now() - started).toBeLessThan(500);
+    });
+
+    it("replaces each email in a text", () => {
+        expect(replaceEmails("Mail Bob@Acme.com today", (email) => `<${email}>`)).toBe("Mail <bob@acme.com> today");
     });
 
     it("reads the host", () => {

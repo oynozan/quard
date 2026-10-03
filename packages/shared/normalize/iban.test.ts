@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findIbans, isValidIban, normalizeIban } from "./iban.ts";
+import { findIbans, isValidIban, normalizeIban, replaceIbans } from "./iban.ts";
 
 const VALID = "DE89370400440532013000";
 
@@ -48,5 +48,16 @@ describe("findIbans", () => {
 
     it("skips look-alikes that fail the checks", () => {
         expect(findIbans("Order ZZ12 3456 7890 1234 5678 and DE89370400440532013001")).toEqual([]);
+    });
+});
+
+describe("replaceIbans", () => {
+    it("replaces each IBAN where it sits, spaced or not", () => {
+        const text = "Pay DE89 3704 0044 0532 0130 00 now, or GB82WEST12345698765432.";
+        expect(replaceIbans(text, (iban) => `<${iban.slice(0, 4)}>`)).toBe("Pay <DE89> now, or <GB82>.");
+    });
+
+    it("leaves text without IBANs alone", () => {
+        expect(replaceIbans("No IBAN in DE89370400440532013001", () => "x")).toBe("No IBAN in DE89370400440532013001");
     });
 });

@@ -27,6 +27,11 @@ export function newStepId(): string {
     return nonZeroHex(8);
 }
 
+// Each uploaded event gets one, so a resend is stored once
+export function newEventId(): string {
+    return nonZeroHex(8);
+}
+
 export function isRunId(value: string): boolean {
     return RUN_ID.test(value) && !ALL_ZEROS.test(value);
 }

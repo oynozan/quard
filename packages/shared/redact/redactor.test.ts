@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest";
+import { keyedHash, parseHashKey } from "./hash.ts";
+import { createRedactor, redactText } from "./redactor.ts";
+
+const KEY = parseHashKey("ab".repeat(32));
+const redactor = createRedactor(KEY);
+const IBAN = "DE89370400440532013000";
+
+describe("redactText", () => {
+    it("masks IBANs, card numbers and emails, and removes secrets", () => {
+        const text = `Pay DE89 3704 0044 0532 0130 00 with 4111 1111 1111 1111, mail Jane@Acme.com, key sk-${"x".repeat(30)}`;
+        expect(redactText(text)).toBe("Pay DE89…3000 with 4111…1111, mail j…@acme.com, key sk-…");
+    });
+
+    it("changes nothing the second time", () => {
+        const once = redactText(`IBAN ${IBAN}, jane@acme.com, 5555555555554444`);
+        expect(redactText(once)).toBe(once);
+    });
+});
+
+describe("redactor.key", () => {
+    it("hashes and masks sensitive keys", () => {
+        expect(redactor.key(`iban:${IBAN}`)).toBe(`iban:DE89…3000#${keyedHash(KEY, "iban", IBAN)}`);
+        expect(redactor.key("email:jane@acme.com")).toBe(
+            `email:j…@acme.com#${keyedHash(KEY, "email", "jane@acme.com")}`,
+        );
+    });
+
+    it("keeps other keys readable, minus secrets", () => {
+        expect(redactor.key("host:acme.com")).toBe("host:acme.com");
+        expect(redactor.key("url:https://x.io/?token=abcdef123")).toBe("url:https://x.io/?token=…");
+        expect(redactor.key(`plain ${IBAN}`)).toBe("plain DE89…3000");
+    });
+
+    it("keeps a hash that is already there, but never a raw value", () => {
+        const hashed = redactor.key(`iban:${IBAN}`);
+        expect(redactor.key(hashed)).toBe(hashed);
+        const forged = `iban:${IBAN}#${"0".repeat(32)}`;
+        expect(redactor.key(forged)).toBe(`iban:DE89…3000#${"0".repeat(32)}`);
+    });
+});
+
+describe("redactor.value", () => {
+    it("redacts every string deeply, keys included", () => {
+        const input = { to: "jane@acme.com", list: [IBAN, 5, null, true], nested: { "a@b.co": "x" } };
+        expect(redactor.value(input)).toEqual({
+            to: "j…@acme.com",
+            list: ["DE89…3000", 5, null, true],
+            nested: { "a…@b.co": "x" },
+        });
+    });
+
+    it("removes whatever a secret-named field holds", () => {
+        expect(redactor.value({ password: "hunter2", token: { value: "x" }, name: "Jo" })).toEqual({
+            password: "…",
+            token: "…",
+            name: "Jo",
+        });
+    });
+
+    it("keeps nothing past the depth limit", () => {
+        let deep: unknown = IBAN;
+        for (let i = 0; i < 40; i++) {
+            deep = [deep];
+        }
+        expect(JSON.stringify(redactor.value(deep))).not.toContain(IBAN);
+    });
+});

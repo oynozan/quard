@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { runEvent } from "./schema.ts";
 
-const base = { runId: "r", stepId: "s", agent: "default", at: "2026-10-03T12:00:00.000Z" };
+const RUN = "a".repeat(32);
+const base = { runId: RUN, stepId: "b".repeat(16), agent: "default", at: "2026-10-03T12:00:00.000Z" };
 
 describe("runEvent", () => {
     it.each([
@@ -10,10 +11,25 @@ describe("runEvent", () => {
             ...base,
             model: "gpt",
             toolCalls: [{ callId: "c", name: "t", arguments: "{}" }],
+            usage: { inputTokens: 10, cachedTokens: 2, outputTokens: 5 },
             status: "ok",
             durationMs: 3,
         },
-        { type: "run_started", runId: "r", agent: "a", at: "t", origins: { "mcp:crm": { trust: "trusted" } } },
+        {
+            type: "run_finished",
+            runId: RUN,
+            agent: "a",
+            at: "2026-10-03T12:00:00.000Z",
+            status: "failed",
+            error: "boom",
+        },
+        {
+            type: "run_started",
+            runId: RUN,
+            agent: "a",
+            at: "2026-10-03T12:00:00.000Z",
+            origins: { "mcp:crm": { trust: "trusted" } },
+        },
         {
             type: "tool_call",
             ...base,
@@ -63,6 +79,26 @@ describe("runEvent", () => {
             decision: "maybe",
             mode: "block",
             enforced: true,
+        };
+
+        expect(runEvent.safeParse(event).success).toBe(false);
+    });
+
+    it.each([
+        ["a run id that is not 32 hex characters", { runId: "run-1" }],
+        ["a step id that is not 16 hex characters", { stepId: "step" }],
+        ["a time that is not ISO", { at: "yesterday" }],
+        ["an empty agent", { agent: "" }],
+        ["a negative duration", { durationMs: -1 }],
+    ])("rejects %s", (_, change) => {
+        const event = {
+            type: "model_call",
+            ...base,
+            model: "m",
+            toolCalls: [],
+            status: "ok",
+            durationMs: 1,
+            ...change,
         };
 
         expect(runEvent.safeParse(event).success).toBe(false);

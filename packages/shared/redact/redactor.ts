@@ -1,0 +1,67 @@
+import { replaceEmails } from "../normalize/email.ts";
+import { replaceIbans } from "../normalize/iban.ts";
+import { replaceCards } from "./cards.ts";
+import { keyedHash } from "./hash.ts";
+import { CUT, maskCard, maskEmail, maskIban } from "./masks.ts";
+import { removeSecrets, SECRET_FIELD } from "./secrets.ts";
+
+export type Redactor = {
+    // Secrets removed; IBANs, card numbers and emails masked
+    text(value: string): string;
+    // A value key such as "iban:DE89...". Sensitive ones become
+    // "iban:DE89…3000#<hash>", so search and tracing still match.
+    key(key: string): string;
+    // Every string inside a value. Secret-named fields lose their value.
+    value(value: unknown): unknown;
+};
+
+const SENSITIVE = new Set(["iban", "email"]);
+const HASHED = /^(.*)#([0-9a-f]{32})$/;
+const MAX_DEPTH = 32;
+
+export function redactText(text: string): string {
+    const noSecrets = removeSecrets(text);
+    return replaceEmails(replaceCards(replaceIbans(noSecrets, maskIban), maskCard), maskEmail);
+}
+
+export function createRedactor(hashKey: Buffer): Redactor {
+    const key = (entry: string): string => {
+        const at = entry.indexOf(":");
+        const kind = entry.slice(0, Math.max(at, 0));
+        const raw = entry.slice(at + 1);
+        if (!SENSITIVE.has(kind)) {
+            return at === -1 ? redactText(entry) : `${kind}:${redactText(raw)}`;
+        }
+        // Already hashed, for example by the SDK: keep the hash, check the mask
+        const done = HASHED.exec(raw);
+        if (done !== null) {
+            return `${kind}:${redactText(String(done[1]))}#${String(done[2])}`;
+        }
+        const mask = kind === "iban" ? maskIban(raw) : maskEmail(raw);
+        return `${kind}:${mask}#${keyedHash(hashKey, kind, raw)}`;
+    };
+
+    const value = (input: unknown, depth = 0): unknown => {
+        if (typeof input === "string") {
+            return redactText(input);
+        }
+        if (input === null || typeof input !== "object") {
+            return input;
+        }
+        // Too deep to check, so nothing in it is kept
+        if (depth >= MAX_DEPTH) {
+            return CUT;
+        }
+        if (Array.isArray(input)) {
+            return input.map((item: unknown) => value(item, depth + 1));
+        }
+        return Object.fromEntries(
+            Object.entries(input).map(([name, item]) => [
+                redactText(name),
+                SECRET_FIELD.test(name) ? CUT : value(item, depth + 1),
+            ]),
+        );
+    };
+
+    return { text: redactText, key, value: (input) => value(input) };
+}

@@ -2,11 +2,18 @@ import { z } from "zod";
 
 // Events the SDK records for each run. M2 sends them to webhook.
 
+// Strict shapes, so bad data is refused at the door instead of failing in the database
+const runId = z.string().regex(/^[0-9a-f]{32}$/);
+const stepId = z.string().regex(/^[0-9a-f]{16}$/);
+const at = z.iso.datetime();
+const durationMs = z.number().min(0).max(2_147_483_647);
+const tokens = z.number().int().min(0);
+
 const base = {
-    runId: z.string(),
-    stepId: z.string(),
-    agent: z.string(),
-    at: z.string(),
+    runId,
+    stepId,
+    agent: z.string().min(1),
+    at,
 };
 
 const trust = z.enum(["trusted", "untrusted"]);
@@ -15,21 +22,34 @@ const sensitivity = z.enum(["internal", "public"]);
 // The origin overrides in force when the run started
 export const runStartedEvent = z.object({
     type: z.literal("run_started"),
-    runId: z.string(),
-    agent: z.string(),
-    at: z.string(),
+    runId,
+    agent: z.string().min(1),
+    at,
     origins: z.record(z.string(), z.object({ trust: trust.optional(), sensitivity: sensitivity.optional() })),
+});
+
+// The end of a quard.run(): how its function finished. "blocked" means a
+// guard with onBlock: "throw" stopped it.
+export const runFinishedEvent = z.object({
+    type: z.literal("run_finished"),
+    runId,
+    agent: z.string().min(1),
+    at,
+    status: z.enum(["completed", "failed", "blocked"]),
+    error: z.string().optional(),
 });
 
 export const modelCallEvent = z.object({
     type: z.literal("model_call"),
     ...base,
-    parentStepId: z.string().optional(),
+    parentStepId: stepId.optional(),
     model: z.string(),
     responseId: z.string().optional(),
     toolCalls: z.array(z.object({ callId: z.string(), name: z.string(), arguments: z.string() })),
+    // Token counts the API reported. Cached tokens are part of the input count.
+    usage: z.object({ inputTokens: tokens, cachedTokens: tokens, outputTokens: tokens }).optional(),
     status: z.enum(["ok", "error"]),
-    durationMs: z.number(),
+    durationMs,
 });
 
 export const toolCallEvent = z.object({
@@ -43,7 +63,9 @@ export const toolCallEvent = z.object({
     influenced: z.boolean(),
     // Some of that content was flagged by a source guard
     flagged: z.boolean(),
-    durationMs: z.number(),
+    // Value keys in the arguments, so search can find them after redaction
+    keys: z.array(z.string()).optional(),
+    durationMs,
     error: z.string().optional(),
 });
 
@@ -80,6 +102,7 @@ export const warningEvent = z.object({
 
 export const runEvent = z.discriminatedUnion("type", [
     runStartedEvent,
+    runFinishedEvent,
     modelCallEvent,
     toolCallEvent,
     decisionEvent,
@@ -89,6 +112,7 @@ export const runEvent = z.discriminatedUnion("type", [
 
 export type RunEvent = z.infer<typeof runEvent>;
 export type RunStartedEvent = z.infer<typeof runStartedEvent>;
+export type RunFinishedEvent = z.infer<typeof runFinishedEvent>;
 export type ModelCallEvent = z.infer<typeof modelCallEvent>;
 export type ToolCallEvent = z.infer<typeof toolCallEvent>;
 export type DecisionEvent = z.infer<typeof decisionEvent>;
