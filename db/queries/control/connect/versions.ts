@@ -17,21 +17,27 @@ export async function agentVersions(
     agent: string,
     options: { limit: number },
 ): Promise<AgentVersionItem[]> {
-    return db
+    const newest = db
         .selectFrom("agent_versions")
-        .select([
-            "version",
-            "model",
-            "tools",
-            sql<string | null>`left(encode(sha256(convert_to(instructions, 'UTF8')), 'hex'), 16)`.as(
-                "instructionsHash",
-            ),
-            "first_seen_at as firstSeenAt",
-        ])
+        .select(["version", "model", "tools", "instructions", "first_seen_at"])
         .where("project_id", "=", projectId)
         .where("agent", "=", agent)
         .orderBy("first_seen_at", "desc")
         .orderBy("version", "desc")
-        .limit(options.limit)
+        .limit(options.limit);
+    // Hashed after the limit, or Postgres would hash every version before sorting
+    return db
+        .selectFrom(newest.as("v"))
+        .select([
+            "v.version",
+            "v.model",
+            "v.tools",
+            sql<string | null>`left(encode(sha256(convert_to(v.instructions, 'UTF8')), 'hex'), 16)`.as(
+                "instructionsHash",
+            ),
+            "v.first_seen_at as firstSeenAt",
+        ])
+        .orderBy("v.first_seen_at", "desc")
+        .orderBy("v.version", "desc")
         .execute();
 }

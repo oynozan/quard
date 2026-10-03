@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestDb, type TestDb } from "../../../test/pglite.ts";
+import { planOf } from "../../../test/plan.ts";
 import { createProject } from "../../projects.ts";
 import { saveAgentVersion, type AgentVersionInput } from "../connections.ts";
 import { agentVersions } from "./versions.ts";
@@ -78,6 +79,16 @@ describe("agentVersions", () => {
 
         const versions = await agentVersions(test.db, projectId, "billing", { limit: 2 });
         expect(versions.map((row) => row.version)).toEqual([V3, V2]);
+    });
+
+    it("hashes the instructions of only the versions it keeps", async () => {
+        const projectId = await createProject(test.db, "Acme");
+
+        const plan = await planOf(test, (db) => agentVersions(db, projectId, "billing", { limit: 2 }));
+        // Below the limit, Postgres would hash every version the agent ever had
+        const [above, below] = plan.split(/^\s*(?:->\s+)?Limit$/m);
+        expect(above).toContain("sha256");
+        expect(below).not.toContain("sha256");
     });
 
     it("has no versions for an agent control never heard about", async () => {
