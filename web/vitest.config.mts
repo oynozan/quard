@@ -9,6 +9,7 @@ export default defineConfig({
     resolve: { alias: { "server-only": fileURLToPath(new URL("./test/server-only.ts", import.meta.url)) } },
     test: {
         environment: "jsdom",
+        setupFiles: ["./test/setup.ts"],
         passWithNoTests: true,
         coverage: {
             provider: "v8",
