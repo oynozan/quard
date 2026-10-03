@@ -580,7 +580,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
     - **Label lookups:** the labels behind a reference in a message, a memory item or a chained response. (**Claude's pick**)
 - **worker** runs jobs from the queue: the root-cause finder, replay, the AI reviewer and retention cleanup. It has no endpoint.
 - **web** is the dashboard. It reads and writes Postgres through its own server code and does not call `control`. When an approver decides, `web` writes the decision to Postgres, and `control` hears about it through Postgres `LISTEN/NOTIFY`. (**Claude's pick**)
-- **Dashboard sign-in.** Email and password accounts in Postgres, with admin and approver roles. Every approval records who decided. Single sign-on comes later. (**Claude's pick**)
+- **Dashboard sign-in.** Privy, with an email code or GitHub. There are no passwords. Quard keeps its own signed session cookie, and the allowed emails and GitHub names are set on the server. Every approval records who decided. (**Owner**)
 
 ## Dashboard
 
@@ -637,7 +637,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Where guards run | In-process; the backend for shared state | Spec |
 | — | Database and queue | Postgres only, with pg-boss | Claude's pick |
 | — | SDK event format | Our own JSON API to `webhook`; W3C ids | Claude's pick |
-| — | Auth | Agent keys for the SDK; email and password accounts for the dashboard | Owner, Claude's pick |
+| — | Auth | Agent keys for the SDK; Privy sign-in (email code or GitHub) for the dashboard | Owner |
 | — | SDK names | The `quard` object (`wrap`, `run`, `agent`, `configure`, `inject`, `resume`), `guard()`, `isGuardRefusal`, `GuardBlockedError` | Owner |
 | — | Blocked tool calls inside monitor | The call stays in the response, marked blocked; the guarded tool refuses it | Owner |
 

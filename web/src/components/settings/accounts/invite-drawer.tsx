@@ -111,7 +111,7 @@ function InviteForm({ taken, onInvited, onCancel }: InviteFormProps) {
                     </Button>
                 }
             >
-                <Hint content="They get a one-time link to set a password. It expires after 7 days.">
+                <Hint content="They sign in with a code sent to this email, or with GitHub.">
                     <Button type="submit" variant="default" busy={busy}>
                         {busy ? "Sending invite…" : "Send invite"}
                     </Button>

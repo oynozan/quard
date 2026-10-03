@@ -32,7 +32,7 @@ Milestones 0 and 1 need no more decisions.
 - First migrations: projects, agent keys, runs, steps, events, labels and decisions.
 - Redaction in the SDK before upload: secrets removed, and keyed hashes with masks for IBANs, card numbers and emails.
 - The SDK uploads events to `webhook` in batches. `webhook` checks the agent key and the schemas, then writes to Postgres.
-- `web`: email and password sign-in, a run list and a run timeline colored by labels.
+- `web`: Privy sign-in (email code or GitHub), a run list and a run timeline colored by labels.
 
 **Done when** a test agent's run shows up in the dashboard, and no secret or raw IBAN is stored.
 
