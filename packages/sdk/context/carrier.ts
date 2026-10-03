@@ -9,8 +9,9 @@ import { exactOccurrences } from "../labels/value-labels.ts";
 import { uploadsOn } from "../transport/configure.ts";
 import { storeLabels } from "../transport/labels.ts";
 import { readBaggage } from "./baggage.ts";
-import { newRun, type RunState } from "./run.ts";
+import { newRun } from "./run.ts";
 import { currentScope, narrowTools, runScope, withScope, type Scope } from "./scope.ts";
+import { startSharing } from "./shared-run.ts";
 
 // The three items that travel with a message between agents
 export type Carrier = {
@@ -66,11 +67,6 @@ function valuesOf(text: string, index: ContentIndex): ValueRecord[] {
     return [...found.values()];
 }
 
-// Where a run starts spanning processes, as a message carries it out or brings it in
-function runSpansProcesses(run: RunState): void {
-    void run;
-}
-
 // quard.inject(): stores the message's labels, then returns what travels with it
 export async function inject(options: InjectOptions): Promise<Carrier> {
     const scope = currentScope();
@@ -95,7 +91,8 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
         },
         run,
     );
-    runSpansProcesses(run);
+    // The run now spans processes, so its counters move to control
+    startSharing(run);
     // Without uploads the record lives in this process only
     if (uploadsOn() && !(await storeLabels([stored]))) {
         // A receiver in another process will read the message as untrusted
@@ -124,7 +121,7 @@ export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOp
     const kept = keptRun(checked.runId);
     const run = kept ?? newRun(checked.runId);
     if (kept === undefined) {
-        runSpansProcesses(run);
+        startSharing(run);
     }
     // The sender's tools cap what this agent may use
     const granted = known?.tools === undefined ? undefined : new Set(known.tools);

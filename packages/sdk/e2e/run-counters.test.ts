@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startSharing } from "../context/shared-run.ts";
 import { currentScope, type Scope } from "../context/scope.ts";
 import { guard, isGuardRefusal, quard } from "../index.ts";
+import { forgetRuns } from "../labels/records.ts";
 import { CONTROL_KEY, startControlServer, type ControlServer } from "../test/control-server.ts";
 import { fakeResponses } from "../test/fake-responses.ts";
 import { resetAll } from "../test/reset.ts";
@@ -43,6 +44,30 @@ function blocked(): string[] {
 }
 
 describe("a run that spans processes", () => {
+    it("shares its counters once a message carries it to another process", async () => {
+        const pay = vi.fn(async (input: { amount: number }) => `paid ${input.amount}`);
+        const payInvoice = guard(pay, { type: "limit", name: "payInvoice", maxCallsPerRun: 3 });
+
+        const carrier = await quard.run({ agent: "orchestrator" }, async () => {
+            await payInvoice({ amount: 1 });
+            await payInvoice({ amount: 2 });
+            return quard.inject({ content: "Pay the last invoice" });
+        });
+        // As if the receiver ran in another process
+        forgetRuns();
+        const outs = await quard.resume(
+            carrier,
+            async () => [await payInvoice({ amount: 3 }), await payInvoice({ amount: 4 })],
+            {
+                agent: "billing",
+            },
+        );
+
+        expect(outs[0]).toBe("paid 3");
+        expect(isGuardRefusal(outs[1])).toBe(true);
+        expect(pay).toHaveBeenCalledTimes(3);
+    });
+
     it("caps a tool's calls across both processes", async () => {
         const runId = newRunId();
         const pay = vi.fn(async (input: { amount: number }) => `paid ${input.amount}`);
