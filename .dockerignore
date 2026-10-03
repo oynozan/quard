@@ -4,3 +4,4 @@
 .git
 web/*
 !web/package.json
+sandbox

@@ -5,6 +5,8 @@ import tseslint from "typescript-eslint";
 export default defineConfig([
     // web/ has its own ESLint setup
     globalIgnores(["**/node_modules/**", "**/dist/**", "**/coverage/**", "web/**"]),
+    // sandbox/ holds local, gitignored examples
+    globalIgnores(["sandbox/**"]),
     js.configs.recommended,
     tseslint.configs.recommended,
     {
