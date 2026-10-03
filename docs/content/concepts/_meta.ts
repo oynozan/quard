@@ -5,6 +5,7 @@ const meta: MetaRecord = {
     "value-tracing": "Value tracing",
     guards: "Guards",
     approvals: "Approvals",
+    "multi-agent": "Multi-agent",
     "run-limits": "Run limits",
 };
 

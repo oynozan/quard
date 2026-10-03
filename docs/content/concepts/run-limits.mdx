@@ -64,7 +64,7 @@ Each field in the policy file wins over the same field in code. The order is def
 
 ## Runs across processes
 
-A run spans processes once `quard.inject()` or `quard.resume()` carries it to another one. From then on, its counters live in `control`, starting from what the process counted so far:
+A run spans processes once [`quard.inject()` or `quard.resume()`](/concepts/multi-agent#across-processes) carries it to another one. From then on, its counters live in `control`, starting from what the process counted so far:
 
 - Steps and cost.
 - The per-run counts of limit guards: `maxCallsPerRun` and `maxAmountPerRun`.

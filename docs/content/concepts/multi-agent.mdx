@@ -1,0 +1,130 @@
+# Multi-agent
+
+When agents work together, Quard puts all their steps in one run. That holds when they share a process and when they run in separate services. Labels go with every message, so a value from a web page stays untrusted after it passes through another agent.
+
+## One run, many agents
+
+In one process, `quard.run()` starts a run and `quard.agent()` starts a helper agent inside it. Every model call and guarded tool inside picks up the run, the agent and the step that led there, even across `await`.
+
+```ts
+await quard.run({ agent: "orchestrator" }, async () => {
+    await fetchPage({ url });
+
+    await quard.agent(
+        "billing",
+        async () => {
+            await payInvoice({ iban, amount });
+        },
+        { tools: ["payInvoice"] },
+    );
+});
+```
+
+- A helper can only use the tools its parent may use. `tools` narrows that list further. It can never add to it.
+- The agents form a run graph: the agent that started the run at the root, its helpers below it, and messages and handoffs as links in time order. The [run page](/guides/runs#read-a-run) draws it.
+- With the OpenAI Agents SDK, the agent comes from the framework instead. See [OpenAI Agents SDK](/integrations/openai-agents).
+
+## Sending and receiving
+
+Wrap each function that sends a message or delegates work with `guard()`, like any other tool. A limit guard with `delegateTo` also checks the [run limits](/concepts/run-limits) on depth, fan-out and loops.
+
+Wrap the function that reads incoming messages with a source guard whose origin is `"agent"`:
+
+```ts
+const delegate = guard(rawDelegate, { type: "limit", name: "delegate", delegateTo: "to" });
+const receive = guard(rawReceive, { type: "source", origin: "agent", name: "receive" });
+```
+
+A received message gets the origin `agent:<sender>`, with the trust and sensitivity of what the sender had read before it sent the message. Each traced value in it keeps the label it had in the sender's run. An IBAN from a web page still reads as `web:…` in the receiving agent's payment.
+
+The receive function returns the message. Pass it where to find the message, such as a queue name, not the text itself. Values a tool gets as arguments are not labeled again when they come back out.
+
+## Across processes
+
+When agents run in separate processes, three items go with each message:
+
+| Item            | What it is                                   |
+| --------------- | -------------------------------------------- |
+| Run id          | The run the message belongs to               |
+| Parent step id  | The sender's step that led to the message    |
+| Label reference | A key to the labels the sender stored for it |
+
+Together they are called the carrier. Set up both sides with `quard.configure()` and all four of `key`, `webhookUrl`, `controlUrl` and `hashKey`. The sender stores its labels through the webhook, and the receiver looks them up through `control`.
+
+### Sending
+
+`quard.inject({ content })` stores the labels of the message and returns the carrier. It returns a promise, so await it. Call it inside the run, with the exact text you send.
+
+Put the carrier in the slot your channel already has for metadata:
+
+| Channel | Slot                                                         |
+| ------- | ------------------------------------------------------------ |
+| HTTP    | The W3C `baggage` header, through `quard.toBaggage(carrier)` |
+| MCP     | `_meta`                                                      |
+| A2A     | `metadata`                                                   |
+| Queues  | Message attributes                                           |
+
+```ts
+const delegate = guard(
+    async ({ to, brief }: { to: string; brief: string }) => {
+        const carrier = await quard.inject({ content: brief });
+        await fetch(`https://${to}.internal/tasks`, {
+            method: "POST",
+            headers: { baggage: quard.toBaggage(carrier) },
+            body: brief,
+        });
+        return "sent";
+    },
+    { type: "limit", name: "delegate", delegateTo: "to" },
+);
+```
+
+`quard.toBaggage()` returns the members `quard-run`, `quard-parent` and `quard-labels`. If the request already has a baggage header, join them with a comma.
+
+### Receiving
+
+`quard.resume(carrier, fn, { agent })` runs `fn` inside the run the carrier names, as the agent you name. It returns a promise of what `fn` returns. It takes the carrier object or a whole baggage header.
+
+```ts
+const result = await quard.resume(
+    req.headers.baggage,
+    async () => {
+        const brief = await receive({ queue: "billing" });
+        return billing(brief);
+    },
+    { agent: "billing" },
+);
+```
+
+- The receive guard uses the carrier that `quard.resume()` came in with.
+- When each message brings its own carrier, such as in queue attributes, set `carrierOf` on the receive guard. It gets the receive function's arguments and returns the carrier.
+- The agent can only use the tools the sender may use. Pass `tools` to `quard.resume()` to narrow that further.
+- The run started in another process, so its start and end are not recorded here.
+
+## What travels and what doesn't
+
+| What                                       | Where it goes                                                               |
+| ------------------------------------------ | --------------------------------------------------------------------------- |
+| Run id, parent step id and label reference | In the message, in the channel's slot                                       |
+| The sender's name and delegation depth     | In the stored record, looked up by the receiver                             |
+| The tools the sender may use               | In the stored record. They cap what the receiving agent may use             |
+| The label of what the sender had read      | In the stored record                                                        |
+| The label of each traced value in the text | In the stored record. Sensitive values are stored as keyed hashes           |
+| A hash of the message text                 | In the stored record, to check the text on arrival                          |
+| The message text                           | Only in your message. Quard never stores it                                 |
+| The pages and emails the sender read       | Nowhere. The receiver only learns the labels of values that are in the text |
+| Steps, cost and per-run limit counts       | In `control`, shared by every process of the run                            |
+| Fan-out and loop counts                    | Nowhere. Each process counts its own                                        |
+
+The [run limits](/concepts/run-limits#runs-across-processes) page covers the counters.
+
+## A missing or changed message
+
+A message reads as untrusted, with the default for agents, when:
+
+- It has no carrier, or one Quard can't read. `quard.resume()` then starts a new run, and the message's origin is `agent:unknown`.
+- Its label reference finds no record. The sender couldn't store it, or `control` didn't answer in time.
+- The record belongs to another run.
+- The text changed on the way, so its hash no longer matches the record.
+
+So a rule that wants an IBAN from your supplier records still blocks a payment built from that message. A sender that couldn't store its record also records a `label_record_not_stored` warning, and the run shows the message as not verified.
