@@ -1,0 +1,57 @@
+# Labels and trust
+
+Quard labels every piece of content an agent reads: the user's message, a web page, an email, a tool result or a message from another agent. The label says where the content came from, and that decides how far Quard trusts it.
+
+## The three parts of a label
+
+| Part        | What it says                                                      | Example                       |
+| ----------- | ----------------------------------------------------------------- | ----------------------------- |
+| Origin      | The tool, domain, sender, server or agent that let the content in | `web:supplier-portal.example` |
+| Trust       | Trusted or untrusted                                              | untrusted                     |
+| Sensitivity | Internal or public                                                | public                        |
+
+## Where the origin comes from
+
+The origin comes from the guarded tool that let the content in, such as the web fetch tool that loaded a page or the inbox tool that read an email. It never comes from the content itself or from an AI. A page cannot claim to be trusted, and no model is asked to judge where text came from.
+
+Trust and sensitivity follow from the origin.
+
+## Default trust
+
+| Origin                                                                  | Trust                      | Sensitivity                |
+| ----------------------------------------------------------------------- | -------------------------- | -------------------------- |
+| The user                                                                | trusted                    | internal                   |
+| Your own tools, with any guard except a source guard                    | trusted                    | internal                   |
+| Web pages and hosted web search                                         | untrusted                  | public                     |
+| Outside email, read by inbox tools                                      | untrusted                  | public                     |
+| MCP servers                                                             | untrusted                  | public                     |
+| Files read by source tools                                              | untrusted                  | internal                   |
+| Another agent                                                           | the labels of what it sent | the labels of what it sent |
+| Unknown: tools without a guard, unlabeled memory and unwatched channels | untrusted                  | internal                   |
+
+## Changing the defaults
+
+Teams change the trust or sensitivity of one origin at a time, in code. For example, a team can trust its own MCP server because it only serves the team's own CRM data. Every change is recorded in the run, and the dashboard lists them all under [Origin overrides](/guides/settings#origin-overrides).
+
+Apps open to the public can mark the user as untrusted.
+
+## The context label
+
+Each call also gets a context label: the least trusted and most sensitive label among everything the model read before it asked for the call. When that label is untrusted, the call is **influenced**. An agent that reads a web page and then sends an email makes an influenced call.
+
+An agent that browses the web is influenced almost all the time. So rules for sensitive actions also look at where each argument came from, not only at the context. See [Value tracing](/concepts/value-tracing).
+
+In the dashboard, the [run timeline](/guides/runs#read-a-run) colors every step by its context label.
+
+## Labels across agents
+
+Content keeps its labels when it moves between agents. A brief from another agent that arrives as a user message still carries the web label of the page it came from, because Quard labels content by matching it against what the run has already read, not by the role of the message.
+
+- **Across processes**, a message carries only the run id, the step that sent it and a reference to its labels. The receiving side looks the labels up. A missing or broken reference counts as untrusted.
+- **Shared memory** keeps its labels too. They are stored with a hash of the content and come back on read, even in a later run. Content changed outside Quard fails the hash check and reads back as untrusted.
+
+## Labels and AI
+
+AI never assigns labels. Content that a model judges could argue its way to trusted, so the origin stays a recorded fact.
+
+AI detectors can only make things stricter. A high-risk score can flag a call, ask a person or block it. It can never allow what a rule blocked, or raise trust.

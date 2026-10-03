@@ -6,5 +6,9 @@ pnpm-lock.yaml
 web/.next
 web/out
 web/next-env.d.ts
+docs/.next
+docs/out
+docs/next-env.d.ts
+docs/public/_pagefind
 # Written by a test from the zod schemas
 packages/sdk/examples/**/*.schema.json

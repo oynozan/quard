@@ -1,0 +1,33 @@
+# Value tracing
+
+A call's [context label](/concepts/labels#the-context-label) says whether the agent had read anything untrusted. Value tracing goes further. For each argument of a tool call, it finds every place that value appeared earlier in the run. That tells you whether the IBAN in a payment came from your supplier records or from a web page.
+
+## How matching works
+
+- Values are compared after normalizing case, spaces and URL form.
+- The search covers everything the run has read, across all its agents. An IBAN from one agent's web page is caught in another agent's payment.
+- A known value is also found inside a longer argument, such as an IBAN or a URL inside an email body.
+
+## What gets traced
+
+| Kind of value                                        | Traced                                                                              |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| IBANs, email addresses, URLs and domains, file paths | Always                                                                              |
+| Values that look like ids                            | When they are at least 8 characters long, have no spaces and contain a digit        |
+| Words, phrases, dates and amounts                    | Not on their own. The call is still marked influenced when its context is untrusted |
+
+URLs and emails also match by host and by main domain, so `mail.acme.co.uk` matches `acme.co.uk`. The Public Suffix List decides what the main domain is. Ids match only as whole words.
+
+## Model-generated values
+
+A value found nowhere earlier in the run is **model-generated**: the model wrote it instead of copying it from something it read. Rules can treat a model-generated value as untrusted for sensitive fields, such as an IBAN.
+
+Content that Quard never sees can't be traced. Pages read by the model provider's hosted web search are one example: values copied from them also show as model-generated.
+
+Matching is exact after normalizing. Near matches and paraphrases are not found.
+
+## In the dashboard
+
+- The [step drawer](/guides/runs#look-at-one-step) lists each argument with **First seen in** and how it matched: exact, or inside a value.
+- [Approval requests](/guides/approvals#answer-a-request) show untrusted origins and **model-generated** under each argument.
+- [Search](/guides/search) finds a traced value across all runs. Sensitive values are stored as keyed hashes, and the same value always gives the same hash, so tracing and search still match them.

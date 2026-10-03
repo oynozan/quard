@@ -1,0 +1,222 @@
+/* Navbar, sidebar, table of contents, search and the other page chrome */
+
+.nextra-navbar-blur {
+    background: var(--page) !important;
+    border-bottom: 1px solid var(--line);
+}
+
+.nextra-navbar nav a,
+.nextra-navbar nav button {
+    color: var(--ink-2);
+}
+
+.nextra-navbar nav a:hover,
+.nextra-navbar nav button:hover {
+    color: var(--ink-bright);
+}
+
+.quard-wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.quard-wordmark-name {
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.2px;
+}
+
+.quard-wordmark-tag {
+    color: var(--ink-muted);
+    font-size: 14px;
+    font-weight: 300;
+    line-height: 1;
+}
+
+/* Search field: a Control fill with no border, the hint on a Tile chip */
+.nextra-search input {
+    height: 32px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: var(--control) !important;
+    color: var(--ink);
+    font-size: 13px;
+}
+
+.nextra-search input:focus-visible {
+    outline: none;
+    border-color: var(--signal);
+}
+
+.nextra-search kbd {
+    border: 0 !important;
+    border-radius: 4px;
+    background: var(--tile) !important;
+    color: var(--ink-absent) !important;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 0 4px;
+}
+
+.nextra-search-results {
+    border: 1px solid var(--line-strong) !important;
+    border-radius: 6px !important;
+    background: var(--surface) !important;
+}
+
+.nextra-search-results [data-focus] {
+    border-radius: 3px;
+    background: var(--highlight) !important;
+}
+
+.nextra-search-results mark,
+.nextra-search-results [class*="text-primary"] {
+    background: none;
+    color: var(--ink-bright) !important;
+}
+
+/* Sidebar: the Rail with a hairline edge */
+.nextra-sidebar {
+    background: var(--rail);
+    border-inline-end: 1px solid var(--line);
+}
+
+.nextra-sidebar a,
+.nextra-sidebar button {
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.nextra-sidebar a[class*="x:dark:text-neutral-400"],
+.nextra-sidebar button[class*="x:dark:text-neutral-400"] {
+    color: var(--ink-2);
+}
+
+.nextra-sidebar a[class*="x:dark:text-neutral-400"]:hover,
+.nextra-sidebar button[class*="x:dark:text-neutral-400"]:hover {
+    background: var(--nav-hover);
+    color: var(--ink-bright);
+}
+
+/* The selected item is a fill with a green label, never an outline */
+.nextra-sidebar a[class*="x:dark:text-primary-600"],
+.nextra-sidebar button[class*="x:dark:text-primary-600"] {
+    background: var(--selected);
+    color: var(--signal);
+    font-weight: 500;
+}
+
+.nextra-sidebar li > div[class*="before:"]::before {
+    border-color: var(--line) !important;
+}
+
+/* Nextra paints the footer with the page color; keep it on the Rail, full width */
+.nextra-sidebar-footer {
+    margin-inline: 0;
+    padding-inline: 12px;
+    border-color: var(--line) !important;
+    background: var(--rail);
+}
+
+/* Icon buttons: no box at rest, a flat fill on hover */
+.nextra-sidebar-footer button,
+.nextra-hamburger {
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-2);
+}
+
+.nextra-sidebar-footer button:hover,
+.nextra-hamburger:hover {
+    background: var(--control-hover);
+    color: var(--ink-bright);
+}
+
+/* Table of contents */
+.nextra-toc p {
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 0.085em;
+    text-transform: uppercase;
+}
+
+.nextra-toc ul a {
+    color: var(--ink-muted);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+.nextra-toc ul a:hover {
+    color: var(--ink-bright);
+}
+
+.nextra-toc ul a[class*="x:text-primary-600"] {
+    color: var(--signal);
+}
+
+/* Breadcrumb */
+.nextra-breadcrumb {
+    color: var(--ink-muted);
+    font-size: 13px;
+}
+
+.nextra-breadcrumb svg {
+    color: var(--ink-faint);
+}
+
+/* Skip link: shown only on keyboard focus */
+.nextra-skip-nav:focus {
+    border: 0 !important;
+    border-radius: 6px;
+    background: var(--signal) !important;
+    color: var(--on-signal) !important;
+    padding: 10px 16px !important;
+}
+
+.nextra-mobile-nav {
+    background: var(--rail) !important;
+}
+
+/* "Copy page": the flat secondary button and its menu */
+article .nextra-border.x\:float-end {
+    border: 0 !important;
+    border-radius: 6px;
+    background: var(--control-hover);
+}
+
+article .nextra-border.x\:float-end button {
+    color: var(--ink-soft);
+}
+
+article .nextra-border.x\:float-end button:hover {
+    background: var(--highlight);
+    color: var(--ink-bright);
+}
+
+[role="listbox"] {
+    border: 1px solid var(--line-strong) !important;
+    border-radius: 6px !important;
+    background: var(--surface) !important;
+}
+
+[role="listbox"] [role="option"][data-focus] {
+    border-radius: 3px;
+    background: var(--highlight) !important;
+}
+
+/* Like the dashboard: the sidebar sits flush left and the page fills the screen */
+body {
+    --nextra-content-width: 100%;
+}
+
+/* Keep the text a readable width on wide screens */
+article {
+    max-width: 1040px;
+    margin-inline: auto;
+}

@@ -1,0 +1,209 @@
+/* Article typography. Titles stay thin and are never bold or green. */
+
+article {
+    color: var(--ink);
+    font-size: 15px;
+}
+
+article p,
+article li {
+    line-height: 1.75;
+}
+
+article h1,
+article h2,
+article h3,
+article h4,
+article h5,
+article h6 {
+    color: var(--ink);
+    font-family: var(--font-sans);
+}
+
+article h1 {
+    font-size: 27px;
+    font-weight: 200;
+    line-height: 1.25;
+    letter-spacing: -0.2px;
+}
+
+article h2 {
+    border-bottom: 1px solid var(--line);
+    font-size: 21px;
+    font-weight: 200;
+    line-height: 1.3;
+    letter-spacing: -0.2px;
+    padding-bottom: 8px;
+}
+
+article h3 {
+    font-size: 17px;
+    font-weight: 200;
+    line-height: 1.4;
+}
+
+article h4 {
+    font-size: 15px;
+    font-weight: 500;
+}
+
+article h5,
+article h6 {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+article h6 {
+    color: var(--ink-muted);
+}
+
+/* Inline links always show an underline, and brighten on hover */
+article p a,
+article li a,
+article td a,
+article blockquote a {
+    color: var(--ink-link);
+    text-decoration: underline;
+    text-decoration-color: var(--line-hover);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+}
+
+article p a:hover,
+article li a:hover,
+article td a:hover,
+article blockquote a:hover {
+    color: var(--ink-bright);
+    text-decoration-color: var(--ink-2);
+}
+
+article ul > li::marker,
+article ol > li::marker {
+    color: var(--ink-faint);
+}
+
+article blockquote {
+    border-inline-start: 2px solid var(--line-strong);
+    color: var(--ink-2);
+    font-style: normal;
+}
+
+article hr {
+    border-color: var(--line);
+}
+
+article kbd {
+    border: 0;
+    border-radius: 4px;
+    background: var(--tile);
+    color: var(--ink-absent);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 1px 5px;
+}
+
+/* Screenshots share the page color, so a pane edge frames them */
+article img {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+/* Tables: a Recess header band and hairline rows */
+article table {
+    font-size: 13px;
+}
+
+article table tr {
+    border-color: var(--line) !important;
+    background: transparent !important;
+}
+
+article table th,
+article table td {
+    border-width: 0 0 1px;
+    border-color: var(--line) !important;
+    padding: 10px 12px;
+}
+
+article table th {
+    background: var(--recess);
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-weight: 400;
+    text-align: start;
+}
+
+/* Last updated line and the bottom pagination */
+article .x\:mt-12 {
+    color: var(--ink-muted);
+}
+
+article a[class*="nextra-focus"][class*="x:text-gray-600"] {
+    color: var(--ink-link);
+    font-size: 14px;
+    font-weight: 400;
+}
+
+article a[class*="nextra-focus"][class*="x:text-gray-600"] svg {
+    width: 14px;
+    opacity: 0.6;
+}
+
+article a[class*="nextra-focus"][class*="x:text-gray-600"]:hover {
+    color: var(--ink-bright);
+}
+
+/* The 404 page: a centered system page */
+.quard-system-page {
+    display: flex;
+    min-height: 60vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    text-align: center;
+}
+
+.quard-system-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink-muted);
+    font-size: 12px;
+}
+
+.quard-system-title {
+    color: var(--ink);
+    font-size: 24px;
+    font-weight: 200;
+    line-height: 1.3;
+    letter-spacing: -0.2px;
+}
+
+.quard-system-text {
+    max-width: 46ch;
+    color: var(--ink-muted);
+    font-size: 14px;
+    line-height: 1.75;
+}
+
+/* The primary button: green fill, dark label */
+.quard-button {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    margin-top: 8px;
+    border: 1px solid var(--signal);
+    border-radius: 6px;
+    background: var(--signal);
+    color: var(--on-signal);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 7px 14px;
+}
+
+.quard-button:hover {
+    border-color: var(--mint);
+    background: var(--mint);
+}

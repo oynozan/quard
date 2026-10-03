@@ -1,0 +1,30 @@
+# Search
+
+Search finds a value anywhere in any run: a domain, a bank account, an email address, a file path, an id, an agent or a tool. Use it to answer questions like "which runs touched this domain?" or "where else did this IBAN show up?"
+
+![The search page](/images/guides/search.webp)
+
+1. **Search field.** Type or paste a value. Press `/` to jump here and Escape to clear it.
+2. **Search.** Runs the search.
+3. **Try.** Example searches to start from.
+4. **What you can search.** How each kind of value matches.
+
+| You search for                | It matches                            |
+| ----------------------------- | ------------------------------------- |
+| A domain or URL               | The same host or the same main domain |
+| An IBAN, card number or email | The exact value, by its hash          |
+| A file path or id             | Any value that holds it               |
+| An agent or tool              | The runs where it appears             |
+| Other text                    | At least 3 characters                 |
+
+## Read the results
+
+![Search results](/images/guides/search-results.webp)
+
+1. **Summary.** How many steps matched, in how many runs, the kind of value and its masked form.
+2. **By hash.** Sensitive values are stored as keyed hashes, never in clear. Quard hashes what you typed the same way and matches on that.
+3. **A run.** Matches are grouped by run, with its status, the agent that started it and when. Click the run id to open the run.
+4. **A match.** The step, the agent, the field and the value, with how it matched: **exact**, or **inside a value** when it was part of a longer one. Click the row to open that step.
+5. **Origin.** Where the matched content came from.
+
+When there are many matches, Search shows the newest 50. The search is part of the page address, so you can share it as a link.

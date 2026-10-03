@@ -1,0 +1,25 @@
+# Overview
+
+The overview is the home page. It shows how your agents are doing right now and what needs your attention.
+
+## Activity
+
+![The top of the overview](/images/guides/overview-top.webp)
+
+1. **Model calls.** Model calls across all agents over the last 24 hours, in 10-minute columns. The heading says how many agents are running. **Live** means the chart updates as calls arrive.
+2. **Runs.** Runs started in the last 24 hours, and the rate per hour.
+3. **Guarded tools.** How many of the tools your agents call are wrapped with a guard, out of every tool Quard has seen. A tool without a guard can only be recorded, never stopped.
+4. **Block rate.** The share of guard decisions that blocked a call, per day over the last 30 days. A day above the dashed line is worth a look.
+5. **Guard decisions.** Calls blocked, and calls that asked a person, in the last 24 hours.
+
+## What needs attention
+
+![The lists on the overview](/images/guides/overview-lists.webp)
+
+1. **Approvals waiting.** Calls waiting for a person. **Influenced by** shows the untrusted origin that shaped a call. **No longer waiting** means the process that asked has stopped, but the request is still open. Click a row to answer it.
+2. **Recent runs.** The latest runs, with their status, a strip of their guard decisions and their cost. Click a row to open the run.
+3. **Incidents.** The latest incidents, with their cause and the state of their replay.
+4. **Decision log.** Guard decisions as they happen: the time, the guard and its decision, the agent, the tool and the reason.
+5. **Agents and guards.** Which agents are running, idle or offline, with their version, and how many decisions each kind of guard made.
+
+**View all** beside a list opens its full page.

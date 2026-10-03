@@ -1,0 +1,146 @@
+/* Quard is dark only. Tokens follow web/DESIGN.md and web/src/app/globals.css. */
+:root {
+    color-scheme: dark;
+
+    /* Signal */
+    --signal: #00da71;
+    --mint: #5dda9d;
+    --on-signal: #161616;
+    --mint-wash: #25372e;
+
+    /* Surfaces, from the page upward */
+    --page: #161616;
+    --rail: #181818;
+    --panel: #191919;
+    --recess: #1a1a1a;
+    --surface: #1c1c1c;
+    --nav-hover: #202020;
+    --control: #222222;
+    --hover: #242424;
+    --tile: #252525;
+    --selected: #2a2a2a;
+    --control-hover: #2b2b2b;
+    --highlight: #333333;
+
+    /* Lines */
+    --line: #2b2b2b;
+    --line-strong: #3a3a3a;
+    --line-hover: #4d4d4d;
+    --field-focus: #929288;
+
+    /* Text ramp */
+    --ink-bright: #f2f2ed;
+    --ink: #ededeb;
+    --ink-soft: #dbdbd6;
+    --ink-alert: #dbdbc9;
+    --ink-link: #c1c1b9;
+    --ink-2: #a2a29a;
+    --ink-muted: #999996;
+    --ink-note: #8f8f83;
+    --ink-faint: #81817e;
+    --ink-subtle: #747471;
+    --ink-absent: #6e6e66;
+
+    /* Status */
+    --warning: #d6b868;
+    --danger: #d97878;
+    --problem: #d98c7a;
+    --caution-text: #e0b5a6;
+    --caution-surface: #241c19;
+    --caution-border: #4a3a33;
+
+    --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-ubuntu-mono), ui-monospace, monospace;
+
+    /* Nextra's theme variables, moved onto the warm ramp */
+    --x-font-sans: var(--font-sans);
+    --x-font-mono: var(--font-mono);
+    --x-color-gray-50: var(--ink-bright);
+    --x-color-gray-100: var(--ink);
+    --x-color-gray-200: var(--ink-soft);
+    --x-color-gray-300: var(--ink-link);
+    --x-color-gray-400: var(--ink-2);
+    --x-color-gray-600: var(--ink-faint);
+    --x-color-gray-700: var(--line-strong);
+    --x-color-gray-800: var(--line);
+    --x-color-gray-900: var(--surface);
+    --x-color-neutral-50: var(--ink-bright);
+    --x-color-neutral-200: var(--ink-soft);
+    --x-color-neutral-300: var(--ink-link);
+    --x-color-neutral-400: var(--ink-2);
+    --x-color-neutral-500: var(--ink-muted);
+    --x-color-neutral-600: var(--ink-faint);
+    --x-color-neutral-700: var(--line-strong);
+    --x-color-neutral-800: var(--line);
+    --x-color-neutral-900: var(--surface);
+    --x-color-slate-100: var(--ink);
+    --x-color-slate-200: var(--ink);
+    --x-color-slate-700: var(--ink-soft);
+    --x-color-slate-900: var(--ink);
+}
+
+html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-kerning: normal;
+    text-rendering: optimizeLegibility;
+}
+
+/* The Hairline Rule: borders, never shadows, and no frosted glass */
+body * {
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+}
+
+a,
+button,
+input,
+summary {
+    transition:
+        color 160ms,
+        background-color 160ms,
+        border-color 160ms,
+        opacity 160ms;
+}
+
+:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 4px;
+}
+
+::selection {
+    background: var(--mint);
+    color: var(--on-signal);
+}
+
+::placeholder {
+    color: var(--ink-faint);
+    opacity: 1;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #444444 #1b1b1b;
+}
+
+.quard-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+}

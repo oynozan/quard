@@ -1,5 +1,6 @@
 packages:
     - db
+    - docs
     - packages/*
     - services/*
     - web
@@ -35,3 +36,8 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
     - eslint@10.12.0
+
+# Nextra 4.6.1 needs zod below 4.4: newer zod rejects its Layout props
+overrides:
+    "nextra>zod": 4.3.6
+    "nextra-theme-docs>zod": 4.3.6

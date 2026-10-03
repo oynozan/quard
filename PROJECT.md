@@ -62,6 +62,7 @@ Later:
 .
 ├── db/
 │   └── migrations/   # Postgres schema changes, plain SQL, run in order
+├── docs/             # documentation site (Nextra)
 ├── packages/
 │   ├── shared/       # code the SDK and the services must share
 │   └── sdk/          # the Quard SDK, published as "quard"

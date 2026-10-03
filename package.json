@@ -10,7 +10,7 @@
         "build": "pnpm -r build",
         "test": "pnpm -r --no-bail test",
         "typecheck": "pnpm -r typecheck",
-        "lint": "eslint . && pnpm --filter web lint",
+        "lint": "eslint . && pnpm --filter web lint && pnpm --filter docs lint",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "db:migrate": "pnpm --filter @quard/db migrate"

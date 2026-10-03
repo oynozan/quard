@@ -1,0 +1,137 @@
+/* Nextra's built-in components, moved onto the Quard system */
+
+/* Mermaid diagrams sit in a pane */
+.quard-mermaid {
+    margin-top: 1.25em;
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--page);
+    padding: 16px;
+}
+
+.quard-mermaid:empty {
+    min-height: 120px;
+}
+
+.quard-mermaid svg {
+    display: block;
+    margin: 0 auto;
+}
+
+/* Callouts and GitHub alerts: neutral tonal boxes, no tints and no outline */
+.nextra-callout {
+    border: 0 !important;
+    border-radius: 6px;
+    background: var(--hover) !important;
+    color: var(--ink-soft) !important;
+    font-size: 14px;
+}
+
+.nextra-callout svg {
+    color: var(--ink-note);
+    opacity: 0.6;
+}
+
+/* Warnings are a 2px amber rule, not a box */
+.nextra-callout[class*="yellow"] {
+    border: 0 !important;
+    border-inline-start: 2px solid var(--warning) !important;
+    border-radius: 0;
+    background: transparent !important;
+    color: var(--ink-alert) !important;
+}
+
+.nextra-callout[class*="yellow"] svg {
+    color: var(--warning);
+    opacity: 1;
+}
+
+/* Cautions and errors: the one tinted box */
+.nextra-callout[class*="red"] {
+    background: var(--caution-surface) !important;
+    color: var(--caution-text) !important;
+}
+
+.nextra-callout[class*="red"] svg {
+    color: var(--caution-text);
+}
+
+/* Tabs: the segmented control from settings */
+[role="tablist"] {
+    gap: 4px;
+    border: 0 !important;
+}
+
+[role="tab"] {
+    height: 32px;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 6px;
+    color: var(--ink-2);
+    font-size: 13px;
+    padding: 0 10px !important;
+}
+
+[role="tab"]:hover {
+    background: var(--nav-hover);
+    color: var(--ink-bright);
+}
+
+[role="tab"][aria-selected="true"] {
+    background: var(--selected);
+    color: var(--signal) !important;
+}
+
+[role="tab"][aria-selected="true"]:hover {
+    color: var(--mint) !important;
+}
+
+/* Steps: zero-padded mono counters on a hairline */
+.nextra-steps {
+    border-color: var(--line) !important;
+}
+
+article .nextra-steps h3:not([style^="visibility:"]) {
+    font-size: 17px;
+    font-weight: 200;
+    letter-spacing: normal;
+}
+
+.nextra-steps h3::before {
+    content: counter(var(--counter-id), decimal-leading-zero) !important;
+    border: 0 !important;
+    border-radius: 4px !important;
+    background: var(--tile) !important;
+    color: var(--ink-absent) !important;
+    font-family: var(--font-mono);
+    font-size: 13px !important;
+    font-weight: 400 !important;
+}
+
+/* Cards: a Panel fill, no outline */
+.nextra-card {
+    border: 0 !important;
+    border-radius: 6px !important;
+    background: var(--panel) !important;
+}
+
+.nextra-card:hover {
+    background: var(--nav-hover) !important;
+}
+
+/* File tree */
+.nextra-filetree {
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.nextra-filetree > ul {
+    border: 0 !important;
+    border-radius: 6px;
+    background: var(--panel);
+}
+
+.nextra-filetree svg {
+    opacity: 0.6;
+}

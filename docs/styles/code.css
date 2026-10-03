@@ -1,0 +1,85 @@
+/* Code: blocks sit on a borderless Recess well, like web's code example */
+
+div.nextra-code > pre {
+    border: 0;
+    border-radius: 6px;
+    background: var(--recess) !important;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* With a filename bar, the bar and the block read as one well */
+div.nextra-code > div + pre {
+    border-radius: 0 0 6px 6px;
+}
+
+div.nextra-code > div:has(+ pre) {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 6px 6px 0 0;
+    background: var(--recess);
+    color: var(--ink-muted);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 300;
+}
+
+div.nextra-code > div:has(+ pre) svg {
+    opacity: 0.6;
+}
+
+div.nextra-code pre code,
+div.nextra-code pre code span {
+    font-family: var(--font-mono);
+}
+
+/* Tokens take their color from the theme; the well gives the background */
+div.nextra-code pre code span {
+    background-color: transparent !important;
+}
+
+/* Line numbers */
+div.nextra-code pre code[data-line-numbers] > span::before {
+    color: var(--ink-absent) !important;
+}
+
+/* Highlighted lines keep their token colors and gain a green rule */
+div.nextra-code pre code > span[data-highlighted-line] {
+    border-inline-start: 2px solid var(--signal);
+    background-color: var(--hover) !important;
+    color: inherit !important;
+    padding-inline-start: calc(1rem - 2px);
+}
+
+div.nextra-code pre code [data-highlighted-chars] {
+    border-radius: 3px;
+    background-color: var(--highlight) !important;
+}
+
+/* Copy button: a ghost icon button */
+div.nextra-code button {
+    border: 0 !important;
+    border-radius: 6px;
+    background: transparent !important;
+    color: var(--ink-2);
+}
+
+div.nextra-code button:hover {
+    background: var(--control-hover) !important;
+    color: var(--ink-bright);
+}
+
+/* The check that replaces the copy glyph confirms in mint */
+.nextra-copy-icon:has(path[d^="M16.707"]) {
+    color: var(--mint);
+}
+
+/* Inline code: a small Tile chip with no outline */
+article :not(pre) > code {
+    border: 0 !important;
+    border-radius: 4px !important;
+    background: var(--tile) !important;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.93em;
+}

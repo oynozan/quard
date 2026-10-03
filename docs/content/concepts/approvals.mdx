@@ -1,0 +1,35 @@
+# Approvals
+
+Some tool calls need a person before they run: every call to a tool with an approval guard, and calls where an action or egress rule decides to ask. This page explains what an answer means and how long it lasts. To answer requests in the dashboard, see the [Approvals guide](/guides/approvals).
+
+## Waiting
+
+The call pauses until someone answers. Then the tool runs with exactly the approved arguments, or the agent gets a refusal. This works in any agent loop.
+
+- **No time limit.** A request waits until someone answers, and an approval never expires.
+- **Identical calls.** While a request is open, a new identical call, from the same agent to the same tool with the same arguments, waits on the same request instead of opening another.
+- **Stopped processes.** If the waiting process stops, for example after a crash, its heartbeats stop and the dashboard shows the request as no longer waiting. The request stays open.
+
+## The three answers
+
+| Answer         | What runs                                                               | What it is tied to                                         |
+| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Approve once   | This call, one time                                                     | The run, agent, step and tool, and the exact arguments     |
+| Always approve | Later calls with exactly the same arguments, without asking, in any run | The agent, the tool and the exact arguments, until revoked |
+| Deny           | Nothing. The agent gets a refusal                                       | This request                                               |
+
+An approval is void as soon as any argument changes: a call with a different argument asks again. Arguments are compared after normalizing, by a hash.
+
+## Checks after an approval
+
+The block checks run again right after an approval. An approval never overrides a block that came up while the call waited, such as a daily cap being reached.
+
+## What the approver sees
+
+The approver sees the real arguments, where each value came from, and the [influence path](/glossary) from the entry point to the call. Everywhere else the dashboard shows sensitive values masked, but an approver must see exactly what they approve. After the answer, only a hash of the arguments is kept.
+
+Admins and approvers can both answer. Every answer records who gave it.
+
+## If Quard's backend can't be reached
+
+A call that needs an answer is blocked after retrying for up to 30 seconds, with the reason `backend_unavailable`.

@@ -1,0 +1,75 @@
+# Summary
+
+The Summary page is the monthly report for all your agents together. Every other page looks at one thing: one run, one incident or one agent. Summary looks across every agent over the last 30 days and shows where problems keep coming from, so you can decide what to fix.
+
+Use it for a regular review, for example once a week. It answers four questions, and holds one to-do list:
+
+| Section               | What it answers                                                     |
+| --------------------- | ------------------------------------------------------------------- |
+| Where incidents start | Which sources and tools keep causing incidents?                     |
+| What guards block     | What gets blocked, and when?                                        |
+| Agents and links      | Which agents let untrusted content in, and which handoffs carry it? |
+| Run limits            | How many runs would the default limits stop?                        |
+| Quarantine            | Which new values are blocked everywhere and wait for a person?      |
+
+## Where incidents start
+
+![Where incidents start](/images/guides/summary-incidents.webp)
+
+1. **By entry source.** The origins where incidents began, such as an email domain or a web page, with how many incidents each one started.
+2. **By damaging tool.** The tools that did the damage.
+
+## What guards block
+
+![What guards block](/images/guides/summary-blocks.webp)
+
+1. **Guard filter.** Show every guard or one kind, with how many calls each one blocked.
+2. **Blocks per day.** Blocks per day over 30 days. Hover a column to read its day.
+3. **Blocks by hour.** Blocks by weekday and hour, in UTC. Brighter cells mean more blocks, and **Busiest hour** names the peak.
+
+## Agents and links
+
+![Agents and links](/images/guides/summary-links.webp)
+
+1. **Entry points.** The agents that most often let untrusted content in.
+2. **Turning points.** The agents whose model calls most often decided to act on it.
+3. **Untrusted links.** The links between agents, ranked by how much untrusted content they carried, with the share of all their messages.
+
+## Run limits
+
+Every run has limits on delegation depth, fan-out, loops, steps and cost. They are product defaults, so they start in observe mode: they record but never stop a run until your team switches them on in code.
+
+![Run limits](/images/guides/summary-limits.webp)
+
+1. **Would stop.** Runs that reached this limit while it was in observe mode. They were recorded, not stopped.
+2. **Stopped.** Runs this limit stopped, because it is switched on.
+3. **The limit.** The limit itself, above a meter of how many runs reached it.
+
+| Limit   | Default per run                                       |
+| ------- | ----------------------------------------------------- |
+| Depth   | 3 levels of delegation                                |
+| Fan-out | 10 helpers per agent                                  |
+| Loops   | 5 handoffs back and forth between the same two agents |
+| Steps   | 200 model calls across all agents                     |
+| Cost    | $5                                                    |
+
+## Quarantine
+
+The fleet check watches recipients, bank accounts and domains that are new to your fleet, first seen less than 7 days ago. Once a fifth separate run uses one within 24 hours, Quard blocks it everywhere and puts it in quarantine. In its first 7 days, the check only records.
+
+![Quarantine](/images/guides/summary-quarantine.webp)
+
+1. **A quarantined value.** The masked value and its field, the agents that used it, when it was quarantined, how many attempts were blocked and the last attempt.
+2. **Mark as known.** Opens the value so you can release it.
+3. **Watching.** New values on their way to the limit, with how many runs used them out of 5.
+4. **More at 1 run.** Values seen in only one run, folded away. Click to show them.
+
+## Release a value
+
+Release a value only after you have checked it, for example a new supplier's bank account that you confirmed by phone.
+
+![Marking a value as known](/images/guides/summary-mark-known.webp)
+
+1. **The value.** The value you are about to release, with a copy button.
+2. **Details.** Its kind, field and agents, when it was first seen and quarantined, the runs that used it, the blocked attempts and the last attempt.
+3. **Mark as known.** Unblocks the value fleet-wide. Every other guard still checks it.

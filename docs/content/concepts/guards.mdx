@@ -1,0 +1,73 @@
+# Guards
+
+A guard wraps a tool and checks every call to it. When the check fails, the tool never runs.
+
+## The five kinds
+
+| Guard    | Wrap it around                                                            | What it checks                                                                                                                                                                    | Results                      |
+| -------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Source   | Tools that bring outside content in: web fetch, search, inbox, files, MCP | Labels the output with its origin, checks its domain against block and allow lists, and scans it for instructions aimed at an AI, text shaped like a tool call and invisible text | Pass, strip, flag or block   |
+| Action   | Tools that change something: payments, emails, deletes, deploys           | Rules on the arguments and their labels, such as "the IBAN must come from supplier records"                                                                                       | Allow, block or ask a person |
+| Approval | High-stakes tools                                                         | Nothing: it always asks a person first                                                                                                                                            | Run or block                 |
+| Egress   | Tools that send data out: email, HTTP posts, uploads                      | Where the data goes and how sensitive it is. Internal data may only go to allowed destinations, never to one that first appeared in untrusted content                             | Allow, block or ask a person |
+| Limit    | Any tool                                                                  | Calls, amounts and cost per run, agent or day, and a new value suddenly used by many agents                                                                                       | Allow or block               |
+
+A source guard runs after its tool returns, before the agent sees the output. The others run before the call.
+
+## What happens on every call
+
+Every guarded call goes through the same nine steps:
+
+1. **Context.** Find the run, the agent and the step that led here.
+2. **Permission.** Check that this agent may use this tool in this run. A delegated agent only holds what its parent granted.
+3. **Labels.** Label the call and each of its arguments.
+4. **Checks.** Run the guards that act before the call: limit, action, egress and approval.
+5. **Decision.** The strictest result wins: block, then ask, then allow. A blocked call never reaches the tool.
+6. **Approval.** When the decision is ask, a person sees the arguments, where they came from and the path that led there, and approves those exact arguments.
+7. **Run.** The tool runs with exactly the arguments that were checked. Its start, end, result or error are recorded.
+8. **Output.** For source tools, the output is labeled, scanned and added to what the run has read, before the agent sees it.
+9. **Record.** Every decision is recorded with its rule and its reason, including the calls that were allowed.
+
+After an approval, the block checks run again. An approval never overrides a block that came up while the call waited, such as a daily cap being reached.
+
+## Block mode and observe mode
+
+Rules live in your app's code, not in the dashboard. They change through code review and roll back with a redeploy. The dashboard shows which rules ran, by name and hash, under [Rules from code](/guides/settings#rules-from-code).
+
+- A rule your team writes blocks by default.
+- A rule in **observe** mode records what it would have done, "would block" or "would ask", and lets the call run. It never changes the final decision. Use it to try a new rule on live traffic first.
+- Approval guards have no mode. They always ask.
+- Defaults that Quard sets start in observe mode: the [run limits](/guides/summary#run-limits) and the first 7 days of the [fleet check](/guides/summary#quarantine).
+- Switching a rule's mode is a code change and a redeploy.
+
+## When a guard blocks
+
+The agent gets a refusal instead of the tool's result. It says what was stopped, why, and not to retry:
+
+```text
+Blocked by egress guard: x@evil.com first appeared in web content. The email was NOT sent. Do not retry.
+```
+
+Refusals come from fixed templates and never quote untrusted content, so a blocked page can't use a refusal to speak to the model. Errors thrown by the tool itself are recorded and passed on unchanged.
+
+## Tool calls the model asks for
+
+Quard also checks the tool calls a model asks for, before your app receives them, against the agent's permissions and labels. A call that fails stays in the model's response, marked blocked, and its guarded tool refuses it at once if your app runs it.
+
+A tool without a guard can only be recorded, never stopped, so Quard warns about it. The overview's [Guarded tools](/guides/overview#activity) tile counts them.
+
+Some tools run inside the model provider's service, such as hosted web search. Quard can't stop those mid-call. For hosted web search, it records the queries and the sites consulted and checks those domains against your lists. It never sees the page text, so the scan is recorded as unscanned.
+
+## When Quard's backend is down
+
+Guards run inside your app, so most checks keep working:
+
+| Part                                       | While the backend can't be reached                            |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| Rules, value labels, per-run limits, scans | Run as usual, inside your app                                 |
+| Approvals and any "ask"                    | Block after retrying for up to 30 seconds                     |
+| Per-day limits                             | Count locally, and block once the local count reaches the cap |
+| Fleet check and quarantine list            | Use the last synced copy, up to 24 hours old                  |
+| Label lookups                              | A label that can't be looked up counts as untrusted           |
+| Detector                                   | Skipped and noted, since detectors only make things stricter  |
+| Decision records                           | Kept and sent when the backend is back, marked as sent late   |

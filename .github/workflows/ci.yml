@@ -20,3 +20,5 @@ jobs:
             - run: pnpm lint
             - run: pnpm typecheck
             - run: pnpm test
+            # Catches broken docs pages that tests can't see, such as bad MDX
+            - run: pnpm --filter docs build
