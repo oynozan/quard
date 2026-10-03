@@ -418,22 +418,32 @@ Decided by the spec and Q11 to Q15.
     - They ride in the slot each channel already has: W3C baggage on HTTP, `_meta` on MCP, `metadata` on A2A, attributes on queue messages.
     - The sender stores the label record, with a hash of the content, before the message leaves.
     - The receiver looks the labels up through `control`.
-    - `quard.inject({ content })` returns the three items for the channel's slot. On the receiving side, `quard.resume(carrier, fn)` runs `fn` inside that run.
-    - A missing, unreadable or mismatched reference counts as untrusted. Value tracing reconnects the pieces later.
+    - `await quard.inject({ content })` stores the label record, then returns the three items for the channel's slot. On the receiving side, `await quard.resume(carrier, fn)` looks the record up once and runs `fn` inside that run. Both return promises. (**Claude's pick**)
+    - On HTTP the three items ride in a W3C `baggage` header as `quard-run`, `quard-parent` and `quard-labels`. `quard.toBaggage(carrier)` writes the header, and `quard.resume()` also accepts the header text. (**Claude's pick**)
+    - Values leave the process only as keyed hashes. The receiver hashes the values it finds in the message and takes each match's label from the record. A record vouches for a message only when the run and the content's hash both match. (**Claude's pick**)
+    - A missing, unreadable or mismatched reference counts as untrusted. So does a record that could not be stored or looked up. Value tracing reconnects the pieces later.
+    - The receiving agent gets no more tools than the sender had, and its depth continues from the sender's.
 - **Across agents.** Value labels search the whole run's content index, so an IBAN from one agent's web page is caught in another agent's payment.
 - **Shared memory** (Q14). A generic wrapper goes around the app's memory read and write functions, or around any store with get, put and search.
+    - `quard.memory(store, { name })` returns the store with the same shape. Reads are `get`, `search` and `read`; writes are `put` and `write`. Items read get the origin `memory:<name>`. (**Claude's pick**)
+    - A write stores the item's labels before the inner write runs. Labels for the same content merge to the least trusted and most sensitive, so writing it again never makes it more trusted.
     - Labels live in the backend, keyed by a hash of the content. They come back on read, even in a later run.
     - Content changed outside the wrapper fails the hash check and reads back as untrusted.
     - Memory labels are not deleted with runs.
 - **Frameworks** (Q13). The OpenAI Agents SDK (JS) comes first. Its integration uses the wrapped OpenAI client, takes the current agent from the framework, and tags handoffs and agents-as-tools. Where it must stop something, it uses the SDK's tool guardrails and approval flow.
+    - It ships as `quard/openai-agents`, so the core package does not need the Agents SDK. `quardRunner({ client })` returns a `Runner` whose runs land in one Quard run. `guardedTool({ ...toolOptions, guard })` runs every call of a tool through `guard()`. (**Claude's pick**)
+    - A block becomes a tool guardrail rejection that the model reads. With `onBlock: "throw"` the run stops with `GuardBlockedError`. An approval still pauses inside the tool call, as everywhere else (Q21). (**Claude's pick**)
 
 ```ts
-// Sending: a guarded tool like any other
-const delegate = guard(rawDelegate, { type: "limit", name: "delegate" });
-await delegate({ to: "billing", brief });
+// Sending: a guarded tool like any other. delegateTo names the receiver.
+const delegate = guard(
+    async ({ to, brief }) => send(to, brief, { baggage: quard.toBaggage(await quard.inject({ content: brief })) }),
+    { type: "limit", name: "delegate", delegateTo: "to" },
+);
 
-// Receiving
+// Receiving, in another process
 const receive = guard(rawReceive, { type: "source", origin: "agent", name: "receive" });
+await quard.resume(request.headers.baggage, () => billingAgent(receive), { agent: "billing" });
 ```
 
 **Run limits** (Q15, **Claude's pick**: Balanced)
@@ -447,8 +457,12 @@ const receive = guard(rawReceive, { type: "source", origin: "agent", name: "rece
 | Cost | $5 |
 
 - These are product defaults, so they start in observe mode. They record "would block" until a team switches them on.
+- Teams set them with `runLimits` in `quard.configure()` or the policy file. The policy file wins field by field. The dashboard lists them with the other rules, for the whole run. (**Claude's pick**)
+- Depth, fan-out and loops are checked on a limit guard with `delegateTo`, the argument that names the receiving agent. Steps and cost are checked before each model call; a refused call never leaves the process. (**Claude's pick**)
 - Cost is estimated from token usage and a price table. When a price is unknown, the step limit still caps the run.
 - When a run spans processes, its counters live in `control`. (**Claude's pick**)
+    - Steps, cost and per-run tool counts move to `control` when a message first carries the run to another process. Until then they count in-process.
+    - Fan-out and loops stay per process in v1, because they need more than a number.
 
 ## Payments (x402)
 
@@ -674,7 +688,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - **webhook** receives SDK events: model calls, tool calls, guard decisions, labels, labeled chunks and messages.
     - It checks them against the shared schemas, writes them to Postgres and queues follow-up jobs.
     - The format is our own JSON API, not OpenTelemetry. (**Claude's pick**)
-    - Most events arrive in batches. Label records that another process may read right away, such as messages to other agents and memory writes, are sent at once. They are acknowledged only after they are stored. (**Claude's pick**)
+    - Most events arrive in batches. Label records that another process may read right away, such as messages to other agents and memory writes, are sent at once to `POST /v1/labels`. They are acknowledged only after they are stored. (**Claude's pick**)
 - **control** is the SDK's live link to the backend. The SDK keeps one long-lived connection to it and reconnects if it drops.
     - **Connect:** the SDK registers its agents, their versions and its active rules.
     - **Counters:** per-day counters, fleet counters, per-run counters for runs that span processes, and quarantine lists.
@@ -745,6 +759,13 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Agent keys | One key per app; an app may host several agents | Claude's pick |
 | — | Late "approve once" | Used by the next identical call | Claude's pick |
 | — | Per-day limits | Per tool across the project, per UTC day | Claude's pick |
+| — | Label records | Values only as keyed hashes; a record vouches only for the same run and content | Claude's pick |
+| — | `inject` and `resume` | Both return promises; the record is stored before the message leaves | Claude's pick |
+| — | Carrier on HTTP | W3C `baggage`; `quard.toBaggage()` writes it | Claude's pick |
+| — | Shared memory API | `quard.memory(store, { name })`; labels merge to the least trusted | Claude's pick |
+| — | Agents SDK API | `quardRunner()` and `guardedTool()` from `quard/openai-agents`; blocks become tool guardrail rejections | Claude's pick |
+| — | Run limit settings | `runLimits` in code and the policy file; `delegateTo` on a limit guard | Claude's pick |
+| — | Shared run counters | Steps, cost and per-run tool counts in `control`; fan-out and loops per process | Claude's pick |
 | — | Auth | Agent keys for the SDK; Privy sign-in (email code or GitHub) for the dashboard | Owner |
 | — | SDK names | The `quard` object (`wrap`, `run`, `agent`, `configure`, `inject`, `resume`), `guard()`, `isGuardRefusal`, `GuardBlockedError` | Owner |
 | — | Blocked tool calls inside monitor | The call stays in the response, marked blocked; the guarded tool refuses it | Owner |
