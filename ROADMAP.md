@@ -76,7 +76,7 @@ Milestones 0 and 1 need no more decisions.
 
 ## M7. Ship v1
 
-- The Jev detector in observe mode, behind the detector interface.
+- Content labels: Jev labels public content in the SDK, behind the detector interface (built early). `webhook` stores the labeled chunks, `web` gets the review queue, and `worker` runs the AI fallback for `none`.
 - Hosted web search (URL level, recorded as `unscanned`) and hosted MCP approval requests.
 - The retention cleanup job.
 - Docker images, one compose file for self-hosting, and install docs.

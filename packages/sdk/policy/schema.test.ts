@@ -40,15 +40,15 @@ describe("signatures config", () => {
 });
 
 describe("configure options", () => {
-    it("accepts a detector with a name and a score function", () => {
-        const detector = { name: "fake", score: async () => 0 };
+    it("accepts a detector with a name and a label function", () => {
+        const detector = { name: "fake", label: async () => ({ label: "none", probabilities: {} }) };
 
         expect(configureExtras.safeParse({ detector, detectorRules: { mode: "enforce" } }).success).toBe(true);
     });
 
     it.each([
-        ["a detector with no score function", { detector: { name: "fake" } }],
-        ["a detector with no name", { detector: { score: async () => 0 } }],
+        ["a detector with no label function", { detector: { name: "fake" } }],
+        ["a detector with no name", { detector: { label: async () => ({}) } }],
         ["a detector that is not an object", { detector: "fake" }],
         ["a null detector", { detector: null }],
         ["an empty policy file path", { policyFile: "" }],

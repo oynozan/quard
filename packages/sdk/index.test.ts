@@ -10,6 +10,7 @@ describe("quard", () => {
             "guard",
             "isGuardRefusal",
             "isGuardType",
+            "jevDetector",
             "quard",
         ]);
         expect(Object.keys(sdk.quard)).toEqual(["wrap", "run", "agent", "configure"]);

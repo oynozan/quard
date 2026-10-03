@@ -80,13 +80,22 @@ Each signature has an `id`, a `title`, a `category`, `where` (`input` for tool a
 
 ## AI detector
 
-A detector is an object with a `name` and a `score(question, text)` function that returns a number from 0 (safe) to 1 (risky). Set it in code:
+A detector is an object with a `name` and a `label(text)` function. It picks one label from a fixed list for the text, and gives the chance of each label, from 0 to 1. Quard comes with Jev from TypeSafe, pinned to `jev-1.13.0`. Set it in code:
 
 ```ts
-quard.configure({ detector: myDetector, detectorRules: { mode: "observe" } });
+import { jevDetector, quard } from "quard";
+
+quard.configure({ detector: jevDetector({ apiKey: process.env.TYPESAFE_API_KEY ?? "" }) });
 ```
 
-- Only content labeled `public` is sent to the detector, split into chunks of up to 4,000 characters.
-- `observe` (the default) does not wait. Scores arrive later as decision events with a `score`.
-- `enforce` waits up to 5 seconds. Chunks scoring `stripAt` (0.9) or more are removed, and a score of `flagAt` (0.5) or more flags the content.
-- The detector can only tighten. Errors, timeouts and scores outside 0 to 1 record a `detector_error` warning and leave the content as the rules left it.
+- Only content labeled `public` is sent to the detector, split into chunks of up to 4,000 characters. Secrets are removed, and emails, IBANs and card numbers are masked first.
+- `enforce` (the default) waits up to 5 seconds. A chunk at least `stripAt` (0.9) likely to be a prompt injection is removed. Content whose risky labels together reach `flagAt` (0.5) gets a flag such as `detector:payment_fraud`, so the agent's later actions face stricter rules.
+- `observe` does not wait and changes nothing. Set it with `detectorRules: { mode: "observe" }` to check the labels first.
+- Each result is a decision event: `score` is the chance the content is an attack, and `reason` lists the labels the detector gave.
+- The detector can only tighten. Errors, timeouts and invalid answers record a `detector_error` warning and leave the content as the rules left it.
+
+The labels, with what each one means, are in [labels.ts](../../detectors/labels.ts):
+
+- Risky: `prompt_injection`, `payment_fraud`, `phishing` and `malicious_code`.
+- Not risky: `invoice`, `business_message`, `promotion`, `documentation`, `article`, `search_results`, `code` and `data_records`.
+- `none` when no other label fits.

@@ -44,7 +44,7 @@ In v1:
 - The root-cause finder, with replay and an AI-written explanation.
 - Multi-agent runs: run context, labeled messages across processes and a generic shared-memory wrapper.
 - An integration for the OpenAI Agents SDK (JS).
-- The Jev detector, in observe mode: it saves scores but never changes a decision.
+- Content labels: the Jev detector labels public content from a fixed list, an AI labels what fits none, and a review queue tunes them. Jev acts by default, and a team can switch it to observe.
 - A self-hosted install with Docker and Postgres.
 
 Later:
@@ -55,7 +55,7 @@ Later:
 - Near-match and paraphrase matching.
 - Integrations for the Vercel AI SDK, Mastra, LangGraph and others.
 - Native adapters for pgvector, Pinecone, Chroma and other stores.
-- Jev acting on its scores, and other detectors.
+- Other detectors, and labels a team defines.
 - A hosted service, single sign-on and OpenTelemetry export.
 
 ## Repo layout
@@ -294,7 +294,7 @@ From the spec:
 | `limit` | Any tool | Calls and amounts per run, agent or day, and a new value suddenly used by many agents | Allow or block |
 | `x402` | An x402 payment client | Payment amounts per payment, run and day, paid hosts, payees first seen in untrusted content, and new payees used by many runs. Added by the **Owner**; see [Payments (x402)](#payments-x402) | Allow, block, or ask a human above a set amount |
 
-- **source** runs after the tool returns. It records the exact origin: URL, sender, server or file. It checks the domain against block and allow lists. It scans for instructions aimed at an AI, text shaped like a tool call, and invisible text. Then it passes the content, strips suspect parts, flags it so later actions face stricter rules, or blocks it. Jev scores are recorded here too.
+- **source** runs after the tool returns. It records the exact origin: URL, sender, server or file. It checks the domain against block and allow lists. It scans for instructions aimed at an AI, text shaped like a tool call, and invisible text. Then it passes the content, strips suspect parts, flags it so later actions face stricter rules, or blocks it. Jev labels the content here too.
 - **action** runs before the call. Typical rules: a value must come from a named origin, like an IBAN from supplier records. Amounts are capped. Never-seen recipients go to a human.
 - **approval** always asks first. See [Approvals](#approvals).
 - **egress** finds the destination (recipients, host or upload target) and the payload's sensitivity from its value labels and context label. Internal data may only go to allowlisted destinations. It never goes to a destination that first appeared in untrusted content.
@@ -328,7 +328,7 @@ Decided by Q6 and Q7.
 - On connect, and again whenever they change, the SDK sends its active rules, as names and a hash, to `control`. Every decision records that hash. The dashboard shows which rules ran but does not edit them.
 - Rules a team writes **block by default**. `mode: "observe"` records "would block" or "would ask" and lets the call run. Observe rules never change the final decision.
 - Approval guards have no mode. They always ask.
-- Defaults the product sets start in observe mode: the run limits and the fleet check's first 7 days. Jev stays in observe mode for all of v1.
+- Defaults the product sets start in observe mode: the run limits and the fleet check's first 7 days. The Jev detector is the exception: it acts by default, and a team can switch it to observe. (**Owner**)
 - Switching a rule's mode is a code change and a redeploy, or an edit to the policy file.
 
 ```ts
@@ -554,25 +554,58 @@ Q17, **Claude's pick**. After an incident, an AI writes a short plain-words expl
 
 ## AI inside Quard
 
-Decided by the spec, Q25, Q26 and Q27.
+Decided by the spec, Q25, Q26 and Q27, and by the owner's content-label decisions on 2026-10-03.
 
-- **AI never assigns labels.** Content judged by a model can argue its way to trusted, so origin stays a recorded fact.
-- **Detectors only tighten.** A high-risk answer can flag, ask or block. It can never allow what a rule blocked, or raise trust.
+- **AI never sets origin, trust or sensitivity.** Content judged by a model can argue its way to trusted, so origin stays a recorded fact.
+- **AI adds content labels.** Jev, and an AI for what Jev can't place, label what content is, such as `invoice` or `payment_fraud`. (**Owner**)
+- **Detectors only tighten.** A risky label can flag content or strip a prompt injection out of it. It can never allow what a rule blocked, or raise trust.
 
 ### Detector
 
-Q25, **Claude's pick**.
+Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner**.
 
 - Jev from TypeSafe, pinned to `jev-1.13.0`, behind a small detector interface. Other detectors can be swapped in later.
-- It runs in observe mode in v1: scores are saved but don't change decisions. In this mode the SDK does not wait for Jev, so it adds no delay.
-- The questions it answers:
-    1. Does this fetched text contain instructions aimed at an AI agent?
-    2. Does this user message contain pasted outside content, such as a forwarded email?
-    3. Does this tool call match the user's original task?
+- For each chunk of public content, Jev answers one choice question: which label from a fixed list fits best. It gives the chance of every label. The list includes `none`.
+- Before a chunk leaves the process, secrets are removed and emails, IBANs and card numbers are masked.
+- It acts by default: the SDK waits up to 5 s for Jev, then flags or strips. A team can switch it to observe, in code or in the policy file. Observe saves the labels without waiting, so it adds no delay.
 - Jev is a hosted API only. The content and the longest question must fit in 32,000 tokens together, so long pages are cleaned and split first.
 - TypeSafe quotes 70 to 500 ms per call ([InfoQ](https://www.infoq.com/news/2026/10/typesafe-ai-jev-released/)). Its own docs say most calls take about 100 ms. See [TypeSafe's models page](https://docs.typesafe.ai/models).
 - It can return a wrong but valid answer, and its docs warn that injected text can move its answer. Test it on the team's own injection examples.
-- Jev can't write text, so the AI reviewer uses a different model.
+- Jev leans toward the options it reads first, so the risky labels come first in the list.
+- Jev can't write text, so the AI reviewer and the AI fallback use a different model.
+- Two more questions are planned, off by default because they need internal data: does a user message hold pasted outside content, such as a forwarded email, and does a tool call match the user's original task.
+
+### Labels
+
+**Claude's pick**, after the owner asked for labels that cover likely cases.
+
+| Label | Risky | Covers |
+| --- | --- | --- |
+| `prompt_injection` | yes | Text that speaks to an AI agent: ignore your instructions, use a tool, send data, hide something |
+| `payment_fraud` | yes | Changed bank details, a new IBAN, urgent or unexpected payments, gift cards, crypto |
+| `phishing` | yes | Pretends to be a trusted company or person to get a login, a code or a click |
+| `malicious_code` | yes | Code or commands that would harm a system if run |
+| `invoice` | no | Ordinary invoices, receipts, quotes and statements |
+| `business_message` | no | Ordinary work email, chat and tickets |
+| `promotion` | no | Adverts, newsletters and offers |
+| `documentation` | no | Product docs, help articles and API references |
+| `article` | no | News, blog posts, reports and reference pages |
+| `search_results` | no | Lists of links with snippets |
+| `code` | no | Ordinary code, configuration and logs |
+| `data_records` | no | Table rows, JSON from an API, CRM or database entries |
+| `none` | no | Nothing else fits, so the AI fallback labels it |
+
+- A chunk's risk is the sum of the chances of its risky labels. Content whose risk reaches the flag threshold gets a flag such as `detector:payment_fraud`. A value from flagged content no longer counts as coming from its origin, and never-seen rules ask a person about it.
+- The other labels change nothing. They show what agents read, in the run view and the review queue.
+- The exact wording Jev reads is in `packages/sdk/detectors/labels.ts`.
+
+### AI fallback
+
+**Owner**. The details are **Claude's pick**.
+
+- When Jev picks `none`, the `worker` asks an AI to label the stored chunk: one of the fixed labels if one fits, or else a new short label with a one-line reason.
+- It uses the team's own provider key and model, like the AI reviewer.
+- It runs after the call, so its label never changes a guard decision. It shows in the run view and the review queue. A new label that keeps coming up can join the fixed list.
 
 ### What AI models may see
 
@@ -580,6 +613,7 @@ Q26, **Claude's pick**.
 
 - Internal run data goes only to the provider the agents already use, which also runs the AI reviewer. Secrets are removed, and emails and IBANs become placeholders.
 - Jev is run by another company. By default it gets only content labeled public, such as web pages, outside email and MCP results. Content from an origin marked internal is never sent to it.
+- The AI fallback gets the same redacted public chunks that Jev got, through the team's own provider.
 - The pasted-content and task-match questions need internal data: the user's message, the task and the tool's arguments. They stay off until a team turns them on and adds the detector to its `egress` allowlist.
 - A short description of the app, written by the team, may be sent as context. It holds no user data.
 
@@ -587,13 +621,14 @@ Q26, **Claude's pick**.
 
 Q27, **Claude's pick**.
 
-| Question | Flag | Ask | Block or strip |
+| Check | Flag | Ask | Block or strip |
 | --- | --- | --- | --- |
-| Instructions aimed at an AI | 0.50 | — | strip the chunk at 0.90 |
-| Pasted outside content | 0.50 | — | — |
-| Tool call doesn't match the task | 0.50 | 0.80 | never |
+| Risky labels, added up | 0.50 | — | — |
+| `prompt_injection` | — | — | strip the chunk at 0.90 |
+| Pasted outside content (planned) | 0.50 | — | — |
+| Tool call doesn't match the task (planned) | 0.50 | 0.80 | never |
 
-All three run in observe mode in v1. Before they ever act, tune them again on at least 200 of the team's own labeled examples per question, and keep the model version pinned.
+Jev acts with these thresholds by default. Check them on at least 200 reviewed examples per risky label from the review queue, tune them where needed, and keep the model version pinned.
 
 ## Data, storage and hosting
 
@@ -606,13 +641,14 @@ Decided by Q18 and Q19, all **Claude's pick**.
 
 ### Storage
 
-- Postgres 18 is the only database. It holds runs, steps, messages, labels, guard decisions, approvals, memory labels, the value index for search and the job queue.
+- Postgres 18 is the only database. It holds runs, steps, messages, labels, guard decisions, approvals, memory labels, labeled chunks for review, the value index for search and the job queue.
 - ClickHouse can come later if volume demands it.
 
 ### Retention
 
 - Runs are deleted after 30 days. Each project can change this.
 - Runs tied to an incident are kept for 1 year, so verdicts and replay keep working.
+- Labeled chunks go with their run. Runs with reviewed chunks are kept for 1 year, so the reviewed examples last. (**Claude's pick**)
 - Memory labels are not deleted with runs.
 - The hashed first-seen index for the fleet check is kept for 1 year, so old values don't look new again.
 
@@ -623,6 +659,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - The same normalized value always gives the same hash, so search and value tracing still match.
 - Guards see real values in memory. The dashboard shows masks. Replay uses stand-ins. The AI reviewer sees placeholders.
 - The one exception is an open approval request: the approver sees the full values. After the decision only the hash is kept.
+- Chunks Jev labels are stored as they were sent to it, for the review queue: secrets removed, and emails, IBANs and cards masked. Only public content is stored this way. (**Owner**)
 - The hash is HMAC-SHA-256 with one random 32-byte key per install. The key is set in every agent process and on the server, which needs it to hash search input. It is never sent to us.
 - To rotate the key, add a new one and keep the old one for search until old runs expire.
 - Names and street addresses stay in clear in v1, because finding them needs a model.
@@ -631,7 +668,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 ## Services
 
 - **Auth.** The SDK talks to `webhook` and `control` with agent keys only. Keys are created and revoked in the dashboard.
-- **webhook** receives SDK events: model calls, tool calls, guard decisions, labels and messages.
+- **webhook** receives SDK events: model calls, tool calls, guard decisions, labels, labeled chunks and messages.
     - It checks them against the shared schemas, writes them to Postgres and queues follow-up jobs.
     - The format is our own JSON API, not OpenTelemetry. (**Claude's pick**)
     - Most events arrive in batches. Label records that another process may read right away, such as messages to other agents and memory writes, are sent at once. They are acknowledged only after they are stored. (**Claude's pick**)
@@ -641,7 +678,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
     - **Approvals:** it creates requests, tracks heartbeats from waiting calls, and returns the decision to the waiting call.
     - **Revocation:** revoked agent keys and revoked "always approve" decisions.
     - **Label lookups:** the labels behind a reference in a message, a memory item or a chained response. (**Claude's pick**)
-- **worker** runs jobs from the queue: the root-cause finder, replay, the AI reviewer and retention cleanup. It has no endpoint.
+- **worker** runs jobs from the queue: the root-cause finder, replay, the AI reviewer, the AI fallback for `none` labels and retention cleanup. It has no endpoint.
 - **web** is the dashboard. It reads and writes Postgres through its own server code and does not call `control`. When an approver decides, `web` writes the decision to Postgres, and `control` hears about it through Postgres `LISTEN/NOTIFY`. `control` also checks for decisions once a second, so a missed notification only delays the answer. (**Claude's pick**)
 - **Dashboard sign-in.** Privy, with an email code or GitHub. There are no passwords. Anyone who signs in with a verified email or a GitHub account can use the dashboard. Quard keeps its own signed session cookie. Every approval records who decided. (**Owner**)
 
@@ -659,6 +696,7 @@ From the spec, plus the approval decisions.
 - **Agent graph:** agents as nodes and messages as edges colored by labels, with a click-through to each agent's timeline.
 - **Search** across all runs: for example every run that touched a domain or used a given IBAN. Sensitive values are searched by their keyed hash.
 - **Approvals:** open requests with their arguments, origins and influence path, answered with approve once, always approve or deny. Also a list of "always" approvals that can be revoked.
+- **Labels:** a review queue of labeled chunks, least sure first. A person marks each label right or wrong, or picks the right one. It counts reviewed examples per label and shows how often each risky label was right at the current thresholds. (**Owner**, details **Claude's pick**)
 - **Settings:** agent keys, accounts and roles, and retention. Origin overrides and rules are shown read-only, because they live in code and the policy file.
 
 Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs before writing code there, as [web/AGENTS.md](web/AGENTS.md) says.
@@ -693,9 +731,9 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | Q22 | Value matching | Exact after normalizing, also inside longer text | Owner |
 | Q23 | Backend down | Split by guard type | Owner |
 | Q24 | Approval time limits | No time limit; approve once or always approve (same agent, tool and arguments, until revoked) | Owner |
-| Q25 | AI detector | Jev, in observe mode in v1, swappable | Claude's pick |
+| Q25 | AI detector | Jev, swappable; labels public content; acts by default, can be switched to observe | Claude's pick, Owner |
 | Q26 | Data for AI models | Internal data only to the team's own provider, masked; Jev gets public content only | Claude's pick |
-| Q27 | Detector thresholds | Per question, observe mode in v1 | Claude's pick |
+| Q27 | Detector thresholds | Flag at 0.5 on the risky labels added up; strip injections at 0.9; tune before enforce | Claude's pick |
 | — | Repo layout | The owner's tree; TypeScript in one pnpm workspace | Owner, Claude's pick |
 | — | Where guards run | In-process; the backend for shared state | Spec |
 | — | Database and queue | Postgres only, with pg-boss | Claude's pick |
@@ -712,6 +750,10 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | x402 chains and tokens | No rule depends on the chain; no token blocked for what it is | Owner |
 | — | Wallet addresses | Stored in clear, since they are public on chain | Owner |
 | — | x402 defaults | $1 per payment, $5 per run, $50 per day, untrusted origins blocked; observe mode first | Claude's pick |
+| — | Content labels | Jev picks one label from a fixed list for public content; `none` goes to an AI | Owner |
+| — | Label list | Four risky labels, eight others and `none` | Claude's pick |
+| — | Jev acting in v1 | Yes: enforce by default; a team can switch it to observe | Owner |
+| — | Text for review | Store redacted public chunks for a review queue | Owner |
 
 ## Changes to the spec
 
@@ -723,6 +765,7 @@ These points changed the spec. The spec doc was updated to match them on 2026-10
 4. **Replay compares both sides.** The spec says replay reruns without the suspect content about twenty times. Now it reruns with and without, up to 20 each, and stops early (Q16).
 5. **Hosted tools can't be stopped mid-call.** The spec says guards run before anything executes. Hosted tools run inside the model call, so monitor can only shape the request, like keeping MCP approval on, and check the results afterwards.
 6. **Per-run counters for runs that span processes** live in `control`, not only in-process (**Claude's pick**).
+7. **AI adds content labels.** The spec says AI never assigns labels. Now Jev, and an AI for what Jev can't place, add labels that say what content is. Origin, trust and sensitivity still never come from AI. The spec doc does not have this change yet.
 
 ## Open items
 

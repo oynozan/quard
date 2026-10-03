@@ -1,20 +1,22 @@
-// An AI check that scores text from 0 (safe) to 1 (risky).
-// Detectors only tighten: they can flag or strip, never allow.
-export type DetectorQuestion = "instructions";
+import type { DetectorAnswer } from "./labels.ts";
 
+// An AI check that picks one predefined label for a text, with the
+// chance of each label. Detectors only tighten: they can flag or strip, never allow.
 export type Detector = {
     readonly name: string;
-    score(question: DetectorQuestion, text: string): Promise<number>;
+    label(text: string): Promise<DetectorAnswer>;
 };
 
 export type DetectorRules = {
-    // "observe" saves scores without waiting; "enforce" waits and acts.
+    // "enforce" (the default) waits and acts; "observe" saves labels without waiting.
     readonly mode: "observe" | "enforce";
+    // Flags text whose risky labels together reach this chance
     readonly flagAt: number;
+    // Drops chunks at least this likely to be a prompt injection
     readonly stripAt: number;
 };
 
-export const DEFAULT_DETECTOR_RULES: DetectorRules = { mode: "observe", flagAt: 0.5, stripAt: 0.9 };
+export const DEFAULT_DETECTOR_RULES: DetectorRules = { mode: "enforce", flagAt: 0.5, stripAt: 0.9 };
 
 const MAX_CHUNK = 4000;
 

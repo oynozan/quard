@@ -1,7 +1,8 @@
-import { flattenArgs, type Label } from "@quard/shared";
+import { flattenArgs, redactText, type Label } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import { chunkText } from "../detectors/detector.ts";
+import { checkAnswer, riskOf, topRisk, type DetectorAnswer } from "../detectors/labels.ts";
 import type { FailResult, GuardCall } from "../guards/call.ts";
 import { mapStrings } from "../guards/source/strip.ts";
 import { textOf } from "../labels/text-of.ts";
@@ -47,7 +48,9 @@ export function signContent(call: GuardCall, shown: Shown, enforced: boolean): S
     );
 }
 
-type Scored = { text: string; chunks: string[]; scores: number[] };
+type Labeled = { text: string; chunks: string[]; answers: DetectorAnswer[] };
+
+const injection = (answer: DetectorAnswer): number => answer.probabilities.prompt_injection ?? 0;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -57,10 +60,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 }
 
-// Asks the AI detector about each chunk of public content. Observe mode
-// records the scores without waiting. Enforce mode waits, drops chunks
-// at stripAt or more and flags content at flagAt or more. Errors and
-// timeouts leave the content as the rules left it.
+// Asks the AI detector to label each chunk of public content. Observe
+// mode records the labels without waiting. Enforce mode waits, drops
+// chunks likely to be a prompt injection and flags content whose risky
+// labels reach flagAt. Errors and timeouts leave the content as the
+// rules left it.
 export async function detectContent(call: GuardCall, shown: Shown, enforced: boolean): Promise<Shown> {
     const { detector, detectorRules } = getConfig();
     // Internal content is never sent to a detector
@@ -69,49 +73,56 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
     }
     const rules = effectiveDetectorRules(detectorRules);
     const acts = enforced && rules.mode === "enforce";
-    const score = async (chunk: string): Promise<number> => {
-        const value = await detector.score("instructions", chunk);
-        if (!(value >= 0 && value <= 1)) {
-            throw new Error("a detector score must be from 0 to 1");
-        }
-        return value;
-    };
+    // Text leaves without secrets, and with emails, IBANs and cards masked
+    const ask = async (chunk: string): Promise<DetectorAnswer> => checkAnswer(await detector.label(redactText(chunk)));
     const texts = [...new Set(flattenArgs(shown.output).map((item) => item.value))];
-    const scoring = Promise.all(
-        texts.map(async (text): Promise<Scored> => {
+    const labeling = Promise.all(
+        texts.map(async (text): Promise<Labeled> => {
             const chunks = chunkText(text);
-            return { text, chunks, scores: await Promise.all(chunks.map(score)) };
+            return { text, chunks, answers: await Promise.all(chunks.map(ask)) };
         }),
     );
-    const report = (scored: Scored[]): number => {
-        const max = Math.max(0, ...scored.flatMap((item) => item.scores));
-        const decision = max >= rules.stripAt ? "strip" : max >= rules.flagAt ? "flag" : "pass";
-        const mode = acts ? "block" : "observe";
-        recordDecision(call, { guard: "source", rule: `detector:${detector.name}`, decision, mode, score: max });
-        return max;
+    // Records the decision and returns the flags it adds
+    const report = (labeled: Labeled[]): string[] => {
+        const answers = labeled.flatMap((item) => item.answers);
+        const risky = answers.filter((answer) => riskOf(answer) >= rules.flagAt);
+        const flags = [...new Set(risky.map((answer) => `detector:${topRisk(answer)}`))];
+        const strips = answers.some((answer) => injection(answer) >= rules.stripAt);
+        recordDecision(call, {
+            guard: "source",
+            rule: `detector:${detector.name}`,
+            decision: strips ? "strip" : flags.length > 0 ? "flag" : "pass",
+            mode: acts ? "block" : "observe",
+            score: Math.max(0, ...answers.map(riskOf)),
+            // Every label the detector gave, such as "article,prompt_injection"
+            reason: [...new Set(answers.map((answer) => answer.label))].join(",") || undefined,
+        });
+        return flags;
     };
     const fail = (): void => {
         const { runId, stepId, agent, tool } = call;
         record({ type: "warning", runId, stepId, agent, at: now(), code: "detector_error", tool });
     };
     if (!acts) {
-        void scoring.then(report, fail);
+        void labeling.then(report, fail);
         return shown;
     }
     try {
-        const scored = await withTimeout(scoring, DETECTOR_TIMEOUT_MS);
-        const max = report(scored);
-        // Each text with a risky chunk, without its risky chunks
+        const labeled = await withTimeout(labeling, DETECTOR_TIMEOUT_MS);
+        const flags = report(labeled);
+        // Each text with a likely injection, without those chunks
         const kept = new Map(
-            scored
-                .filter((item) => item.scores.some((value) => value >= rules.stripAt))
+            labeled
+                .filter((item) => item.answers.some((answer) => injection(answer) >= rules.stripAt))
                 .map((item) => [
                     item.text,
-                    item.chunks.filter((_, index) => (item.scores[index] as number) < rules.stripAt).join("\n\n"),
+                    item.chunks
+                        .filter((_, index) => injection(item.answers[index] as DetectorAnswer) < rules.stripAt)
+                        .join("\n\n"),
                 ]),
         );
         const output = kept.size === 0 ? shown.output : mapStrings(shown.output, (text) => kept.get(text) ?? text);
-        return withFlags({ output, label: shown.label }, max >= rules.flagAt ? ["detector"] : []);
+        return withFlags({ output, label: shown.label }, flags);
     } catch {
         fail();
         return shown;

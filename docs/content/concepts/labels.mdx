@@ -52,6 +52,8 @@ Content keeps its labels when it moves between agents. A brief from another agen
 
 ## Labels and AI
 
-AI never assigns labels. Content that a model judges could argue its way to trusted, so the origin stays a recorded fact.
+AI never decides where content came from, or how far Quard trusts it. Content that a model judges could argue its way to trusted, so the origin stays a recorded fact.
 
-AI detectors can only make things stricter. A high-risk score can flag a call, ask a person or block it. It can never allow what a rule blocked, or raise trust.
+An AI detector adds a label that says what the content is, such as `invoice`, `article` or `payment_fraud`. Quard's detector, Jev, labels public content only. When its risky labels are likely enough, the content gets a flag such as `detector:payment_fraud`. A value from flagged content no longer counts as coming from its origin, so rules for sensitive actions treat it with suspicion.
+
+AI detectors can only make things stricter. A risky label can flag content, or strip a prompt injection out of it. It can never allow what a rule blocked, or raise trust. The detector acts by default. A team can switch it to observe mode, where it only saves its labels.
