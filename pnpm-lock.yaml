@@ -423,6 +423,9 @@ importers:
 
   sandbox:
     dependencies:
+      '@openai/agents':
+        specifier: 'catalog:'
+        version: 0.18.0(bufferutil@4.1.0)(supports-color@7.2.0)(undici@8.11.2)(utf-8-validate@5.0.10)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.6.5)
       '@quard/db':
         specifier: workspace:*
         version: link:../db
@@ -435,6 +438,9 @@ importers:
       quard:
         specifier: link:lib/quard
         version: link:lib/quard
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

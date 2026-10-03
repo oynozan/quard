@@ -7,10 +7,12 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@openai/agents": "catalog:",
         "@quard/db": "workspace:*",
         "@quard/shared": "workspace:*",
         "openai": "catalog:",
-        "quard": "link:lib/quard"
+        "quard": "link:lib/quard",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@types/node": "catalog:",
