@@ -1,4 +1,5 @@
 import { Agent, OpenAIProvider, RunContext, Runner, tool } from "@openai/agents";
+import { assistantMessage, functionCall, ScriptedModel } from "@openai/agents/testing";
 import type { RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -7,6 +8,7 @@ import { currentScope } from "../../context/scope.ts";
 import { modelCalls, scriptedClient, testAgent } from "../../test/openai-agents.ts";
 import { resetAll } from "../../test/reset.ts";
 import { quardRunner } from "./runner.ts";
+import { guardedTool } from "./tool.ts";
 
 let events: RunEvent[] = [];
 
@@ -132,6 +134,42 @@ describe("a resumed run", () => {
         expect(second.finalOutput).toBe("Sent.");
         expect(events[0]).toMatchObject({ type: "run_started", agent: "billing" });
         expect(modelCalls(events).map((call) => call.agent)).toEqual(["billing"]);
+    });
+});
+
+describe("agents with a Model object of their own", () => {
+    it("skip the wrapped client, while their guarded tools still carry the right agent", async () => {
+        const noteDown = guardedTool({
+            name: "noteDown",
+            description: "Write a note",
+            parameters: z.object({ text: z.string() }),
+            execute: async () => "noted",
+            guard: { type: "limit", maxCallsPerRun: 5 },
+        });
+        const billing = new Agent({
+            name: "billing",
+            model: new ScriptedModel([
+                [functionCall("noteDown", { text: "Invoice 114" }, { callId: "call_2" })],
+                [assistantMessage("Noted.")],
+            ]),
+            tools: [noteDown],
+        });
+        const orchestrator = new Agent({
+            name: "orchestrator",
+            model: new ScriptedModel([[functionCall("transfer_to_billing", {}, { callId: "call_1" })]]),
+            handoffs: [billing],
+        });
+
+        await quardRunner({ client: scriptedClient({}).client }).run(orchestrator, "Note invoice 114.");
+
+        expect(modelCalls(events)).toEqual([]);
+        const [handoff] = events.filter((event) => event.type === "handoff");
+        expect(handoff).toMatchObject({ agent: "orchestrator", to: "billing" });
+        expect(events.find((event) => event.type === "tool_call")).toMatchObject({
+            agent: "billing",
+            tool: "noteDown",
+            status: "ok",
+        });
     });
 });
 
