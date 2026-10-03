@@ -31,6 +31,10 @@ const TOOLS = [
     define("sendEmail", "Send an email", { to: ["string", "Recipient address"], body: ["string", "Email text"] }),
     define("lookupOrder", "Look up an order", { orderId: ["string", "Order number"] }),
     define("refundOrder", "Refund an order in full", { orderId: ["string", "Order number"] }),
+    define("notifyPartner", "Send a message to a partner company", {
+        partner: ["string", "Partner name, such as globex or initech"],
+        message: ["string", "Message text"],
+    }),
 ];
 
 export function definitions(names: string[]): OpenAI.Responses.FunctionTool[] {
