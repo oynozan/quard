@@ -91,6 +91,41 @@ describe("POST /v1/events", () => {
         expect(run).toMatchObject({ blocked: 1, degraded: true });
     });
 
+    it("stores a card number sent as a number masked", async () => {
+        const runId = "6".repeat(32);
+        const event = {
+            type: "tool_call",
+            runId,
+            stepId: "7".repeat(16),
+            agent: "billing",
+            at: AT,
+            tool: "payByCard",
+            arguments: { card: 4111111111111111, amount: 50 },
+            status: "blocked",
+            influenced: false,
+            flagged: false,
+            durationMs: 1,
+        };
+
+        expect((await post({ events: [{ id: id(), event }] })).status).toBe(202);
+
+        const masked = { arguments: { card: "4111…1111", amount: 50 } };
+        const stored = await test.db
+            .selectFrom("events")
+            .select("body")
+            .where("project_id", "=", projectId)
+            .where("run_id", "=", runId)
+            .executeTakeFirstOrThrow();
+        expect(stored.body).toMatchObject(masked);
+        const step = await test.db
+            .selectFrom("steps")
+            .select("detail")
+            .where("project_id", "=", projectId)
+            .where("run_id", "=", runId)
+            .executeTakeFirstOrThrow();
+        expect(step.detail).toMatchObject(masked);
+    });
+
     it("notes events the SDK had to drop", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
