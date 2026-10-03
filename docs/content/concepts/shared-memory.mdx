@@ -1,0 +1,51 @@
+# Shared memory
+
+Agents often share a store: notes, a vector database, a cache of past answers. Content saved there can come back much later, in another agent or another run. Quard keeps its labels, so an item written after reading a web page still reads as untrusted.
+
+## Wrap the store
+
+Wrap your store with `quard.memory()` and give it a name:
+
+```ts
+const notes = quard.memory(store, { name: "notes" });
+
+await notes.put("acme", "Acme Supplies now pays to DE89 3704 0044 0532 0130 00.");
+const found = await notes.search("acme");
+```
+
+The wrapped store has the same methods as yours. Any of these may be there:
+
+| Method   | Kind  | What Quard labels                        |
+| -------- | ----- | ---------------------------------------- |
+| `get`    | Read  | What it returns, as one item             |
+| `search` | Read  | What it returns, one item per list entry |
+| `read`   | Read  | What it returns, one item per list entry |
+| `put`    | Write | Its second argument, the value           |
+| `write`  | Write | Its first argument                       |
+
+- Reads and writes return promises. Other methods pass through untouched.
+- The name is 1 to 200 characters. Items read back get the origin `memory:<name>`.
+- Outside a run, a call starts a new run, as a guarded tool does.
+
+## How labels are kept
+
+- **On write**, Quard stores the item's labels in the backend before the item is written: the label of everything the run had read, and the label of each traced value in it. They are keyed by a hash of the content. Sensitive values are stored as keyed hashes, never in clear.
+- **On read**, Quard looks the labels up by the same hash. They come back in any agent, process or later run.
+- **Values keep their origin.** An IBAN that came from a web page reads back as `web:…`, not as memory, so a rule that wants it from your supplier records still blocks it.
+- **Memory labels outlive runs.** They are not deleted when a run is, so an old note keeps its label.
+
+## When an item has no labels
+
+An item reads back as untrusted and internal, the default for unknown content, when:
+
+- It was changed outside the wrapper, so its hash matches no record.
+- It was written before the store was wrapped, or by code that skips the wrapper.
+- Its labels couldn't be stored, or couldn't be looked up in time.
+
+A write still goes ahead when its labels can't be stored. Other processes then read the item as untrusted.
+
+A team's [origin override](/concepts/labels#changing-the-defaults) for `memory:<name>` applies only to items that have labels. It can't make unlabeled content trusted.
+
+## In the dashboard
+
+Every read and write is recorded in the run, with the store, how many items it touched and how many of them had labels. Agent pages show memory calls in their own lane under [Recent calls](/guides/agents#agent-page).

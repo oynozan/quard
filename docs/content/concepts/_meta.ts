@@ -7,6 +7,7 @@ const meta: MetaRecord = {
     approvals: "Approvals",
     "multi-agent": "Multi-agent",
     "run-limits": "Run limits",
+    "shared-memory": "Shared memory",
 };
 
 export default meta;
