@@ -1,6 +1,6 @@
 import { labelFor } from "@quard/shared";
 import { describe, expect, it } from "vitest";
-import { ContentIndex } from "./content-index.ts";
+import { ContentIndex, printOf } from "./content-index.ts";
 
 const IBAN = "DE89370400440532013000";
 
@@ -104,5 +104,13 @@ describe("ContentIndex options", () => {
         expect(second.size).toBe(2);
         expect(second.lookup([`iban:${IBAN}`])[0]).toMatchObject({ origin: "web:evil.com", order: 1, contentId: "c2" });
         expect(second.context().trust).toBe("untrusted");
+    });
+});
+
+describe("printOf", () => {
+    it("gives text that differs only in spacing the same print", () => {
+        expect(printOf(`  IBAN\n${IBAN} `)).toBe(printOf(`IBAN ${IBAN}`));
+        expect(printOf("IBAN DE00")).not.toBe(printOf(`IBAN ${IBAN}`));
+        expect(printOf("x")).toMatch(/^[0-9a-f]{64}$/);
     });
 });

@@ -1,12 +1,15 @@
+import { inject, resume } from "./context/carrier.ts";
 import { agentScope, runScope } from "./context/scope.ts";
 import { wrap } from "./monitor/wrap.ts";
 import { configureQuard } from "./transport/configure.ts";
 
-// The SDK's main object. inject and resume arrive with M4.
+// The SDK's main object. inject and resume carry a run between agents.
 export const quard = {
     wrap,
     run: runScope,
     agent: agentScope,
+    inject,
+    resume,
     configure: configureQuard,
 };
 
@@ -14,7 +17,8 @@ export { GuardBlockedError, GuardRefusal, isGuardRefusal } from "./core/refusal.
 export { GUARD_TYPES, isGuardType } from "./guards/types.ts";
 export { guard } from "./pipeline/guard.ts";
 export type { RunEvent } from "@quard/shared";
-export type { ApprovalAnswer, ApprovalRequest, QuardConfig } from "./core/config.ts";
+export type { ApprovalAnswer, ApprovalRequest, QuardConfig, RunLimits } from "./core/config.ts";
+export type { Carrier, InjectOptions, ResumeOptions } from "./context/carrier.ts";
 export type { AgentOptions, RunOptions } from "./context/scope.ts";
 export { DetectorError } from "./detectors/detector.ts";
 export type { Detector, DetectorRules } from "./detectors/detector.ts";

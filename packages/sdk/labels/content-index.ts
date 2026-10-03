@@ -47,6 +47,11 @@ function hash(text: string): string {
     return createHash("sha256").update(text).digest("hex");
 }
 
+// The same text after cleaning and spacing gets the same print
+export function printOf(text: string): string {
+    return hash(normalized(text));
+}
+
 // Everything the model read in one run, with labels and value keys
 export class ContentIndex {
     readonly #records: ContentRecord[] = [];
@@ -86,7 +91,7 @@ export class ContentIndex {
     }
 
     has(text: string): boolean {
-        return this.#seen.has(hash(normalized(text)));
+        return this.#seen.has(printOf(text));
     }
 
     // Keys come strongest first, so the first match per record is kept
