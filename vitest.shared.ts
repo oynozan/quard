@@ -7,7 +7,7 @@ export function packageConfig() {
             coverage: {
                 provider: "v8",
                 include: ["**/*.ts"],
-                exclude: ["**/*.test.ts", "**/*.config.ts", "dist/**", "coverage/**"],
+                exclude: ["**/*.test.ts", "**/*.config.ts", "test/**", "dist/**", "coverage/**"],
                 thresholds: { 100: true },
             },
         },
