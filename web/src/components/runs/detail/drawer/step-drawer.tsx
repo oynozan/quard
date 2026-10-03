@@ -109,7 +109,11 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
                             {formatInt(step.model.outputTokens)}
                         </DetailRow>
                         <DetailRow term="Cost" mono>
-                            {usd(step.model.costUsd)}
+                            {step.model.costKnown === false ? (
+                                <Absent>No price for this model</Absent>
+                            ) : (
+                                usd(step.model.costUsd)
+                            )}
                         </DetailRow>
                         <DetailRow term="Asked for" mono>
                             {step.model.toolCalls.length ? step.model.toolCalls.join(", ") : <Absent>No tools</Absent>}

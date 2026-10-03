@@ -6,10 +6,12 @@ import { ApprovalsSection, IncidentsSection, RunsSection } from "@/components/ov
 import { OverviewRail } from "@/components/overview/overview-rail";
 import { TerminalOverview } from "@/components/overview/terminal-overview";
 import { getOverview } from "@/lib/data/overview";
+import { listRuns, requestTime } from "@/lib/data/runs/query";
 import { PAGE_WIDE } from "@/components/kit/page";
 
 export default async function OverviewPage() {
-    const data = await getOverview();
+    // Recent runs come from Postgres; the other panes still show sample data
+    const [data, runs, now] = await Promise.all([getOverview(), listRuns({ limit: 6 }), requestTime()]);
 
     return (
         <div className={PAGE_WIDE}>
@@ -28,7 +30,7 @@ export default async function OverviewPage() {
                     style={{ animationDelay: "80ms" }}
                 >
                     <ApprovalsSection approvals={data.approvals} now={data.now} />
-                    <RunsSection runs={data.runs} now={data.now} />
+                    <RunsSection runs={runs} now={now} />
                     <IncidentsSection incidents={data.incidents} now={data.now} />
                     <Pane title="Decision log" actions={<LiveMark />}>
                         <EventLog events={data.events} />

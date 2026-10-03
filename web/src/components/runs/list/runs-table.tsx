@@ -6,6 +6,7 @@ import { RowChevron, RowLink } from "@/components/kit/links";
 import { formatAge, formatDuration, formatInt, formatUsd, shortId } from "@/lib/format";
 import type { RunRow } from "@/lib/data/runs/types";
 import { RUNS_MIN_WIDTH, RunsColgroup, RunsHead } from "./runs-columns";
+import { costText } from "../detail/lib/cost";
 
 // A number in mono followed by its unit word, like "12 min".
 function Amount({ value, unit }: { value: string | number; unit: string }) {
@@ -47,7 +48,7 @@ function RunRowView({ run, now }: { run: RunRow; now: number }) {
                     <span className="text-[12px] text-ink-absent">None yet</span>
                 )}
             </Td>
-            <Td className="mono text-[12px] text-ink-2">{formatUsd(run.costUsd)}</Td>
+            <Td className="mono text-[12px] text-ink-2">{costText(run.costUsd, run.costKnown, formatUsd)}</Td>
             <Td className="mono text-[12px] text-ink-2">{formatDuration(run.durationMs)}</Td>
             <Td className="text-[12px] text-ink-2">
                 <time dateTime={new Date(run.startedAt).toISOString()}>

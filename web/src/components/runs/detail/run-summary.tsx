@@ -3,6 +3,7 @@ import { CrossGlyph, WarningGlyph } from "@/components/icons/glyphs";
 import type { RunRow } from "@/lib/data/runs/types";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { costText } from "./lib/cost";
 
 // Observe-mode results that would have blocked or asked if the rule were on.
 export type Observed = { wouldBlock: number; wouldAsk: number };
@@ -46,7 +47,7 @@ export function RunSummary({ run, observed }: { run: RunRow; observed: Observed 
                 <Counter>{formatInt(run.steps)}</Counter>
             </Tile>
             <Tile label="Estimated cost" className="max-[560px]:col-span-2">
-                <Counter>${run.costUsd.toFixed(4)}</Counter>
+                <Counter>{costText(run.costUsd, run.costKnown, (usd) => `$${usd.toFixed(4)}`)}</Counter>
             </Tile>
             <Tile label="Guard decisions" className="max-[980px]:col-span-3 max-[560px]:col-span-2">
                 <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">

@@ -7,6 +7,7 @@ import { Badge, LabelChip, RunStatusLabel, StatusSquare } from "@/components/kit
 import { formatAge, formatUsd, shortId } from "@/lib/format";
 import type { ApprovalRequest, Incident, RunSummary } from "@/lib/data/types";
 import { REPLAY_TONE } from "@/components/incidents/lib/labels";
+import { costText } from "@/components/runs/detail/lib/cost";
 
 export function ApprovalsSection({ approvals, now }: { approvals: ApprovalRequest[]; now: number }) {
     return (
@@ -123,7 +124,9 @@ export function RunsSection({ runs, now }: { runs: RunSummary[]; now: number }) 
                             <Td>
                                 <OutcomeBar counts={run.decisions} cells={24} />
                             </Td>
-                            <Td className="mono text-[12px] text-ink-2">{formatUsd(run.costUsd)}</Td>
+                            <Td className="mono text-[12px] text-ink-2">
+                                {costText(run.costUsd, run.costKnown, formatUsd)}
+                            </Td>
                             <Td className="text-[12px] text-ink-2">
                                 {formatAge(run.startedAt, now)} ago
                                 <RowChevron />
