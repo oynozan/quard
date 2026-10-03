@@ -7,6 +7,7 @@ import type { RunBuilder } from "../build/builder";
 import type { RunPlan } from "./plan";
 
 const TEXT = { subject: "text", body: "text" } as const;
+const PINNED = ["docs-site", "status-page"];
 
 export function supportWork(b: RunBuilder, plan: RunPlan, root: boolean): void {
     const customer = pick(b.rng, CUSTOMERS);
@@ -80,7 +81,7 @@ export function supportWork(b: RunBuilder, plan: RunPlan, root: boolean): void {
         b.model("support", { calls: ["refund_order"] });
         const refund = b.tool("support", "refund_order", {
             args: { order: customer.order, amount: "24.90 EUR" },
-            approval: answerFor(b),
+            approval: answerFor(b, plan),
         });
         if (refund.result !== "ran") b.end("blocked");
     } else if (roll < 0.45) {
@@ -153,9 +154,11 @@ export function triageWork(b: RunBuilder, plan: RunPlan): void {
 }
 
 export function deployWork(b: RunBuilder, plan: RunPlan): void {
-    const service = pick(b.rng, SERVICES);
-    const pinned = service === "docs-site" || service === "status-page";
-    const env = pinned || chance(b.rng, 0.4) ? "production" : "staging";
+    const blocked = plan.ending === "blocked";
+    // A blocked plan deploys an unpinned service to production: no grant matches, so a human is asked.
+    const service = pick(b.rng, blocked ? SERVICES.filter((name) => !PINNED.includes(name)) : SERVICES);
+    const pinned = PINNED.includes(service);
+    const env = pinned || blocked || chance(b.rng, 0.4) ? "production" : "staging";
     b.model("deploy-bot", { input: { text: `Deploy ${service} to ${env}.` }, calls: ["run_tests"] });
     const tests = b.tool("deploy-bot", "run_tests", {
         args: { service, suite: "smoke" },
@@ -188,7 +191,7 @@ export function deployWork(b: RunBuilder, plan: RunPlan): void {
         args,
         kinds: { service: "text", environment: "text", ref: "text" },
         grant: service === "docs-site" ? "grant_3e1c" : service === "status-page" ? "grant_9a04" : undefined,
-        approval: plan.ending === "blocked" ? { answer: "deny", by: "marco@acme.com" } : answerFor(b, "marco@acme.com"),
+        approval: answerFor(b, plan, "marco@acme.com"),
     });
     if (deployed.result !== "ran") {
         b.model("deploy-bot", { detail: "Read the denial and stopped" });

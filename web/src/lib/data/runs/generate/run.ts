@@ -14,8 +14,10 @@ function orchestratorWork(b: RunBuilder, plan: RunPlan): void {
         if (step.agent === "researcher") researcherWork(b, plan);
         else if (step.agent === "billing") billingWork(b, plan, false, step.supplierId);
         else supportWork(b, plan, false);
+        // A helper that ended the run reports nothing back, and the orchestrator stops.
+        if (b.ending) return;
         b.message(step.agent, "orchestrator", { text: RESULT[step.agent] ?? "Done." });
-        const more = index < task.steps.length - 1 && !b.ending;
+        const more = index < task.steps.length - 1;
         b.model("orchestrator", { calls: more ? ["delegate"] : [], detail: more ? undefined : "Answered the user" });
         if (!more) break;
     }

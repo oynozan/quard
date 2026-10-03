@@ -17,7 +17,7 @@ export type CatalogRun = { built: BuiltRun; detail: RunDetail };
 let entries: Entry[] | null = null;
 const cache = new Map<string, CatalogRun>();
 const MAX_EXTRA = 300;
-const LIVE_OFFSETS = [7_000, 19_000, 34_000];
+const LIVE_OFFSETS = [7_000, 19_000, 26_000];
 
 // Generated runs follow the overview's runs-per-hour chart, minus the pinned runs in each hour.
 function catalogEntries(): Entry[] {

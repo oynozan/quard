@@ -6,10 +6,10 @@ import type { ApprovalPlan } from "../build/approval";
 import type { RunBuilder } from "../build/builder";
 import type { RunPlan } from "./plan";
 
-// Most requests are approved once; some are denied.
-export function answerFor(b: RunBuilder, by?: string): ApprovalPlan {
+// A human denies only in a run planned to end blocked. Otherwise they approve once.
+export function answerFor(b: RunBuilder, plan: RunPlan, by?: string): ApprovalPlan {
     return {
-        answer: chance(b.rng, 0.92) ? "approve once" : "deny",
+        answer: plan.ending === "blocked" ? "deny" : "approve once",
         by,
         waitMs: b.int(35, 480) * 1000,
     };
@@ -38,7 +38,8 @@ export function researcherWork(b: RunBuilder, plan: RunPlan): void {
             args: { url },
             output: pageNote(url),
             error: plan.ending === "failed" && last ? "429 Too Many Requests" : undefined,
-            decide: roll < 0.05 ? FLAG_HIDDEN : roll < 0.08 ? STRIP_PAGE : undefined,
+            // Nothing overrides the planned block.
+            decide: blocked ? undefined : roll < 0.05 ? FLAG_HIDDEN : roll < 0.08 ? STRIP_PAGE : undefined,
         });
         if (fetched.result === "blocked") {
             b.model("researcher", { detail: "Read the refusal and stopped" });
@@ -92,7 +93,8 @@ export function billingWork(b: RunBuilder, plan: RunPlan, root: boolean, supplie
         return;
     }
 
-    const blocked = plan.ending === "blocked" && plan.canAsk;
+    // The quarantine list blocks this payment without asking anyone, so recent runs can end blocked too.
+    const blocked = plan.ending === "blocked";
     if (blocked || chance(b.rng, 0.4)) {
         const folder = blocked ? "/srv/inbox-attachments" : "/srv/invoices";
         b.tool("billing", "get_invoice_pdf", {
@@ -106,7 +108,7 @@ export function billingWork(b: RunBuilder, plan: RunPlan, root: boolean, supplie
         });
     }
 
-    if (plan.canAsk && (blocked || chance(b.rng, 0.6))) {
+    if (blocked || (plan.canAsk && chance(b.rng, 0.6))) {
         b.model("billing", { calls: ["pay_invoice"] });
         const paid = b.tool("billing", "pay_invoice", {
             args: {
@@ -115,7 +117,7 @@ export function billingWork(b: RunBuilder, plan: RunPlan, root: boolean, supplie
                 reference: invoice.id,
             },
             fleet: blocked ? { known: false, runs: 6, quarantined: true } : undefined,
-            approval: answerFor(b),
+            approval: answerFor(b, plan),
         });
         if (paid.result !== "ran") {
             b.model("billing", { detail: "Read the refusal and stopped" });
