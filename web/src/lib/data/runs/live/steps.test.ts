@@ -126,6 +126,16 @@ describe("buildSteps", () => {
         expect(limit?.guard?.degraded).toBe(false);
     });
 
+    it("shows the rules hash a decision was made with, and no hash for the single rule", () => {
+        const run = storedRun();
+        run.decisions[2] = { ...run.decisions[2]!, rulesHash: "0123456789abcdef" };
+        const [source, action] = buildSteps(run).filter((step) => step.kind === "guard_decision");
+
+        expect(action?.guard).toMatchObject({ rulesHash: "0123456789abcdef", ruleHash: "" });
+        // Stored without a hash, as from an SDK that had no guarded tool yet
+        expect(source?.guard?.rulesHash).toBe("");
+    });
+
     it("reads a decision stored without its event as on time and not scored", () => {
         const check: RunDecision = {
             eventId: "e00000000000000c",

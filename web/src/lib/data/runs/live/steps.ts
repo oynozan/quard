@@ -178,7 +178,7 @@ function guardStep(decision: StoredDecision, labels: RunLabel[]): Step {
             mode: guard === "approval" ? null : decision.mode,
             rule: decision.rule,
             ruleHash: "",
-            rulesHash: "",
+            rulesHash: decision.rulesHash ?? "",
             reason,
             degraded: decision.degraded ?? false,
             scan:

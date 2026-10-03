@@ -40,8 +40,9 @@ export type GuardDecision = {
     // Null for approval guards, which always ask.
     mode: GuardMode | null;
     rule: string;
+    // Empty, because the SDK hashes whole rule sets and not single rules
     ruleHash: string;
-    // The active rules hash the SDK sent on connect.
+    // The hash of the active rules it was decided with, empty when the SDK sent none
     rulesHash: string;
     reason: string;
     // Sent late while the backend was unreachable.
