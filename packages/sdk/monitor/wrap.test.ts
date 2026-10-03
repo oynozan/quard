@@ -25,6 +25,12 @@ describe("wrap", () => {
         expect(inner).toHaveBeenCalledWith("https://api.openai.com/v1/models", undefined);
     });
 
+    it("leaves a wrapped client as it is, so calls are not recorded twice", () => {
+        const wrapped = wrap(fakeClient(vi.fn()));
+
+        expect(wrap(wrapped)).toBe(wrapped);
+    });
+
     it("falls back to the global fetch", async () => {
         const global = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
 
