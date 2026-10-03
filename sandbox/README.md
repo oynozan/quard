@@ -36,20 +36,35 @@ pnpm --filter @quard/sandbox typecheck
 
 ## See runs in the dashboard
 
-The examples can also send their runs to a local Quard backend. No Docker needed:
+1. Add a hash key to `sandbox/.env`. Make one with `openssl rand -hex 32`:
 
-```sh
-pnpm --filter @quard/db dev:db                                   # Postgres on 5432 (PGlite)
-export DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres
-pnpm db:migrate
-pnpm --filter @quard/db create-project --project Acme
-export QUARD_HASH_KEY=<from the last step>
-node services/webhook/main.ts                                    # events, port 4100
-node services/control/main.ts                                    # approvals and limits, port 4200
-cd web && pnpm dev                                               # Privy settings: web/.env.example
-```
+    ```sh
+    QUARD_HASH_KEY=<64 hex characters>
+    ```
 
-Then set `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` in `sandbox/.env` (the lines are there, commented out) and run any example. With them set, `05-human-approval.ts` waits for your answer at http://localhost:3000/approvals instead of asking in the terminal.
+2. Start the local backend and the dashboard:
+
+    ```sh
+    node sandbox/dashboard.ts
+    ```
+
+    It uses the database in `web/.env` (`DATABASE_URL`), applies migrations, and runs webhook (port 4100), control (4200) and the web app (3000). Ctrl-C stops it all.
+
+3. Open http://localhost:3000, sign in, then go to Settings and create an agent key. Add it to `sandbox/.env`:
+
+    ```sh
+    QUARD_AGENT_KEY=qk_live_...
+    ```
+
+4. In another terminal:
+
+    ```sh
+    node sandbox/15-everything.ts
+    ```
+
+No Postgres? Run `pnpm --filter @quard/db dev:db` and set `DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres` in `web/.env`. Only one Next dev server can run in `web/` at a time, so stop any other one first.
+
+With `QUARD_AGENT_KEY` set, every example sends its runs to the dashboard, and `05-human-approval.ts` waits for your answer at http://localhost:3000/approvals instead of asking in the terminal. Comment the line out to keep runs in the terminal only.
 
 ## Examples
 
@@ -66,23 +81,24 @@ Then set `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` in `sandbox/.env` (the lines are
 
 These need the local backend (see "See runs in the dashboard"):
 
-| File                               | What it shows                                                                                                 |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `09-runs-in-the-dashboard.ts`      | Runs reach the dashboard with secrets removed and IBANs and emails masked; completed, failed and blocked runs |
-| `10-approvals-in-the-dashboard.ts` | Approvals answered in the dashboard: always approve, an amount rule that asks, a timeout                      |
-| `11-daily-limits.ts`               | Per-day limits shared by every process; run it twice and the count goes on                                    |
-| `12-fleet-check.ts`                | A new IBAN paid in 5 separate runs is quarantined (only observed for the first 7 days)                        |
+| File                               | What it shows                                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `09-runs-in-the-dashboard.ts`      | Runs reach the dashboard with secrets removed and IBANs and emails masked; completed, failed and blocked runs   |
+| `10-approvals-in-the-dashboard.ts` | Approvals answered in the dashboard: always approve, an amount rule that asks, a timeout                        |
+| `11-daily-limits.ts`               | Per-day limits shared by every process; run it twice and the count goes on                                      |
+| `12-fleet-check.ts`                | A new IBAN paid in 5 separate runs is quarantined (only observed for the first 7 days)                          |
 
 These run with or without it:
 
-| File                 | What it shows                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `13-backend-down.ts` | Backend unreachable: approvals block after 30 s, daily limits count locally, other guards keep working |
-| `14-policy-file.ts`  | Rules in a JSON policy file win over code and change while the app runs                                |
+| File                              | What it shows                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `13-backend-down.ts`              | Backend unreachable: approvals block after 30 s, daily limits count locally, other guards keep working |
+| `14-policy-file.ts`               | Rules in a JSON policy file win over code and change while the app runs                                |
 
 ## How it fits together
 
 - `import { guard, quard } from "quard"` is the same line an app would use. `pnpm install` links `node_modules/quard` to `lib/quard`, which re-exports the SDK source in `packages/sdk`, so SDK changes show up right away.
 - The sandbox is a workspace package (`@quard/sandbox`), so CI type-checks the examples.
 - `lib/agent.ts` is a plain agent loop on the Responses API, and `lib/tools.ts` holds the tool definitions the model sees.
+- `dashboard.ts` and `lib/backend/` start the local backend.
 - `lib/env.ts` loads `.env`, `lib/terminal.ts` asks for approvals, and `lib/show.ts` prints events.

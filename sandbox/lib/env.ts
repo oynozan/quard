@@ -19,11 +19,16 @@ export const MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
 export const DASHBOARD = Boolean(process.env.QUARD_AGENT_KEY);
 
 if (DASHBOARD) {
+    const webhookUrl = process.env.QUARD_WEBHOOK_URL || "http://localhost:4100";
     quard.configure({
         key: process.env.QUARD_AGENT_KEY,
-        webhookUrl: process.env.QUARD_WEBHOOK_URL || "http://localhost:4100",
+        webhookUrl,
         controlUrl: process.env.QUARD_CONTROL_URL || "http://localhost:4200",
         hashKey: process.env.QUARD_HASH_KEY,
+    });
+    // Only a warning: example 13 runs with the backend down on purpose
+    await fetch(`${webhookUrl}/health`, { signal: AbortSignal.timeout(1000) }).catch(() => {
+        console.warn(`The Quard backend at ${webhookUrl} isn't answering. Start it with: node sandbox/dashboard.ts`);
     });
 }
 
@@ -31,7 +36,7 @@ if (DASHBOARD) {
 export function needsDashboard(): void {
     if (!DASHBOARD) {
         console.error(
-            "This example needs the local Quard backend. Start it as sandbox/README.md shows, then set QUARD_AGENT_KEY and QUARD_HASH_KEY in sandbox/.env.",
+            "This example needs the local Quard backend. Start it with node sandbox/dashboard.ts, then add QUARD_AGENT_KEY and QUARD_HASH_KEY to sandbox/.env.",
         );
         process.exit(1);
     }
