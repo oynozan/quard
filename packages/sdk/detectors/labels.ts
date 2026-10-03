@@ -68,9 +68,10 @@ export function topRisk(answer: DetectorAnswer): DetectorLabel {
     return RISKY.reduce((best, name) => (chance(answer, name) > chance(answer, best) ? name : best));
 }
 
-// Throws unless the label is known and every chance is from 0 to 1
+// Throws unless the label is known, has its own chance, and every
+// chance is from 0 to 1
 export function checkAnswer(answer: DetectorAnswer): DetectorAnswer {
-    const known = Object.hasOwn(DETECTOR_LABELS, answer.label);
+    const known = Object.hasOwn(DETECTOR_LABELS, answer.label) && answer.probabilities[answer.label] !== undefined;
     const chances = Object.values(answer.probabilities);
     if (!known || !chances.every((p) => typeof p === "number" && p >= 0 && p <= 1)) {
         throw new DetectorError("bad_reply");

@@ -49,6 +49,8 @@ describe("checkAnswer", () => {
         ["a negative chance", { label: "article", probabilities: { article: -0.1 } }],
         ["a chance that is not a number", { label: "article", probabilities: { article: Number.NaN } }],
         ["a missing chance", { label: "article", probabilities: { article: undefined } }],
+        ["no chance for its own label", { label: "article", probabilities: { invoice: 1 } }],
+        ["no chances at all", { label: "article", probabilities: {} }],
     ])("refuses %s", (_what, bad) => {
         expect(() => checkAnswer(bad as DetectorAnswer)).toThrow(new DetectorError("bad_reply"));
     });

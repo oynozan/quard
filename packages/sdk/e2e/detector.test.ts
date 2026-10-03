@@ -10,6 +10,7 @@ import {
     type DetectorAnswer,
     type SourceOptions,
 } from "../index.ts";
+import { LABEL_NAMES } from "../detectors/labels.ts";
 import { decisionsOf } from "../test/events.ts";
 import { tempDir, writeJson } from "../test/files.ts";
 import { resetAll } from "../test/reset.ts";
@@ -136,13 +137,15 @@ const EMAIL = [
 ].join("\n");
 
 // Jev's API, answering with the given label
+// A Jev reply gives the chance of every label
 function jevAnswers(choice: string) {
+    const probabilities = Object.fromEntries(
+        LABEL_NAMES.map((name) => [name, name === choice ? 0.92 : name === "none" ? 0.08 : 0]),
+    );
     const fetch = vi.fn(async (_url: string, _init: RequestInit) =>
         Response.json({
             model: "jev-1.13.0",
-            answers: {
-                label: { type: "choice", choice, confidence: 0.9, probabilities: { [choice]: 0.92, none: 0.08 } },
-            },
+            answers: { label: { type: "choice", choice, confidence: 0.9, probabilities } },
         }),
     );
     vi.stubGlobal("fetch", fetch);
