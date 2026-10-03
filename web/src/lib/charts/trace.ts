@@ -82,17 +82,24 @@ export function allocateCells(parts: number[], cells: number): number[] {
     const exact = parts.map((p) => (p / total) * cells);
     const counts = exact.map((e, i) => (parts[i] > 0 ? Math.max(1, Math.floor(e)) : 0));
     let left = cells - counts.reduce((sum, c) => sum + c, 0);
-    const order = exact.map((e, i) => ({ i, rest: e - Math.floor(e) })).sort((a, b) => b.rest - a.rest);
+    // Rank by what each part is still owed, so a part raised to one cell sorts last.
+    const order = exact
+        .map((e, i) => ({ i, rest: e - counts[i] }))
+        .filter(({ i }) => parts[i] > 0)
+        .sort((a, b) => b.rest - a.rest);
     for (const { i } of order) {
         if (left <= 0) break;
-        if (parts[i] > 0) {
-            counts[i] += 1;
-            left -= 1;
-        }
+        counts[i] += 1;
+        left -= 1;
     }
     while (left < 0) {
-        const biggest = counts.indexOf(Math.max(...counts));
-        counts[biggest] -= 1;
+        // Take from the most cells; on a tie, from the smallest part.
+        const most = Math.max(...counts);
+        const pick = counts.reduce(
+            (best, c, i) => (c === most && exact[i] < exact[best] ? i : best),
+            counts.indexOf(most),
+        );
+        counts[pick] -= 1;
         left += 1;
     }
     return counts;

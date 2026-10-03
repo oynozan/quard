@@ -28,6 +28,8 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
 
     const columns = Math.max(20, Math.floor((width - AXIS + 2) / (CELL + 2)));
     const layout = traceLayout({ values, columns, rows: ROWS, cell: CELL, limit });
+    // A limit is always given, so the layout always places its line
+    const limitY = layout.limitY! + 0.5;
     const dayOf = (i: number) => startAt + i * DAY;
     const today = values[values.length - 1];
     const peak = values.indexOf(Math.max(...values));
@@ -127,16 +129,14 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
                                 ) : null}
                                 <path d={layout.lit} fill="var(--signal)" />
                                 <path d={layout.over} fill="var(--warning)" />
-                                {layout.limitY !== null ? (
-                                    <line
-                                        x1={0}
-                                        x2={layout.width}
-                                        y1={layout.limitY + 0.5}
-                                        y2={layout.limitY + 0.5}
-                                        stroke="var(--warning)"
-                                        strokeDasharray={`${CELL} 2`}
-                                    />
-                                ) : null}
+                                <line
+                                    x1={0}
+                                    x2={layout.width}
+                                    y1={limitY}
+                                    y2={limitY}
+                                    stroke="var(--warning)"
+                                    strokeDasharray={`${CELL} 2`}
+                                />
                             </svg>
                             {breach !== null ? (
                                 <span
