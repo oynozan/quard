@@ -1,4 +1,16 @@
 {
     "extends": "./tsconfig.json",
-    "exclude": ["node_modules", "dist", "coverage", "**/*.test.ts", "test", "e2e", "*.config.ts"]
+    "include": ["**/*.ts", "../shared/**/*.ts"],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "coverage",
+        "**/*.test.ts",
+        "test",
+        "e2e",
+        "*.config.ts",
+        "../shared/node_modules",
+        "../shared/**/*.test.ts",
+        "../shared/*.config.ts"
+    ]
 }

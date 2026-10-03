@@ -11,6 +11,10 @@
         ".": {
             "types": "./dist/index.d.mts",
             "default": "./dist/index.mjs"
+        },
+        "./openai-agents": {
+            "types": "./dist/openai-agents.d.mts",
+            "default": "./dist/openai-agents.mjs"
         }
     },
     "engines": {
