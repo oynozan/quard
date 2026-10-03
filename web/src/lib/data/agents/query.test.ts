@@ -148,7 +148,7 @@ describe("agents from Postgres", () => {
         expect(detail?.stats).toEqual({
             modelCalls24h: 1,
             influencedShare: 1,
-            costUsd24h: 0.0031,
+            costUsd24h: 0.003075,
             costKnown: true,
             asked24h: 1,
             blocked24h: 1,

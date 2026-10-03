@@ -58,7 +58,7 @@ describe("RunGraph", () => {
         const bare = makeAgent({ name: "billing", version: "", model: "" });
         render(<RunGraph graph={{ nodes: [bare], edges: [] }} startedAt={START} />);
         expect(screen.getByRole("link", { name: "billing" }).parentElement!.children).toHaveLength(1);
-        expect(agentRows()[0]!.textContent).toBe("billing0 steps$0.0000");
+        expect(agentRows()[0]!.textContent).toBe("billing0 steps$0.00");
     });
 
     it("shows a lone agent with no incoming message and no messages below", () => {

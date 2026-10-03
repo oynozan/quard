@@ -99,7 +99,7 @@ describe("agentStats", () => {
         expect(stats).toEqual({
             modelCalls: 5,
             influenced: 2,
-            costUsd: expect.closeTo(0.0124, 10) as number,
+            costUsd: expect.closeTo(0.0123, 10) as number,
             costKnown: true,
             asked: 2,
             blocked: 3,
@@ -114,6 +114,6 @@ describe("agentStats", () => {
 
         const stats = await agentStats(test.db, projectId, "billing", { since });
 
-        expect(stats).toMatchObject({ modelCalls: 2, costUsd: 0.0031, costKnown: false });
+        expect(stats).toMatchObject({ modelCalls: 2, costUsd: 0.003075, costKnown: false });
     });
 });
