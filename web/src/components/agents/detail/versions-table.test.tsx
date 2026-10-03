@@ -5,9 +5,25 @@ import { VersionsTable } from "./versions-table";
 
 // Newest first, as the agent page passes them
 const versions = [
-    version("v4", { tools: ["search", "delegate"], current: true, note: "Can delegate", since: Date.UTC(2026, 7, 20) }),
-    version("v3", { tools: ["search", "fetch"], since: Date.UTC(2026, 6, 1), until: Date.UTC(2026, 7, 20) }),
-    version("v2", { tools: ["search", "fetch"], since: Date.UTC(2026, 5, 12), until: Date.UTC(2026, 6, 1) }),
+    version("v4", {
+        tools: ["search", "delegate"],
+        toolsBefore: ["search", "fetch"],
+        current: true,
+        note: "Can delegate",
+        since: Date.UTC(2026, 7, 20),
+    }),
+    version("v3", {
+        tools: ["search", "fetch"],
+        toolsBefore: ["search", "fetch"],
+        since: Date.UTC(2026, 6, 1),
+        until: Date.UTC(2026, 7, 20),
+    }),
+    version("v2", {
+        tools: ["search", "fetch"],
+        toolsBefore: ["search"],
+        since: Date.UTC(2026, 5, 12),
+        until: Date.UTC(2026, 6, 1),
+    }),
     version("v1", { tools: ["search"], since: Date.UTC(2026, 5, 2), until: Date.UTC(2026, 5, 12) }),
 ];
 
@@ -33,9 +49,15 @@ describe("VersionsTable", () => {
     });
 
     it("names a version that only dropped tools", () => {
-        render(<VersionsTable versions={[version("v2", { tools: [] }), version("v1")]} />);
+        render(<VersionsTable versions={[version("v2", { tools: [], toolsBefore: ["search"] }), version("v1")]} />);
         const title = rows()[0].children[0].getAttribute("title");
         expect(title).toBe("No tools (Removed search)");
+    });
+
+    it("compares the oldest version listed with the one before it, even when that one is not listed", () => {
+        render(<VersionsTable versions={[version("v101", { tools: ["search"], toolsBefore: ["search", "fetch"] })]} />);
+        const title = rows()[0].children[0].getAttribute("title");
+        expect(title).toBe("1 tool: search (Removed fetch)");
     });
 
     it("marks the current version and shows its note", () => {

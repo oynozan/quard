@@ -18,6 +18,7 @@ export function version(name: string, extra: Partial<AgentVersionRow> = {}): Age
         model: "claude-sonnet",
         instructionsHash: "abcdef0123456789abcdef",
         tools: ["search"],
+        toolsBefore: null,
         since: NOW - 10 * DAY,
         until: null,
         note: "",

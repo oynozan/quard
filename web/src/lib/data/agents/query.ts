@@ -52,7 +52,8 @@ export const getAgent = cache(async (name: string): Promise<AgentDetail | null> 
         modelCallBuckets(db, project.id, { ...hours, bucketMs: HOUR, agent: name }),
         agentRecentCalls(db, project.id, name, { limit: RECENT_STEPS }),
         agentLinks(db, project.id, { since: window.since, agent: name }),
-        agentVersions(db, project.id, name, { limit: VERSIONS }),
+        // One more than the page lists, for the tools before the oldest one listed
+        agentVersions(db, project.id, name, { limit: VERSIONS + 1 }),
     ]);
     const row = roster.find((item) => item.agent === name);
     return {
@@ -60,7 +61,7 @@ export const getAgent = cache(async (name: string): Promise<AgentDetail | null> 
         stats: statsOf(stats),
         activity: activityOf(buckets, hours.since),
         links: links.map(edgeOf),
-        versions: versionsOf(versions),
+        versions: versionsOf(versions, VERSIONS),
         incidents: [],
         timeline: timelineOf(groups),
     };

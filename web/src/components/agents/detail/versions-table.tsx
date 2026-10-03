@@ -7,10 +7,11 @@ import { formatShortDate, shortHash } from "@/lib/format";
 import { plural } from "../lib/words";
 
 // What changed in the tools since the version before
-function toolChange(row: AgentVersionRow, before: AgentVersionRow | undefined): string {
+function toolChange(row: AgentVersionRow): string {
+    const before = row.toolsBefore;
     if (!before) return "First version";
-    const added = row.tools.filter((tool) => !before.tools.includes(tool));
-    const removed = before.tools.filter((tool) => !row.tools.includes(tool));
+    const added = row.tools.filter((tool) => !before.includes(tool));
+    const removed = before.filter((tool) => !row.tools.includes(tool));
     const parts = [
         added.length ? `Added ${added.join(", ")}` : "",
         removed.length ? `Removed ${removed.join(", ")}` : "",
@@ -19,8 +20,8 @@ function toolChange(row: AgentVersionRow, before: AgentVersionRow | undefined): 
 }
 
 // The tool list and its change, shown when hovering the version cell
-function toolsTitle(row: AgentVersionRow, before: AgentVersionRow | undefined): string {
-    const change = toolChange(row, before);
+function toolsTitle(row: AgentVersionRow): string {
+    const change = toolChange(row);
     if (row.tools.length === 0) return `No tools (${change})`;
     return `${row.tools.length} ${plural(row.tools.length, "tool")}: ${row.tools.join(", ")} (${change})`;
 }
@@ -46,9 +47,9 @@ export function VersionsTable({ versions }: { versions: AgentVersionRow[] }) {
                     </tr>
                 </thead>
                 <tbody>
-                    {versions.map((row, i) => (
+                    {versions.map((row) => (
                         <Tr key={row.version}>
-                            <Td title={toolsTitle(row, versions[i + 1])}>
+                            <Td title={toolsTitle(row)}>
                                 <span className="flex min-w-0 items-center gap-2">
                                     <strong className="mono shrink-0 text-[14px] font-normal text-ink">
                                         {row.version}

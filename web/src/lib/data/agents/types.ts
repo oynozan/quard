@@ -39,6 +39,8 @@ export type AgentVersionRow = {
     // Null for a version that ran without instructions
     instructionsHash: string | null;
     tools: string[];
+    // The tools of the version before it, null for the first version
+    toolsBefore: string[] | null;
     since: number;
     // When the next version replaced it. Null for the current version.
     until: number | null;

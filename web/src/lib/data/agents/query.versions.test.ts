@@ -4,7 +4,7 @@ import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ago, items, model, runOf, start, stepOf } from "../../../../test/agents/events";
 import { seenVersion } from "../../../../test/agents/versions";
-import { DAY, NOW } from "../../../../test/time";
+import { DAY, HOUR, NOW } from "../../../../test/time";
 
 vi.mock("@/lib/auth/session", () => ({
     requireSession: async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 }),
@@ -19,6 +19,9 @@ vi.mock("react", async (original) => {
 
 const { getAgent } = await import("./query");
 const { database } = await import("../runs/live/client");
+
+// Version hashes made from a number
+const versionOf = (n: number): string => n.toString(16).padStart(16, "0");
 
 let test: TestDb;
 
@@ -75,6 +78,7 @@ describe("agent versions from Postgres", () => {
                 model: "gpt-5.4-mini",
                 instructionsHash: null,
                 tools: ["payInvoice", "fetchPage"],
+                toolsBefore: ["payInvoice"],
                 since: NOW - 2 * DAY,
                 until: null,
                 note: "",
@@ -87,6 +91,7 @@ describe("agent versions from Postgres", () => {
                 // The first 16 hex characters of the SHA-256 of "Pay approved invoices."
                 instructionsHash: "c452794b8ad8444b",
                 tools: ["payInvoice"],
+                toolsBefore: null,
                 since: NOW - 10 * DAY,
                 until: NOW - 2 * DAY,
                 note: "",
@@ -94,5 +99,31 @@ describe("agent versions from Postgres", () => {
                 incidents: [],
             },
         ]);
+    });
+
+    it("lists the newest 100, the oldest of them still compared with the version before it", async () => {
+        const projectId = await billing();
+        // 101 versions an hour apart, where only the oldest could also fetch pages
+        await test.db
+            .insertInto("agent_versions")
+            .values(
+                Array.from({ length: 101 }, (_, n) => ({
+                    project_id: projectId,
+                    agent: "billing",
+                    version: versionOf(n),
+                    model: "gpt-5.4",
+                    tools: n === 0 ? ["payInvoice", "fetchPage"] : ["payInvoice"],
+                    first_seen_at: new Date(NOW - (101 - n) * HOUR),
+                })),
+            )
+            .execute();
+
+        const versions = (await getAgent("billing"))?.versions ?? [];
+        expect(versions).toHaveLength(100);
+        expect(versions[0]?.version).toBe(versionOf(100));
+        expect(versions[99]).toMatchObject({
+            version: versionOf(1),
+            toolsBefore: ["payInvoice", "fetchPage"],
+        });
     });
 });
