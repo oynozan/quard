@@ -11,11 +11,14 @@
     },
     "dependencies": {
         "@hono/node-server": "catalog:",
+        "@quard/db": "workspace:*",
         "@quard/shared": "workspace:*",
-        "hono": "catalog:"
+        "hono": "catalog:",
+        "ws": "catalog:"
     },
     "devDependencies": {
         "@types/node": "catalog:",
+        "@types/ws": "catalog:",
         "@vitest/coverage-v8": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"

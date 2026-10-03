@@ -24,11 +24,13 @@
     },
     "dependencies": {
         "tldts": "catalog:",
+        "ws": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {
         "@quard/shared": "workspace:*",
         "@types/node": "catalog:",
+        "@types/ws": "catalog:",
         "@vitest/coverage-v8": "catalog:",
         "openai": "catalog:",
         "tsdown": "catalog:",
