@@ -27,7 +27,16 @@
         "ws": "catalog:",
         "zod": "catalog:"
     },
+    "peerDependencies": {
+        "@openai/agents": "^0.18.0"
+    },
+    "peerDependenciesMeta": {
+        "@openai/agents": {
+            "optional": true
+        }
+    },
     "devDependencies": {
+        "@openai/agents": "catalog:",
         "@quard/shared": "workspace:*",
         "@types/node": "catalog:",
         "@types/ws": "catalog:",
