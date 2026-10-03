@@ -16,6 +16,17 @@ export function readAmount(input: unknown, field: string): number | undefined {
     return typeof value === "number" ? value : Number(value);
 }
 
+// The rule name decision events and the rules list use
+export function ruleName(rule: ActionRule): string {
+    if ("check" in rule) {
+        return rule.name;
+    }
+    if ("from" in rule) {
+        return rule.name ?? `${rule.field}:from`;
+    }
+    return "max" in rule ? (rule.name ?? `${rule.field}:max`) : (rule.name ?? `${rule.field}:never-seen`);
+}
+
 function outcome(
     rule: string,
     mode: Mode,
@@ -50,19 +61,12 @@ function evaluate(call: GuardCall, rule: ActionRule, mode: Mode): RuleResult {
                 exactOccurrences(value).some((o) => o.flags.length === 0 && matchesOrigin(o.origin, rule.from)),
             );
         const reason = values.some((v) => v.modelGenerated) ? "value_model_generated" : "value_not_from_allowed_origin";
-        return outcome(rule.name ?? `${rule.field}:from`, mode, !allowed, rule.onFail ?? "block", reason, rule.field);
+        return outcome(ruleName(rule), mode, !allowed, rule.onFail ?? "block", reason, rule.field);
     }
     if ("max" in rule) {
         const amount = readAmount(call.input, rule.field);
         const over = amount !== undefined && !(amount <= rule.max);
-        return outcome(
-            rule.name ?? `${rule.field}:max`,
-            mode,
-            over,
-            rule.onFail ?? "block",
-            "amount_over_cap",
-            rule.field,
-        );
+        return outcome(ruleName(rule), mode, over, rule.onFail ?? "block", "amount_over_cap", rule.field);
     }
     // A value counts as seen when it first appeared in trusted, unflagged content.
     // Never-seen values go to a human unless the rule says otherwise.
@@ -73,14 +77,7 @@ function evaluate(call: GuardCall, rule: ActionRule, mode: Mode): RuleResult {
             const first = exactOccurrences(value)[0];
             return first !== undefined && first.trust === "trusted" && first.flags.length === 0;
         });
-    return outcome(
-        rule.name ?? `${rule.field}:never-seen`,
-        mode,
-        !seen,
-        rule.onFail ?? "ask",
-        "recipient_never_seen",
-        rule.field,
-    );
+    return outcome(ruleName(rule), mode, !seen, rule.onFail ?? "ask", "recipient_never_seen", rule.field);
 }
 
 export function checkAction(call: GuardCall, options: ActionOptions): RuleResult[] {

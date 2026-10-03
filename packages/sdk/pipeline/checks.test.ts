@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configure, resetConfig } from "../core/config.ts";
-import { takeEvents } from "../core/recorder.ts";
+import { configure } from "../core/config.ts";
+import { registerGuardedTool } from "../context/registry.ts";
 import type { RuleResult } from "../guards/call.ts";
 import type { GuardOptions } from "../guards/options.ts";
+import { rulesSnapshot } from "../policy/rules.ts";
 import { makeCall } from "../test/call.ts";
-import { countLimits, decide, preChecks, recordDecision } from "./checks.ts";
+import { resetAll } from "../test/reset.ts";
+import { asksOf, decide, preChecks, recordDecision } from "./checks.ts";
 
 afterEach(() => {
-    resetConfig();
-    takeEvents();
+    resetAll();
 });
 
 const result = (decision: RuleResult["decision"], mode: RuleResult["mode"] = "block"): RuleResult =>
@@ -55,15 +56,11 @@ describe("decide", () => {
     });
 });
 
-describe("countLimits", () => {
-    it("counts only limit guards", () => {
-        const call = makeCall({});
-        countLimits(call, [
-            { type: "action", rules: [] },
-            { type: "limit", maxCallsPerRun: 1 },
-        ]);
+describe("asksOf", () => {
+    it("keeps the enforced asks", () => {
+        const asks = asksOf([result("allow"), result("ask"), result("ask", "observe"), result("block")]);
 
-        expect([...call.run.counters.values()]).toEqual([1]);
+        expect(asks).toEqual([result("ask")]);
     });
 });
 
@@ -86,6 +83,22 @@ describe("recordDecision", () => {
         expect(onEvent.mock.calls.map(([event]) => [event.decision, event.enforced, event.reason])).toEqual([
             ["block", true, "amount_over_cap"],
             ["ask", false, "rule_failed"],
+        ]);
+    });
+
+    it("adds the rules hash once a guarded tool exists, and the approval request", () => {
+        const onEvent = vi.fn();
+        configure({ onEvent });
+        const call = makeCall({});
+        const request = `apr_${"1".repeat(16)}`;
+
+        recordDecision(call, result("allow"));
+        registerGuardedTool("pay", [{ type: "approval" }]);
+        recordDecision(call, { guard: "approval", rule: "human", decision: "allow", mode: "block", request });
+
+        expect(onEvent.mock.calls.map(([event]) => [event.rules, event.request])).toEqual([
+            [undefined, undefined],
+            [rulesSnapshot().hash, request],
         ]);
     });
 });

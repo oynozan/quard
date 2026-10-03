@@ -314,6 +314,10 @@
                                         "return",
                                         "throw"
                                     ]
+                                },
+                                "timeout": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
                                 }
                             },
                             "required": [
@@ -443,6 +447,37 @@
                                         "max"
                                     ],
                                     "additionalProperties": false
+                                },
+                                "maxCallsPerDay": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                },
+                                "maxAmountPerDay": {
+                                    "type": "object",
+                                    "properties": {
+                                        "field": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "max": {
+                                            "type": "number",
+                                            "minimum": 0
+                                        }
+                                    },
+                                    "required": [
+                                        "field",
+                                        "max"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "fleetCheck": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
                                 }
                             },
                             "required": [

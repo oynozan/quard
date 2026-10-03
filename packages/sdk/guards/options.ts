@@ -37,6 +37,8 @@ export type ApprovalOptions = {
     type: "approval";
     name?: string;
     onBlock?: "return" | "throw";
+    // Seconds to wait for an answer, with no limit by default
+    timeout?: number;
 };
 
 // What an egress guard does with sensitive data in what it sends
@@ -55,6 +57,11 @@ export type LimitOptions = Common & {
     type: "limit";
     maxCallsPerRun?: number;
     maxAmountPerRun?: { field: string; max: number };
+    // Per UTC day, across every process of the project
+    maxCallsPerDay?: number;
+    maxAmountPerDay?: { field: string; max: number };
+    // Fields whose IBANs, emails and domains the fleet check watches
+    fleetCheck?: string[];
 };
 
 export type GuardOptions = SourceOptions | ActionOptions | ApprovalOptions | EgressOptions | LimitOptions;

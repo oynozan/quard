@@ -24,8 +24,13 @@
                     { "field": "amount", "max": 10000, "onFail": "ask" }
                 ]
             },
-            { "type": "limit", "maxAmountPerRun": { "field": "amount", "max": 50000 } }
+            {
+                "type": "limit",
+                "maxAmountPerRun": { "field": "amount", "max": 50000 },
+                "maxAmountPerDay": { "field": "amount", "max": 200000 },
+                "fleetCheck": ["iban"]
+            }
         ],
-        "deleteRecords": [{ "type": "approval" }]
+        "deleteRecords": [{ "type": "approval", "timeout": 600 }]
     }
 }

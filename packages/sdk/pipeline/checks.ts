@@ -4,17 +4,20 @@ import { checkAction } from "../guards/action/action.ts";
 import { checkApproval } from "../guards/approval/approval.ts";
 import type { FailResult, GuardCall, Mode, RuleResult } from "../guards/call.ts";
 import { checkEgress } from "../guards/egress/egress.ts";
-import { checkLimit, countLimit } from "../guards/limit/limit.ts";
+import { checkLimit } from "../guards/limit/limit.ts";
 import type { GuardOptions } from "../guards/options.ts";
+import { rulesHash } from "../policy/rules.ts";
 import { policyVersion } from "../policy/state.ts";
 import { checkSignatureInput } from "../signatures/check.ts";
+import { activeControl } from "../transport/link/active.ts";
 
 // The guards that act before a call, in pipeline order
 export function preChecks(call: GuardCall, list: readonly GuardOptions[], withApproval: boolean): RuleResult[] {
     const results: RuleResult[] = checkSignatureInput(call);
+    const fleet = activeControl()?.fleet;
     for (const options of list) {
         if (options.type === "limit") {
-            results.push(...checkLimit(call, options));
+            results.push(...checkLimit(call, options, fleet));
         }
     }
     for (const options of list) {
@@ -42,12 +45,9 @@ export function decide(results: readonly RuleResult[]): FailResult | undefined {
     return enforced.find((result) => result.decision === "block") ?? enforced[0];
 }
 
-export function countLimits(call: GuardCall, list: readonly GuardOptions[]): void {
-    for (const options of list) {
-        if (options.type === "limit") {
-            countLimit(call, options);
-        }
-    }
+// The enforced asks a human must settle
+export function asksOf(results: readonly RuleResult[]): FailResult[] {
+    return results.filter((result): result is FailResult => result.mode === "block" && result.decision === "ask");
 }
 
 // What one rule decided. Output checks can also pass, strip or flag.
@@ -59,6 +59,8 @@ export type Outcome = {
     reason?: string;
     field?: string;
     score?: number;
+    // The approval request that answered the call
+    request?: string;
 };
 
 export function recordDecision(call: GuardCall, result: Outcome): void {
@@ -78,5 +80,7 @@ export function recordDecision(call: GuardCall, result: Outcome): void {
         field: result.field,
         score: result.score,
         policy: policyVersion(),
+        rules: rulesHash(),
+        request: result.request,
     });
 }

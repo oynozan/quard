@@ -34,7 +34,13 @@ const action = z.strictObject({
     rules: z.array(z.union([fromRule, maxRule, neverSeenRule])).min(1),
 });
 
-const approval = z.strictObject({ type: z.literal("approval"), name, onBlock });
+const approval = z.strictObject({
+    type: z.literal("approval"),
+    name,
+    onBlock,
+    // Seconds to wait for an answer
+    timeout: z.number().positive().optional(),
+});
 
 const egress = z.strictObject({
     type: z.literal("egress"),
@@ -53,6 +59,9 @@ const limit = z.strictObject({
     onBlock,
     maxCallsPerRun: z.number().int().nonnegative().optional(),
     maxAmountPerRun: z.strictObject({ field, max: z.number().nonnegative() }).optional(),
+    maxCallsPerDay: z.number().int().nonnegative().optional(),
+    maxAmountPerDay: z.strictObject({ field, max: z.number().nonnegative() }).optional(),
+    fleetCheck: z.array(field).min(1).optional(),
 });
 
 export const guardOptionsJson = z.discriminatedUnion("type", [source, action, approval, egress, limit]);

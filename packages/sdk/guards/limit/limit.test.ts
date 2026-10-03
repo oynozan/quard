@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeCall } from "../../test/call.ts";
-import { checkLimit, countLimit } from "./limit.ts";
+import { checkLimit, countLimit, limitRules } from "./limit.ts";
 
 describe("checkLimit", () => {
     it("allows calls until the per-run count is reached", () => {
@@ -63,5 +63,40 @@ describe("checkLimit", () => {
 
         expect(checkLimit(call, { type: "limit" })).toEqual([]);
         expect(call.run.counters.size).toBe(0);
+    });
+});
+
+describe("countLimit", () => {
+    it("can take a count back", () => {
+        const options = { type: "limit" as const, maxCallsPerRun: 5, maxAmountPerRun: { field: "amount", max: 100 } };
+        const call = makeCall({ amount: 30 });
+        countLimit(call, options);
+
+        const takeBack = countLimit(call, options);
+        takeBack();
+
+        expect([...call.run.counters.values()]).toEqual([1, 30]);
+    });
+});
+
+describe("limitRules", () => {
+    it("names the rules a limit guard has", () => {
+        expect(limitRules({ type: "limit" })).toEqual([]);
+        expect(
+            limitRules({
+                type: "limit",
+                maxCallsPerRun: 1,
+                maxAmountPerRun: { field: "a", max: 1 },
+                maxCallsPerDay: 1,
+                maxAmountPerDay: { field: "a", max: 1 },
+                fleetCheck: ["iban"],
+            }),
+        ).toEqual([
+            "max-calls-per-run",
+            "max-amount-per-run",
+            "max-calls-per-day",
+            "max-amount-per-day",
+            "fleet-check",
+        ]);
     });
 });

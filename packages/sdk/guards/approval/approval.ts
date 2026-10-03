@@ -1,4 +1,4 @@
-import { canonicalJson } from "../../context/canonical.ts";
+import { canonicalJson } from "@quard/shared";
 import type { RuleResult } from "../call.ts";
 
 // "Always approve" covers the same agent, tool and exact arguments

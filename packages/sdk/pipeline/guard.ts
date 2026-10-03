@@ -1,16 +1,20 @@
-import { labelFor, newStepId } from "@quard/shared";
+import { canonicalJson, labelFor, newStepId } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { GuardBlockedError, GuardRefusal } from "../core/refusal.ts";
 import { claimCall, registerGuardedTool, type RequestedCall } from "../context/registry.ts";
 import { currentScope, mayUse, newScope, withScope, type Scope } from "../context/scope.ts";
 import type { FailResult, GuardCall, RuleResult } from "../guards/call.ts";
 import { maskArgs } from "../guards/egress/payload.ts";
-import type { GuardOptions } from "../guards/options.ts";
+import type { ApprovalOptions, GuardOptions } from "../guards/options.ts";
 import { isGuardType } from "../guards/types.ts";
 import { labelArguments } from "../labels/value-labels.ts";
 import { policyOptions, refreshSources, sourcesReady } from "../policy/state.ts";
-import { askHuman } from "./approve.ts";
-import { countLimits, decide, preChecks, recordDecision } from "./checks.ts";
+import { syncRules } from "../transport/link/active.ts";
+import { askHuman } from "./approval/human.ts";
+import { blocked } from "./approval/record.ts";
+import { asksOf, decide, preChecks, recordDecision } from "./checks.ts";
+import { countCall } from "./count/count.ts";
+import { reportRefused } from "./count/fleet.ts";
 import { finishOutput, recordToolCall, runTool } from "./output.ts";
 import { snapshot } from "./snapshot.ts";
 
@@ -48,10 +52,28 @@ function permission(scope: Scope, tool: string, requested: RequestedCall | undef
         : { ...base, decision: "block", reason: "permission_denied" };
 }
 
+// Arguments that are not plain data are not copied, so the caller could
+// change them after the approver saw them
+function changed(call: GuardCall, approvedArgs: string | undefined): FailResult | undefined {
+    if (approvedArgs === undefined || canonicalJson(call.input) === approvedArgs) {
+        return undefined;
+    }
+    return blocked(call, "arguments-changed", "approval_required");
+}
+
 // Records the block and returns a refusal, or throws when the guard that
 // caused the block sets onBlock: "throw"
-function refuse(spec: Spec, call: GuardCall, requested: RequestedCall | undefined, result: FailResult): GuardRefusal {
+function refuse(
+    spec: Spec,
+    call: GuardCall,
+    requested: RequestedCall | undefined,
+    result: FailResult,
+    ran = false,
+): GuardRefusal {
     recordToolCall(call, requested, "blocked", Date.now());
+    if (!ran) {
+        reportRefused(call, spec.list);
+    }
     if (requested !== undefined) {
         // The refusal text the app sends back is ours, not outside content
         requested.outputLabel = labelFor("system", getConfig().origins);
@@ -79,6 +101,7 @@ async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
     // 0. A changed policy file or feed applies from this call on
     refreshSources(Date.now());
     await sourcesReady();
+    syncRules();
     const spec: Spec = { ...code, list: policyOptions(code.tool) ?? code.list };
 
     // 1. Context: the current scope, or the run of the call the model asked for
@@ -106,20 +129,24 @@ async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
     }
 
     // 3 to 5. Labels, checks and the decision
-    const results = preChecks(call, spec.list, true);
-    results.forEach((result) => recordDecision(call, result));
-    let final = decide(results);
+    let checked = preChecks(call, spec.list, true);
+    checked.forEach((result) => recordDecision(call, result));
+    let final = decide(checked);
 
     // 6. Approval, then the block checks again with no wait before counting
+    let approvedArgs: string | undefined;
     if (final?.decision === "ask") {
-        const answer = await askHuman(call);
-        if (answer !== "approved") {
-            return refuse(spec, call, requested, answer);
+        const approval = spec.list.find((item): item is ApprovalOptions => item.type === "approval");
+        approvedArgs = canonicalJson(input);
+        const answer = await askHuman(call, asksOf(checked), approval?.timeout);
+        const stopped = answer === "approved" ? changed(call, approvedArgs) : answer;
+        if (stopped !== undefined) {
+            return refuse(spec, call, requested, stopped);
         }
         call = buildCall(spec.tool, input, scope, stepId);
-        const again = preChecks(call, spec.list, false);
-        again.forEach((result) => recordDecision(call, result));
-        final = decide(again);
+        checked = preChecks(call, spec.list, false);
+        checked.forEach((result) => recordDecision(call, result));
+        final = decide(checked);
         // The human already said yes to every other ask
         final = final?.decision === "block" ? final : undefined;
     }
@@ -127,15 +154,18 @@ async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
         return refuse(spec, call, requested, final);
     }
 
-    // 7. Run inside the scope, so calls made by the tool join this run
-    countLimits(call, spec.list);
+    // 7. Count, then run inside the scope so calls made by the tool join this run
+    const stop = (await countCall(call, spec.list, checked)) ?? changed(call, approvedArgs);
+    if (stop !== undefined) {
+        return refuse(spec, call, requested, stop);
+    }
     const ran = call;
     const output = await withScope(scope, () => runTool(spec.fn, runArgs, ran, requested));
 
     // 8 and 9. Output checks; every step above was recorded
     const shown = await finishOutput(spec.list, call, output, requested);
     if ("blocked" in shown) {
-        return refuse(spec, call, undefined, shown.blocked);
+        return refuse(spec, call, undefined, shown.blocked, true);
     }
     return shown.output;
 }
@@ -151,12 +181,16 @@ export function guard<F extends (...args: never[]) => unknown>(
         if (!isGuardType(item.type)) {
             throw new Error(`Unknown guard type: ${String(item.type)}`);
         }
+        if (item.type === "approval" && item.timeout !== undefined && !(item.timeout > 0)) {
+            throw new Error("An approval timeout must be a positive number of seconds");
+        }
     }
     const tool = list.find((item) => item.name !== undefined)?.name;
     if (tool === undefined || tool === "") {
         throw new Error("guard() needs options.name: the tool name the model sees");
     }
-    registerGuardedTool(tool);
+    registerGuardedTool(tool, list);
+    syncRules();
     const spec: Spec = { fn, list, tool };
     type Result = Awaited<ReturnType<F>> | GuardRefusal;
     return async (...args: Parameters<F>): Promise<Result> => {

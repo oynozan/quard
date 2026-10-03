@@ -45,11 +45,13 @@ Every type except `approval` takes `mode`: `"block"` (the default) enforces, and
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `source`   | `origin` (`web`, `email`, `mcp`, `file` or a full origin such as `mcp:crm`), `blockDomains` and `allowDomains` (`evil.com` or `*.evil.com`), `onSuspect` (`flag`, `strip` or `block`).                 |
 | `action`   | `rules`, each with `onFail` (`block` by default, or `ask`): `{ field, from: [origins] }`, `{ field, max }` or `{ field, neverSeen: true }`.                                                              |
-| `approval` | No options. Always asks a person.                                                                                                                                                                         |
+| `approval` | `timeout`: seconds to wait for an answer, then refuse with `approval_timed_out`. No limit by default. Always asks a person.                                                                              |
 | `egress`   | `allow` (`acme.com`, `*.acme.com` or `bob@acme.com`), `onFail` for internal data headed outside the allowlist, and `payload` with `secrets`, `cards` and `ibans` set to `allow`, `mask` or `block`. |
-| `limit`    | `maxCallsPerRun` and `maxAmountPerRun: { field, max }`.                                                                                                                                                   |
+| `limit`    | `maxCallsPerRun` and `maxAmountPerRun: { field, max }` per run. `maxCallsPerDay` and `maxAmountPerDay: { field, max }` per UTC day, across every process of the project. `fleetCheck`: the fields whose IBANs, emails and domains the fleet check watches. |
 
 Options that are functions in code (`originOf`, `destinations` and custom rules with `check`) can't be written in the file.
+
+Per-day limits and the fleet check need the link to control (`controlUrl` with `key` and `hashKey`). Without it, per-day limits count in the process only, and the fleet check does nothing.
 
 ## Sensitive data sent out
 

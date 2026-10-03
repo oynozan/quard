@@ -92,30 +92,31 @@ export function sourcesReady(): Promise<void> {
     return sources.settled();
 }
 
-function policy(): PolicyFile | undefined {
+// The policy file in force, a new object after each reload
+export function currentPolicy(): PolicyFile | undefined {
     return sources.policy?.current();
 }
 
 // A tool named in the policy file uses the file's options, not its code options
 export function policyOptions(tool: string): GuardOptions[] | undefined {
-    return policy()?.guards?.[tool];
+    return currentPolicy()?.guards?.[tool];
 }
 
 export function policyVersion(): string | undefined {
-    const version = policy()?.version;
+    const version = currentPolicy()?.version;
     return version === undefined ? undefined : String(version);
 }
 
 export function policyOrigins(): OriginOverrides | undefined {
-    return policy()?.origins;
+    return currentPolicy()?.origins;
 }
 
 export function currentPreset(): Preset {
-    return PRESETS[policy()?.strictness ?? "balanced"];
+    return PRESETS[currentPolicy()?.strictness ?? "balanced"];
 }
 
 export function effectiveDetectorRules(fromCode: Partial<DetectorRules> | undefined): DetectorRules {
-    return { ...DEFAULT_DETECTOR_RULES, ...fromCode, ...policy()?.detector };
+    return { ...DEFAULT_DETECTOR_RULES, ...fromCode, ...currentPolicy()?.detector };
 }
 
 export function signatureFeed(): CompiledFeed | undefined {
@@ -129,5 +130,5 @@ export function feedMissing(): boolean {
 
 // A mode in the policy file applies live
 export function signatureMode(): "block" | "observe" {
-    return policy()?.signatures?.mode ?? sources.feedMode;
+    return currentPolicy()?.signatures?.mode ?? sources.feedMode;
 }
