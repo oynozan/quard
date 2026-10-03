@@ -66,6 +66,42 @@ describe("createLabelSender", () => {
         expect(sent[0]?.records[0]?.label.origins).toEqual(["email:b…@acme.com"]);
     });
 
+    it("masks names in memory records and tool lists, and never touches hashes", async () => {
+        const { sent, send } = webhook(201);
+        // Holds a digit run that passes the card check
+        const print = `a4111111111111111${"b".repeat(47)}`;
+        const memory: LabelRecord = {
+            kind: "memory",
+            store: "notes of bob@acme.com",
+            print,
+            runId: "b".repeat(32),
+            agent: "agent bob@acme.com",
+            label: { trust: "trusted", sensitivity: "internal", origins: [], flagged: false },
+            values: [
+                {
+                    hash: "d".repeat(32),
+                    origin: "email:bob@acme.com",
+                    trust: "untrusted",
+                    sensitivity: "public",
+                    flags: ["bob@acme.com"],
+                    stepId: "1".repeat(16),
+                },
+            ],
+        };
+
+        await sender(send)([memory, { ...messageRecord("a".repeat(16)), print, tools: ["mail bob@acme.com"] }]);
+
+        expect(sent[0]?.records).toMatchObject([
+            {
+                store: "notes of b…@acme.com",
+                agent: "agent b…@acme.com",
+                print,
+                values: [{ hash: "d".repeat(32), origin: "email:b…@acme.com", flags: ["b…@acme.com"] }],
+            },
+            { print, tools: ["mail b…@acme.com"] },
+        ]);
+    });
+
     it.each([200, 202, 400, 500])("is false when webhook answers %i", async (status) => {
         expect(await sender(webhook(status).send)([messageRecord("a".repeat(16))])).toBe(false);
     });
