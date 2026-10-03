@@ -20,6 +20,8 @@ export type LinksOptions = { since: Date; agent?: string };
 // the parent's step that started it. As on the run page (agentsOf in web
 // live/detail.ts), the parent is the agent of that step, when it differs.
 // A delegation counts when one of its model calls is at or after `since`.
+// Across processes the receiver also records a message naming the same step.
+// That message counts it instead (agentMessageLinks), so it is left out here.
 export async function agentLinks(db: Db, projectId: string, options: LinksOptions): Promise<AgentLinkRow[]> {
     let calls = db
         .selectFrom("steps as c")
@@ -41,6 +43,21 @@ export async function agentLinks(db: Db, projectId: string, options: LinksOption
         .where("c.project_id", "=", projectId)
         .where("c.kind", "=", "model_call")
         .whereRef("p.agent", "<>", "c.agent")
+        .where((eb) =>
+            eb.not(
+                eb.exists(
+                    eb
+                        .selectFrom("agent_messages as m")
+                        .select(sql`1`.as("one"))
+                        .whereRef("m.project_id", "=", "c.project_id")
+                        .whereRef("m.run_id", "=", "c.run_id")
+                        .whereRef("m.parent_step_id", "=", "c.parent_step_id")
+                        .whereRef("m.to_agent", "=", "c.agent")
+                        .where("m.kind", "=", "message")
+                        .where("m.at", ">=", options.since),
+                ),
+            ),
+        )
         .groupBy(["c.run_id", "c.parent_step_id", "p.agent", "c.agent"])
         .having(sql<Date>`max(c.at)`, ">=", options.since);
     const agent = options.agent;

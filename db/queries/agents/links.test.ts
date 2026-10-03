@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { label, model, runOf, start, stepOf, tool } from "../../test/agents.ts";
 import { item } from "../../test/events.ts";
+import { insertMessages, type MessageRow } from "../../test/messages.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import type { RunItem } from "../ingest/rows.ts";
 import { ingestBatch } from "../ingest/store.ts";
@@ -93,6 +94,34 @@ describe("agentLinks", () => {
         expect(await linksOf("billing")).toEqual([billingToResearcher]);
         expect(await linksOf("writer")).toEqual([researcherToWriter]);
         expect(await linksOf("planner")).toEqual([]);
+    });
+
+    it("leaves out a delegation that a message from another process counts", async () => {
+        const message = (runId: string, parentStepId: string, to: string, more: Partial<MessageRow> = {}) => ({
+            runId,
+            stepId: stepOf(8),
+            kind: "message" as const,
+            from: "billing",
+            to,
+            parentStepId,
+            at: "2026-10-03T12:00:03.000Z",
+            ...more,
+        });
+        const other = await projectWith(chain());
+        await insertMessages(test.db, other, [message(r2, s1, "researcher")]);
+        const projectId = await projectWith(chain());
+        await insertMessages(test.db, projectId, [
+            message(r1, s2, "researcher"),
+            // Another receiver, a handoff, and a message from before since
+            message(r2, s1, "writer"),
+            message(r2, s3, "researcher", { kind: "handoff" }),
+            message(r2, s3, "researcher", { at: "2026-09-03T18:39:59.000Z" }),
+        ]);
+
+        expect(await agentLinks(test.db, projectId, { since })).toEqual([
+            { ...billingToResearcher, delegations: 2, runs: 1 },
+            researcherToWriter,
+        ]);
     });
 
     it("marks a delegation untrusted when its first model call had read untrusted content", async () => {
