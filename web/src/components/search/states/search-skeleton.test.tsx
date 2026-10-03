@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { SearchSkeleton } from "./search-skeleton";
 
 describe("SearchSkeleton", () => {
-    it("sizes the field and the tonal button like the search row", () => {
+    it("spans the full width with the field and the tonal button, like the search row", () => {
         const { container } = render(<SearchSkeleton />);
         const row = container.querySelector("[aria-hidden]") as HTMLElement;
-        expect(row.className).toContain("max-w-[760px]");
+        expect(row.className).not.toContain("max-w-");
         const [field, button] = Array.from(row.children);
         expect(field.className).toContain("bg-control");
         expect(button.className).toContain("w-[96px]");

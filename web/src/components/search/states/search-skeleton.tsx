@@ -7,7 +7,7 @@ import { SEARCH_COLUMNS, SEARCH_MIN_WIDTH, SearchColgroup, SearchHead } from "..
 export function SearchSkeleton() {
     return (
         <div>
-            <div aria-hidden className="flex max-w-[760px] gap-2 max-[760px]:flex-col">
+            <div aria-hidden className="flex gap-2 max-[760px]:flex-col">
                 <span className="h-[46px] min-w-0 flex-1 rounded-md bg-control max-[760px]:flex-none" />
                 <span className="h-[46px] w-[96px] rounded-md bg-control-hover max-[760px]:w-full" />
             </div>

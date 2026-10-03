@@ -34,7 +34,7 @@ export function SearchBrowser({ query, children }: SearchBrowserProps) {
             <form
                 role="search"
                 aria-label="Search all runs"
-                className="flex max-w-[760px] gap-2 max-[760px]:flex-col"
+                className="flex gap-2 max-[760px]:flex-col"
                 onSubmit={(event) => {
                     event.preventDefault();
                     go(value);

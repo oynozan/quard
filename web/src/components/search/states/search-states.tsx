@@ -15,7 +15,7 @@ const KINDS: { term: string; finds: string }[] = [
 
 export function SearchIntro() {
     return (
-        <section aria-labelledby="search-kinds" className="max-w-[760px]">
+        <section aria-labelledby="search-kinds">
             <h2 id="search-kinds" className="mb-4 text-[15px] leading-[1.4] font-extralight max-[760px]:text-[14px]">
                 What you can search
             </h2>

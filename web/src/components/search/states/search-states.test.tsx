@@ -9,10 +9,10 @@ function heads() {
 }
 
 describe("SearchIntro", () => {
-    it("lists what each kind of query finds, as wide as the search row", () => {
+    it("lists what each kind of query finds, across the full width like the search row", () => {
         render(<SearchIntro />);
         const section = screen.getByRole("region", { name: "What you can search" });
-        expect(section.className).toContain("max-w-[760px]");
+        expect(section.className).not.toContain("max-w-");
         const terms = within(section)
             .getAllByRole("term")
             .map((term) => term.textContent);
