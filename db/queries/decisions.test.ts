@@ -87,6 +87,8 @@ describe("latestDecisions", () => {
             reason: "value_not_from_allowed_origin",
             field: "iban",
             at: new Date("2026-10-03T12:00:00.000Z"),
+            rulesHash: null,
+            requestId: null,
         });
     });
 

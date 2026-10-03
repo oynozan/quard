@@ -70,6 +70,8 @@ export function stepRows(projectId: string, items: RunItem[]): Insertable<StepsT
                         usage: event.usage ?? null,
                         // Priced when stored, so a later price change leaves past runs alone
                         costUsd: event.usage === undefined ? null : costOf(event.model, event.usage),
+                        // Left out when the SDK sent none
+                        agentVersion: event.agentVersion,
                     }),
                 },
             ];
@@ -139,6 +141,8 @@ export function decisionRows(projectId: string, items: RunItem[]): Insertable<De
                       reason: event.reason ?? null,
                       field: event.field ?? null,
                       at: event.at,
+                      rules_hash: event.rules ?? null,
+                      request_id: event.request ?? null,
                   },
               ]
             : [],

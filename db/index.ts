@@ -1,6 +1,10 @@
 export { hashToken, keyPrefix, newAgentKey } from "./auth/tokens.ts";
 export { connect } from "./connect/connect.ts";
 export type { Db } from "./connect/connect.ts";
+export { CHANNELS, notify } from "./notify/channels.ts";
+export type { Channel } from "./notify/channels.ts";
+export { openListener } from "./notify/listen.ts";
+export type { Listener, Notice } from "./notify/listen.ts";
 export { modelCallBuckets, runStartBuckets } from "./queries/activity.ts";
 export type { BucketCount, BucketRange, TimeRange } from "./queries/activity.ts";
 export { agentRecentCalls } from "./queries/agents/calls.ts";
@@ -11,6 +15,35 @@ export { agentLastSeen, agentRoster } from "./queries/agents/roster.ts";
 export type { AgentRosterRow, RosterWindow } from "./queries/agents/roster.ts";
 export { agentStats } from "./queries/agents/stats.ts";
 export type { AgentStatsRow } from "./queries/agents/stats.ts";
+export { claimOnce, claimRequest, findActiveGrant, useGrant } from "./queries/approvals/claims.ts";
+export { decideApproval, revokeGrant } from "./queries/approvals/decide.ts";
+export type { DecideResult } from "./queries/approvals/decide.ts";
+export { countOpenRequests, listDecidedRequests, listGrants, listOpenRequests } from "./queries/approvals/list.ts";
+export { decidedRequests, getApprovalRequest, openApprovalRequest } from "./queries/approvals/requests.ts";
+export type {
+    ApprovalContext,
+    ApprovalGrantItem,
+    ApprovalRequestDetail,
+    ApprovalRequestFields,
+    ApprovalRequestInput,
+    ApprovalWaiter,
+    ApprovalWaiterInput,
+    DecidedApprovalItem,
+    OnceClaim,
+    OpenApprovalItem,
+    RequestDecision,
+} from "./queries/approvals/types.ts";
+export { addWaiter, beatWaiters, finishWaiters } from "./queries/approvals/waiters.ts";
+export { closeConnection, openConnection, saveAgentVersion, saveRules } from "./queries/control/connections.ts";
+export type { AgentVersionInput, ConnectionInput } from "./queries/control/connections.ts";
+export { addDayCount, dayCounts } from "./queries/control/counters.ts";
+export type { DayCount, DayCountInput, DayCountResult } from "./queries/control/counters.ts";
+export { fleetFields, listQuarantined, listWatched } from "./queries/control/fleet/dashboard.ts";
+export type { QuarantinedFleetItem, WatchedFleetItem } from "./queries/control/fleet/dashboard.ts";
+export { splitFleetKey } from "./queries/control/fleet/keys.ts";
+export { recordFleetUse } from "./queries/control/fleet/record.ts";
+export type { FleetUseInput, FleetUseResult } from "./queries/control/fleet/record.ts";
+export { fleetObserveUntil, markValueKnown, quarantineList } from "./queries/control/fleet/state.ts";
 export {
     blockRateDays,
     decisionTotals,
@@ -28,8 +61,15 @@ export type {
     ToolCoverage,
 } from "./queries/decisions.ts";
 export { ingestBatch } from "./queries/ingest/store.ts";
-export { createAgentKey, listAgentKeys, projectForKey, revokeAgentKey } from "./queries/keys.ts";
-export type { AgentKeyRow, NewAgentKey } from "./queries/keys.ts";
+export {
+    agentKeyFor,
+    createAgentKey,
+    listAgentKeys,
+    projectForKey,
+    revokeAgentKey,
+    revokedKeyIds,
+} from "./queries/keys.ts";
+export type { AgentKeyMatch, AgentKeyRow, NewAgentKey } from "./queries/keys.ts";
 export { originOverrides } from "./queries/origins.ts";
 export type { OriginOverrideRow } from "./queries/origins.ts";
 export { createProject, findProject, firstProject, projectSettings } from "./queries/projects.ts";

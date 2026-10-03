@@ -61,6 +61,9 @@ export type RunDecision = {
     reason: string | null;
     field: string | null;
     at: Date;
+    // The active rules when it was made, and the approval request that answered it
+    rulesHash: string | null;
+    requestId: string | null;
 };
 
 // A decision with what only its stored event holds
@@ -209,6 +212,8 @@ export const DECISION_COLUMNS = [
     "reason",
     "field",
     "at",
+    "rules_hash as rulesHash",
+    "request_id as requestId",
 ] as const;
 
 // The extra columns of RunDecisionDetail, read from each decision's stored event.

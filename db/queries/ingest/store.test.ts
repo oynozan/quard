@@ -45,7 +45,29 @@ describe("ingestBatch", () => {
         expect(run?.steps.map((step) => step.kind)).toEqual(["model_call", "tool_call"]);
         expect(run?.labels).toHaveLength(1);
         expect(run?.decisions).toHaveLength(1);
+        expect(run?.decisions[0]).toMatchObject({ rulesHash: null, requestId: null });
         expect(run?.warnings).toHaveLength(1);
+    });
+
+    it("keeps the rules hash and approval request of each decision", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const answered = {
+            ...decision(),
+            guard: "approval",
+            rule: "human",
+            decision: "allow" as const,
+            rules: "a".repeat(16),
+            request: "apr_0123456789abcdef",
+        };
+        await ingestBatch(test.db, projectId, [item(started()), item(answered)]);
+
+        const run = await getRun(test.db, projectId, RUN);
+        expect(run?.decisions[0]).toMatchObject({
+            guard: "approval",
+            rule: "human",
+            rulesHash: "a".repeat(16),
+            requestId: "apr_0123456789abcdef",
+        });
     });
 
     it("changes nothing when the same batch arrives again", async () => {

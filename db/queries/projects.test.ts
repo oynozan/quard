@@ -1,3 +1,4 @@
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestDb, type TestDb } from "../test/pglite.ts";
 import { createProject, findProject, firstProject, projectSettings } from "./projects.ts";
@@ -19,7 +20,13 @@ describe("projects", () => {
 
     it("finds a project by id, and the oldest one first", async () => {
         const first = await createProject(test.db, "Acme");
-        await createProject(test.db, "Later");
+        const later = await createProject(test.db, "Later");
+        // Two quick inserts can share a timestamp, and then the random id decides
+        await test.db
+            .updateTable("projects")
+            .set({ created_at: sql`created_at + interval '1 second'` })
+            .where("id", "=", later)
+            .execute();
 
         expect(await findProject(test.db, first)).toEqual({ id: first, name: "Acme" });
         expect(await findProject(test.db, "00000000-0000-0000-0000-000000000000")).toBeUndefined();

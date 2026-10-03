@@ -2,7 +2,7 @@ import { sql, type ExpressionBuilder, type SqlBool } from "kysely";
 import type { Db } from "../connect/connect.ts";
 import type { Database } from "../schema/database.ts";
 import { slotOf, type TimeRange } from "./activity.ts";
-import type { RunDecision } from "./runs.ts";
+import { DECISION_COLUMNS, type RunDecision } from "./runs.ts";
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -44,21 +44,7 @@ export async function latestDecisions(
 ): Promise<DecisionRow[]> {
     return db
         .selectFrom("decisions")
-        .select([
-            "event_id as eventId",
-            "run_id as runId",
-            "step_id as stepId",
-            "agent",
-            "tool",
-            "guard",
-            "rule",
-            "decision",
-            "mode",
-            "enforced",
-            "reason",
-            "field",
-            "at",
-        ])
+        .select([...DECISION_COLUMNS, "run_id as runId"])
         .where("project_id", "=", projectId)
         .where("at", ">=", options.since)
         .where("at", "<", options.until)

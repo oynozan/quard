@@ -58,6 +58,13 @@ describe("stepRows", () => {
         expect(JSON.parse(String(withParent?.detail))).toMatchObject({ usage: null, costUsd: null });
         expect(tool?.call_id).toBeNull();
         expect(JSON.parse(String(tool?.detail)).keys).toEqual([]);
+        expect(JSON.parse(String(withParent?.detail))).not.toHaveProperty("agentVersion");
+    });
+
+    it("keeps the agent version of a model call", () => {
+        const [model] = stepRows(PROJECT, [item({ ...modelCall(), agentVersion: "b".repeat(16) })]);
+
+        expect(JSON.parse(String(model?.detail))).toMatchObject({ agentVersion: "b".repeat(16) });
     });
 });
 
@@ -76,6 +83,20 @@ describe("labelRows and decisionRows", () => {
     it("store missing reasons and fields as null", () => {
         const bare = { ...decision(), reason: undefined, field: undefined } as RunItem["event"];
 
-        expect(decisionRows(PROJECT, [item(bare)])[0]).toMatchObject({ reason: null, field: null });
+        expect(decisionRows(PROJECT, [item(bare)])[0]).toMatchObject({
+            reason: null,
+            field: null,
+            rules_hash: null,
+            request_id: null,
+        });
+    });
+
+    it("keep the active rules hash and the approval request of a decision", () => {
+        const answered = { ...decision(), rules: "a".repeat(16), request: "apr_0123456789abcdef" };
+
+        expect(decisionRows(PROJECT, [item(answered)])[0]).toMatchObject({
+            rules_hash: "a".repeat(16),
+            request_id: "apr_0123456789abcdef",
+        });
     });
 });
