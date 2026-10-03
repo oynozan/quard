@@ -1,0 +1,68 @@
+# OpenAI Agents SDK
+
+Quard works with the OpenAI Agents SDK for JavaScript. It follows handoffs and agents run as tools, so every agent's steps land in one run under the right name. Import it from `quard/openai-agents`. It needs `@openai/agents` 0.18.
+
+## Set it up
+
+Set up Quard with `quard.configure()` as usual. Then build your tools with `guardedTool()` and run your agents with `quardRunner()`:
+
+```ts
+import OpenAI from "openai";
+import { Agent } from "@openai/agents";
+import { z } from "zod";
+import { guardedTool, quardRunner } from "quard/openai-agents";
+
+const fetchPage = guardedTool({
+    name: "fetchPage",
+    description: "Fetch a web page",
+    parameters: z.object({ url: z.string() }),
+    execute: async ({ url }) => (await fetch(url)).text(),
+    guard: { type: "source", origin: "web" },
+});
+
+const payInvoice = guardedTool({
+    name: "payInvoice",
+    description: "Pay a supplier invoice",
+    parameters: z.object({ iban: z.string(), amount: z.number() }),
+    execute: async ({ iban, amount }) => pay(iban, amount),
+    guard: { type: "action", rules: [{ field: "iban", from: ["tool:getSupplier"] }] },
+});
+
+const billing = new Agent({ name: "billing", instructions: "Pay invoices.", tools: [payInvoice] });
+const researcher = new Agent({ name: "researcher", instructions: "Read pages.", tools: [fetchPage] });
+const orchestrator = new Agent({
+    name: "orchestrator",
+    instructions: "Plan the work.",
+    tools: [researcher.asTool({ toolName: "research", toolDescription: "Read a web page" })],
+    handoffs: [billing],
+});
+
+const runner = quardRunner({ client: new OpenAI() });
+const result = await runner.run(orchestrator, "Pay invoice 114 from Acme Supplies.");
+```
+
+## quardRunner()
+
+`quardRunner()` returns the SDK's `Runner`. It takes the SDK's run config, plus `client`: your OpenAI client. Quard wraps the client with `quard.wrap()` unless it already is.
+
+- **One run.** Each `run()` lands in one Quard run: the run of the current `quard.run()`, or a new run named after the first agent.
+- **The right agent.** The agent comes from the framework. A handoff switches it, and an agent run as a tool, with `agent.asTool()`, runs under its own name. Model calls and guarded tools carry that agent.
+- **The run graph.** Each switch is recorded as a handoff, from one agent to the other, through a handoff or a tool. The new agent's parent step is the step that handed over.
+- **Model calls.** They use the Responses API over HTTP, so Quard sees each one and checks the [run limits](/concepts/run-limits) on steps and cost.
+- **Resumed runs.** A run resumed from `result.state` goes on with the agent it stopped at.
+
+## guardedTool()
+
+`guardedTool()` takes the SDK's `tool()` options, plus `guard`: the options of one [guard](/concepts/guards) or a list of them. Each guard takes the tool's name.
+
+- Every call runs through Quard's checks. Only the input is checked, and `execute` still gets the run context and the call details.
+- A block becomes a tool guardrail rejection from the `quard` guardrail. The model reads Quard's refusal as the tool result, and `result.toolOutputGuardrailResults` holds it.
+- With `onBlock: "throw"`, the run stops and `run()` rejects with `GuardBlockedError`. Its `cause` is the SDK's `ToolCallError`.
+- An approval guard waits inside the call for an answer from the dashboard, as anywhere else. The SDK's own `needsApproval` still works beside it.
+
+## Known gaps
+
+- To follow agents run as tools, the first `quardRunner()` call wraps the SDK's `Runner.prototype.run`. Runners without a `quardRunner()` provider run as before. So do runs started with the SDK's `run()`, and agent tools with their own `runConfig.modelProvider`.
+- An agent whose `model` is a `Model` object, not a name, skips the wrapped client. Its model calls are not recorded, but its guarded tools still carry the right agent.
+- Inside an agent run as a tool, `onBlock: "throw"` stops only that agent's run. The calling agent reads the error as the tool result.
+- Quard still warns about an unguarded tool for handoff and agent tool calls.
