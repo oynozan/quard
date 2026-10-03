@@ -2,6 +2,7 @@ import "server-only";
 import {
     agentLastSeen,
     agentLinks,
+    agentMessageLinks,
     agentRecentCalls,
     agentRoster,
     agentStats,
@@ -12,6 +13,7 @@ import { cache } from "react";
 import { HOUR } from "@/lib/time";
 import { projectScope } from "../scope";
 import { timelineOf } from "./live/calls";
+import { linksOf } from "./live/links";
 import { activityOf, edgeOf, nodeOf, quietNode, statsOf } from "./live/rows";
 import { versionsOf } from "./live/versions";
 import { hoursWindow, rosterWindow, WINDOW_DAYS } from "./live/windows";
@@ -23,17 +25,18 @@ const RECENT_STEPS = 60;
 // Templated instructions can make a version per call, so the page lists only the newest
 const VERSIONS = 100;
 
-// Every agent heard from in the window, and the delegations between them
+// Every agent heard from in the window, and the delegations, handoffs and messages between them
 export async function getAgentGraph(): Promise<AgentGraph> {
     const scope = await projectScope();
     if (!scope) return { windowDays: WINDOW_DAYS, nodes: [], edges: [] };
     const { db, project } = scope;
     const window = rosterWindow(Date.now());
-    const [roster, links] = await Promise.all([
+    const [roster, delegations, messages] = await Promise.all([
         agentRoster(db, project.id, window),
         agentLinks(db, project.id, { since: window.since }),
+        agentMessageLinks(db, project.id, { since: window.since }),
     ]);
-    return { windowDays: WINDOW_DAYS, nodes: roster.map(nodeOf), edges: links.map(edgeOf) };
+    return { windowDays: WINDOW_DAYS, nodes: roster.map(nodeOf), edges: linksOf(delegations, messages) };
 }
 
 // Cached per request, since the page and its metadata both ask

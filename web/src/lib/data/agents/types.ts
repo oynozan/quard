@@ -13,7 +13,7 @@ export type AgentNode = {
     lastSeenAt: number;
 };
 
-// Traffic between two agents over the window, which so far holds delegations only
+// Delegations, handoffs and messages from one agent to another over the window
 export type AgentEdge = {
     from: string;
     to: string;

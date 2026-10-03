@@ -140,6 +140,38 @@ describe("agents from Postgres", () => {
         expect(requireSession).toHaveBeenCalled();
     });
 
+    it("adds handoffs and messages, and counts a delegation across processes once, as a message", async () => {
+        await fleet();
+        const row = (runId: string, kind: string, from: string, to: string, secondsAgo: number) => ({
+            project_id: process.env.QUARD_PROJECT_ID!,
+            event_id: `${runId}${kind}${from}`,
+            run_id: runId,
+            step_id: S4,
+            kind: kind as "message" | "handoff" | "tool",
+            from_agent: from,
+            to_agent: to,
+            parent_step_id: null,
+            trust: "trusted" as const,
+            sensitivity: "internal" as const,
+            at: ago(secondsAgo),
+        });
+        await test.db
+            .insertInto("agent_messages")
+            .values([
+                // billing's process also reports orchestrator's delegation as a message
+                { ...row(NEW, "message", "orchestrator", "billing", 40), parent_step_id: S1 },
+                { ...row(NEW, "message", "billing", "orchestrator", 22), verified: false },
+                row(EARLIER, "tool", "support", "helper", D3 - 2),
+            ])
+            .execute();
+
+        expect((await getAgentGraph()).edges).toEqual([
+            { ...handed, handoffs: 1, total: 2 },
+            { ...link("billing", "orchestrator", 1, 22), delegations: 0, messages: 1 },
+            { ...link("orchestrator", "billing", 0, 40), delegations: 0, messages: 1 },
+        ]);
+    });
+
     it("opens an agent with its last 24 hours, its links and its recent calls", async () => {
         await fleet();
         const detail = await getAgent("billing");

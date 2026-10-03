@@ -1,7 +1,7 @@
 import type { AgentLinkRow, AgentRosterRow, AgentStatsRow, BucketCount } from "@quard/db";
 import type { AgentActivity, AgentEdge, AgentNode, AgentStats } from "../types";
 
-const share = (part: number, whole: number) => Math.round((part / whole) * 1000) / 1000;
+export const share = (part: number, whole: number) => Math.round((part / whole) * 1000) / 1000;
 
 export function nodeOf(row: AgentRosterRow): AgentNode {
     return {
@@ -18,7 +18,7 @@ export function quietNode(name: string, lastSeen: Date): AgentNode {
     return { name, state: "idle", model: null, runs24h: 0, lastSeenAt: lastSeen.getTime() };
 }
 
-// Handoffs and messages are not recorded yet, so delegations are the whole link
+// A link of delegations alone. linksOf adds the handoffs and messages.
 export function edgeOf(row: AgentLinkRow): AgentEdge {
     return {
         from: row.from,
