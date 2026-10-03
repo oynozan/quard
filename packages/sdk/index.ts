@@ -1,10 +1,12 @@
 import { toBaggage } from "./context/baggage.ts";
 import { inject, resume } from "./context/carrier.ts";
 import { agentScope, runScope } from "./context/scope.ts";
+import { memory } from "./memory/wrap.ts";
 import { wrap } from "./monitor/wrap.ts";
 import { configureQuard } from "./transport/configure.ts";
 
-// The SDK's main object. inject, resume and toBaggage carry a run between agents.
+// The SDK's main object. inject, resume and toBaggage carry a run between
+// agents; memory labels what goes into a shared store and back out.
 export const quard = {
     wrap,
     run: runScope,
@@ -13,6 +15,7 @@ export const quard = {
     resume,
     toBaggage,
     configure: configureQuard,
+    memory,
 };
 
 export { GuardBlockedError, GuardRefusal, isGuardRefusal } from "./core/refusal.ts";
@@ -39,4 +42,5 @@ export type {
     SourceOptions,
 } from "./guards/options.ts";
 export type { GuardType } from "./guards/types.ts";
+export type { MemoryOptions, MemoryStore } from "./memory/wrap.ts";
 export type { SignaturesConfig } from "./policy/schema.ts";

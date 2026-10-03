@@ -14,6 +14,15 @@ describe("quard", () => {
             "jevDetector",
             "quard",
         ]);
-        expect(Object.keys(sdk.quard)).toEqual(["wrap", "run", "agent", "inject", "resume", "toBaggage", "configure"]);
+        expect(Object.keys(sdk.quard)).toEqual([
+            "wrap",
+            "run",
+            "agent",
+            "inject",
+            "resume",
+            "toBaggage",
+            "configure",
+            "memory",
+        ]);
     });
 });
