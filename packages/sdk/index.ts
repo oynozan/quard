@@ -1,13 +1,13 @@
 import { agentScope, runScope } from "./context/scope.ts";
-import { configure } from "./core/config.ts";
 import { wrap } from "./monitor/wrap.ts";
+import { configureQuard } from "./transport/configure.ts";
 
 // The SDK's main object. inject and resume arrive with M4.
 export const quard = {
     wrap,
     run: runScope,
     agent: agentScope,
-    configure,
+    configure: configureQuard,
 };
 
 export { GuardBlockedError, GuardRefusal, isGuardRefusal } from "./core/refusal.ts";

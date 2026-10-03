@@ -17,6 +17,11 @@ export type QuardConfig = {
     onEvent?: (event: RunEvent) => void;
     // Asks a human. The dashboard takes this over in M3.
     approver?: (request: ApprovalRequest) => Promise<ApprovalAnswer>;
+    // Uploads to webhook start once all three are set
+    key?: string;
+    webhookUrl?: string;
+    // The install's 64-hex hash key, the same as on the server
+    hashKey?: string;
 };
 
 let current: QuardConfig = { origins: {} };

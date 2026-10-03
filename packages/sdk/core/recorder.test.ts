@@ -1,15 +1,32 @@
 import type { RunEvent } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure, resetConfig } from "./config.ts";
-import { now, record, takeEvents } from "./recorder.ts";
+import { now, record, takeDropped, takeEvents } from "./recorder.ts";
 
 function warning(code: string): RunEvent {
     return { type: "warning", runId: "r", stepId: "s", agent: "a", at: "t", code };
 }
 
+function allow(rule: string, decision: "allow" | "pass" = "allow"): RunEvent {
+    return {
+        type: "decision",
+        runId: "r",
+        stepId: "s",
+        agent: "a",
+        at: "t",
+        tool: "t",
+        guard: "action",
+        rule,
+        decision,
+        mode: "block",
+        enforced: true,
+    };
+}
+
 afterEach(() => {
     resetConfig();
     takeEvents();
+    takeDropped();
 });
 
 describe("recorder", () => {
@@ -40,7 +57,7 @@ describe("recorder", () => {
         expect(takeEvents()).toEqual([warning("three")]);
     });
 
-    it("drops the oldest event when the buffer is full", () => {
+    it("drops the oldest event when the buffer is full, and counts it", () => {
         for (let i = 0; i <= 10_000; i++) {
             record(warning(String(i)));
         }
@@ -48,6 +65,27 @@ describe("recorder", () => {
 
         expect(events).toHaveLength(10_000);
         expect(events[0]).toEqual(warning("1"));
+        expect(takeDropped()).toBe(1);
+        expect(takeDropped()).toBe(0);
+    });
+
+    it("drops allow decisions before anything else", () => {
+        record(warning("first"));
+        record(allow("quiet"));
+        for (let i = 0; i < 9_999; i++) {
+            record(warning(String(i)));
+        }
+
+        expect(takeEvents(2)).toEqual([warning("first"), warning("0")]);
+    });
+
+    it("counts a source pass as an allow", () => {
+        record(allow("scan", "pass"));
+        for (let i = 0; i < 10_000; i++) {
+            record(warning(String(i)));
+        }
+
+        expect(takeEvents(1)).toEqual([warning("0")]);
     });
 
     it("stamps the time as ISO text", () => {
