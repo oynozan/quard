@@ -35,13 +35,19 @@ const PREFIX =
     /^((?:qk_(?:live|test)_|sk-(?:proj-|svcacct-|admin-|ant-)?|(?:sk|rk)_(?:live|test)_|gh[pousr]_|github_pat_|xox[abprs]-|AKIA|ASIA|AIza|eyJ)?)[\s\S]*$/;
 const BEARER = /\b(Bearer\s+)[\w.~+/-]{12,}=*/gi;
 
-// password=..., "api_key": "..." and the like. The name stays.
+// password=..., "api_key": "...", refresh_token=... and the like. The
+// name stays. The name's prefix is bounded, so the scan stays linear.
 const ASSIGNED =
-    /\b(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token)(["']?\s{0,3}[:=]\s{0,3}["']?)([^\s"'&,;]{6,})/gi;
+    /\b([\w-]{0,40}?(?:password|passwd|pwd|secret|api[_-]?key|token))(["']?\s{0,3}[:=]\s{0,3}["']?)([^\s"'&,;]{6,})/gi;
 
-// Fields whose whole value is removed, whatever it holds
-export const SECRET_FIELD =
-    /^(password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|authorization|cookie)$/i;
+// Cookie and Authorization values, such as Basic auth, go whole.
+// Bearer tokens keep their "Bearer" word.
+const HEADER =
+    /\b((?:set-)?cookie|(?:proxy-)?authorization)(["']?\s{0,3}[:=]\s{0,3}["']?)(?!\s|bearer\s)([^"'\r\n]{6,})/gi;
+
+// Fields whose whole value is removed, whatever it holds, such as
+// password, client_secret, sessionToken or x-api-key
+export const SECRET_FIELD = /^[\w-]{0,40}?(password|passwd|pwd|secret|api[_-]?key|token|authorization|cookie)$/i;
 
 // Removes secrets before text is stored. A key keeps only its known
 // prefix ("sk-proj-…"); a private key becomes "[private key]".
@@ -57,5 +63,8 @@ export function removeSecrets(text: string): string {
         out += text.slice(last, span.start) + shown;
         last = span.end;
     }
-    return (out + text.slice(last)).replace(BEARER, `$1${CUT}`).replace(ASSIGNED, `$1$2${CUT}`);
+    return (out + text.slice(last))
+        .replace(BEARER, `$1${CUT}`)
+        .replace(ASSIGNED, `$1$2${CUT}`)
+        .replace(HEADER, `$1$2${CUT}`);
 }
