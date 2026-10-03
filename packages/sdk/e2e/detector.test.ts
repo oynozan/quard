@@ -137,7 +137,7 @@ const EMAIL = [
 ].join("\n");
 
 // Jev's API, answering with the given label
-// A Jev reply gives the chance of every label
+// A Jev reply gives the chance of every label, and its yes or no answer
 function jevAnswers(choice: string) {
     const probabilities = Object.fromEntries(
         LABEL_NAMES.map((name) => [name, name === choice ? 0.92 : name === "none" ? 0.08 : 0]),
@@ -145,7 +145,10 @@ function jevAnswers(choice: string) {
     const fetch = vi.fn(async (_url: string, _init: RequestInit) =>
         Response.json({
             model: "jev-1.13.0",
-            answers: { label: { type: "choice", choice, confidence: 0.9, probabilities } },
+            answers: {
+                label: { type: "choice", choice, confidence: 0.9, probabilities },
+                injection: { type: "noul", noul: 0.02 },
+            },
         }),
     );
     vi.stubGlobal("fetch", fetch);

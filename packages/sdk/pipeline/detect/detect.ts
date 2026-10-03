@@ -23,7 +23,10 @@ type Answered = { ask: Ask; sent: string; answer: DetectorAnswer };
 type Failed = { ask: Ask; failed: string };
 type Result = Answered | Failed;
 
-const injection = ({ answer }: Answered): number => answer.probabilities.prompt_injection ?? 0;
+// How likely a chunk is to be a prompt injection: the label's chance,
+// or the detector's own yes or no answer when it gives one, whichever is higher
+const injection = ({ answer }: Answered): number =>
+    Math.max(answer.probabilities.prompt_injection ?? 0, answer.injection ?? 0);
 
 // Fails once the signal fires, so a detector that ignores the signal
 // still gives up its place in the queue
@@ -126,6 +129,7 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
                     // checkAnswer made sure every chance is a number
                     probabilities: result.answer.probabilities as Record<string, number>,
                     score: riskOf(result.answer),
+                    ...(result.answer.injection === undefined ? {} : { injection: result.answer.injection }),
                 });
             }
         });

@@ -28,11 +28,14 @@ function chancesFor(choice: string): Record<string, number> {
     return Object.fromEntries(LABEL_NAMES.map((name) => [name, name === choice ? 0.9 : name === rest ? 0.1 : 0]));
 }
 
-// A reply as Jev's API sends it
-function jevReply(choice: string, { model = JEV_MODEL, probabilities = chancesFor(choice) } = {}): Response {
+// A reply as Jev's API sends it. `injection` is the yes or no answer.
+function jevReply(
+    choice: string,
+    { model = JEV_MODEL, probabilities = chancesFor(choice), injection = { type: "noul", noul: 0.04 } as unknown } = {},
+): Response {
     return Response.json({
         model,
-        answers: { label: { type: "choice", choice, confidence: 0.82, probabilities } },
+        answers: { label: { type: "choice", choice, confidence: 0.82, probabilities }, injection },
         usage: { input_tokens: 412, output_tokens: 12 },
     });
 }
@@ -46,7 +49,7 @@ describe("jevDetector", () => {
 
         const answer = await jev().label("Your mailbox is full. Log in here to keep your messages.");
 
-        expect(answer).toEqual({ label: "phishing", probabilities: chancesFor("phishing") });
+        expect(answer).toEqual({ label: "phishing", probabilities: chancesFor("phishing"), injection: 0.04 });
         const [url, init] = fetch.mock.calls[0]!;
         expect(url).toBe("https://api.typesafe.ai/v1/systemone");
         expect(init.method).toBe("POST");
@@ -55,8 +58,9 @@ describe("jevDetector", () => {
         expect(body).toMatchObject({
             model: "jev-1.13.0",
             state: "Your mailbox is full. Log in here to keep your messages.",
-            questions: { label: { type: "choice" } },
+            questions: { label: { type: "choice" }, injection: { type: "noul" } },
         });
+        expect(body.questions.injection.instructions).toContain("instruct an AI agent that is reading it");
         expect(Object.keys(body.questions.label.criteria)).toEqual(LABEL_NAMES);
         expect(body.questions.label.criteria.none).toBe("None of the other labels fits this text.");
     });
@@ -132,6 +136,8 @@ describe("jevDetector", () => {
             jevReply("article", { probabilities: { ...chancesFor("article"), none: 0.5 } }),
         ],
         ["text that is not JSON", new Response("not json")],
+        ["no yes or no answer", jevReply("article", { injection: null })],
+        ["a yes or no answer above 1", jevReply("article", { injection: { type: "noul", noul: 1.2 } })],
     ])("refuses %s without a retry", async (_what, reply) => {
         const fetch = answers(reply);
 

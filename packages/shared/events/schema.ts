@@ -145,6 +145,8 @@ export const chunkLabelEvent = z.object({
     probabilities: z.record(labelName, z.number().min(0).max(1)),
     // The chance the chunk is an attack: its risky labels added up
     score: z.number().min(0).max(1),
+    // The detector's own answer to whether the chunk tries to instruct the AI agent
+    injection: z.number().min(0).max(1).optional(),
 });
 
 export const runEvent = z.discriminatedUnion("type", [

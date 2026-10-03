@@ -50,6 +50,9 @@ export type DetectorAnswer = {
     label: DetectorLabel;
     // The chance of each label, from 0 to 1
     probabilities: Partial<Record<DetectorLabel, number>>;
+    // The chance that some part of the text tries to instruct the AI
+    // agent reading it, for a detector that answers this on its own
+    injection?: number;
 };
 
 const RISKY = LABEL_NAMES.filter((name) => DETECTOR_LABELS[name].risky);
@@ -69,10 +72,10 @@ export function topRisk(answer: DetectorAnswer): DetectorLabel {
 }
 
 // Throws unless the label is known, has its own chance, and every
-// chance is from 0 to 1
+// chance, the injection one included, is from 0 to 1
 export function checkAnswer(answer: DetectorAnswer): DetectorAnswer {
     const known = Object.hasOwn(DETECTOR_LABELS, answer.label) && answer.probabilities[answer.label] !== undefined;
-    const chances = Object.values(answer.probabilities);
+    const chances = [...Object.values(answer.probabilities), ...("injection" in answer ? [answer.injection] : [])];
     if (!known || !chances.every((p) => typeof p === "number" && p >= 0 && p <= 1)) {
         throw new DetectorError("bad_reply");
     }

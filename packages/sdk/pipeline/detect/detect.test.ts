@@ -163,6 +163,37 @@ describe("detectContent", () => {
         ]);
     });
 
+    it("strips a chunk the detector's own answer marks as an injection, though its label chance is low", async () => {
+        // As Jev answered for an invoice that also tells the AI to pay a new IBAN
+        const mixed: DetectorAnswer = {
+            label: "prompt_injection",
+            probabilities: { prompt_injection: 0.65, payment_fraud: 0.35 },
+            injection: 0.98,
+        };
+        configure({ detector: fake((text) => (text.includes("forward") ? mixed : ARTICLE)) });
+
+        const shown = await detectContent(makeCall({}), web(PAGE), true);
+
+        expect(shown.output).toBe(LONG);
+        const chunks = takeEvents().filter((event) => event.type === "chunk_label");
+        expect(chunks).toMatchObject([{ chunk: 0 }, { chunk: 1, injection: 0.98 }]);
+        expect(chunks[0]).not.toHaveProperty("injection");
+    });
+
+    it("keeps text whose own injection answer stays under stripAt, such as docs that show a prompt", async () => {
+        const docs: DetectorAnswer = {
+            label: "documentation",
+            probabilities: { documentation: 0.92, prompt_injection: 0.08 },
+            injection: 0.67,
+        };
+        configure({ detector: fake(() => docs) });
+
+        const shown = await detectContent(makeCall({}), web(PAGE), true);
+
+        expect(shown.output).toBe(PAGE);
+        expect(decisionsOf(takeEvents())).toMatchObject([{ decision: "pass" }]);
+    });
+
     it.each(KEPT)("keeps the text for $what and records $decision", async ({ answer, decision, score, flags }) => {
         configure({ detector: fake(() => answer) });
 

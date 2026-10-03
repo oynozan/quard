@@ -24,11 +24,16 @@ describe("a chunk_label event", () => {
         expect(uploadBatch.safeParse({ events: [{ id: "c".repeat(16), event: CHUNK }] }).success).toBe(true);
     });
 
+    it("keeps the detector's own injection answer when it gives one", () => {
+        expect(runEvent.parse({ ...CHUNK, injection: 0.97 })).toEqual({ ...CHUNK, injection: 0.97 });
+    });
+
     it.each([
         ["a label that is not a plain name", { label: "Payment Fraud" }],
         ["a chance above 1", { probabilities: { payment_fraud: 1.2 } }],
         ["a chance under a label that is not a plain name", { probabilities: { "pay-me": 0.5 } }],
         ["a score above 1", { score: 1.5 }],
+        ["an injection answer above 1", { injection: 1.5 }],
         ["a negative chunk", { chunk: -1 }],
         ["no detector", { detector: "" }],
     ])("is refused with %s", (_what, change) => {

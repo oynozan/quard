@@ -39,8 +39,10 @@ describe("topRisk", () => {
 describe("checkAnswer", () => {
     it("returns a valid answer as it is", () => {
         const valid = answer({ article: 0.9, none: 0.1 });
+        const withInjection = { ...valid, injection: 0.2 };
 
         expect(checkAnswer(valid)).toBe(valid);
+        expect(checkAnswer(withInjection)).toBe(withInjection);
     });
 
     it.each([
@@ -51,6 +53,11 @@ describe("checkAnswer", () => {
         ["a missing chance", { label: "article", probabilities: { article: undefined } }],
         ["no chance for its own label", { label: "article", probabilities: { invoice: 1 } }],
         ["no chances at all", { label: "article", probabilities: {} }],
+        ["an injection chance above 1", { label: "article", probabilities: { article: 1 }, injection: 2 }],
+        [
+            "an injection chance that is missing",
+            { label: "article", probabilities: { article: 1 }, injection: undefined },
+        ],
     ])("refuses %s", (_what, bad) => {
         expect(() => checkAnswer(bad as DetectorAnswer)).toThrow(new DetectorError("bad_reply"));
     });
