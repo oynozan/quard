@@ -1,8 +1,11 @@
-import type { RunDecision, RunDetail as StoredRun, RunLabel, RunStep } from "@quard/db";
+import type { RunDecision, RunLabel, RunStep } from "@quard/db";
 import { contextOf, isInfluenced } from "../../labels/context";
 import type { GuardType, Label, Outcome, StepKind } from "../../types";
 import type { Step } from "../types";
 import { argsOf } from "./values";
+
+// Stored steps with their labels and decisions, such as a whole stored run or an agent's recent calls
+export type StepSource = { steps: RunStep[]; labels: RunLabel[]; decisions: RunDecision[] };
 
 const GUARDS: ReadonlySet<string> = new Set<GuardType>([
     "source",
@@ -110,18 +113,23 @@ function modelStep(step: RunStep, labels: RunLabel[]): Step {
 }
 
 // A tool call starts at its first check. Its own output comes after it, so it is not part of its context.
-function toolStep(step: RunStep, run: StoredRun, firstCheck: Map<string, number>, owner: Map<string, string>): Step {
+function toolStep(
+    step: RunStep,
+    source: StepSource,
+    firstCheck: Map<string, number>,
+    owner: Map<string, string>,
+): Step {
     const end = ms(step.at);
     const startedAt = Math.min(end - step.durationMs, firstCheck.get(step.stepId) ?? end);
-    const before = readBefore(run.labels, startedAt);
+    const before = readBefore(source.labels, startedAt);
     const detail = toolDetailOf(step.detail);
     const generated = new Set(
-        run.decisions
+        source.decisions
             .filter((d) => d.stepId === step.stepId && d.reason === "value_model_generated" && d.field !== null)
             .map((d) => String(d.field)),
     );
     const args = argsOf(detail.arguments, detail.keys, before, generated);
-    const output = run.labels.find((label) => label.stepId === step.stepId);
+    const output = source.labels.find((label) => label.stepId === step.stepId);
     const first = args[0];
     return {
         ...base,
@@ -180,20 +188,20 @@ function guardStep(decision: RunDecision, labels: RunLabel[]): Step {
 }
 
 // Model calls, tool calls and guard decisions in time order. A call comes before its own checks.
-export function buildSteps(run: StoredRun): Step[] {
+export function buildSteps(source: StepSource): Step[] {
     const firstCheck = new Map<string, number>();
-    for (const decision of run.decisions) {
+    for (const decision of source.decisions) {
         if (!firstCheck.has(decision.stepId)) firstCheck.set(decision.stepId, ms(decision.at));
     }
     const owner = new Map<string, string>();
-    for (const step of run.steps) {
+    for (const step of source.steps) {
         for (const call of step.kind === "model_call" ? callsOf(step.detail) : []) owner.set(call.callId, step.stepId);
     }
     const steps = [
-        ...run.steps.map((step) =>
-            step.kind === "model_call" ? modelStep(step, run.labels) : toolStep(step, run, firstCheck, owner),
+        ...source.steps.map((step) =>
+            step.kind === "model_call" ? modelStep(step, source.labels) : toolStep(step, source, firstCheck, owner),
         ),
-        ...run.decisions.filter(shown).map((d) => guardStep(d, run.labels)),
+        ...source.decisions.filter(shown).map((d) => guardStep(d, source.labels)),
     ];
     return steps.sort((a, b) => a.startedAt - b.startedAt || rank(a.kind) - rank(b.kind));
 }

@@ -2,6 +2,7 @@ import { APIError } from "@privy-io/node";
 import { NextResponse, type NextRequest } from "next/server";
 import { canEnter } from "@/lib/auth/access";
 import { readAuthEnv } from "@/lib/auth/env";
+import { sameOrigin } from "@/lib/auth/origin";
 import { verifyPrivyLogin } from "@/lib/auth/privy";
 import { SESSION_COOKIE, SESSION_DAYS, signSession } from "@/lib/auth/session-token";
 
@@ -9,19 +10,6 @@ const DAY = 24 * 60 * 60;
 
 function problem(status: number, error: string) {
     return NextResponse.json({ error }, { status });
-}
-
-// Only this site may sign people in or out, which stops login and logout forgery from other pages.
-function sameOrigin(request: NextRequest): boolean {
-    const origin = request.headers.get("origin");
-    // Behind a chain of proxies the forwarded host can list several values; the first is the public one.
-    const host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host"))?.split(",")[0].trim();
-    if (!origin || !host) return false;
-    try {
-        return new URL(origin).host === host;
-    } catch {
-        return false;
-    }
 }
 
 async function readAccessToken(request: NextRequest): Promise<string | null> {
@@ -33,7 +21,7 @@ async function readAccessToken(request: NextRequest): Promise<string | null> {
 
 // Trades a verified Privy access token for a Quard session cookie.
 export async function POST(request: NextRequest) {
-    if (!sameOrigin(request)) return problem(403, "Cross-site request");
+    if (!sameOrigin(request.headers)) return problem(403, "Cross-site request");
     const env = readAuthEnv();
     if (!env) return problem(503, "Sign-in is not set up");
     const accessToken = await readAccessToken(request);
@@ -71,7 +59,7 @@ export async function POST(request: NextRequest) {
 
 // Signs out by clearing the cookie.
 export async function DELETE(request: NextRequest) {
-    if (!sameOrigin(request)) return problem(403, "Cross-site request");
+    if (!sameOrigin(request.headers)) return problem(403, "Cross-site request");
     const response = new NextResponse(null, { status: 204 });
     response.cookies.set(SESSION_COOKIE, "", {
         httpOnly: true,

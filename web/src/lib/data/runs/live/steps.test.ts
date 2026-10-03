@@ -185,6 +185,12 @@ describe("buildSteps", () => {
         });
     });
 
+    it("builds the same steps from just the stored steps, labels and decisions", () => {
+        const { steps, labels, decisions } = storedRun();
+
+        expect(buildSteps({ steps, labels, decisions })).toEqual(buildSteps(storedRun()));
+    });
+
     it("shows a permission check only when it stopped a call", () => {
         const run = storedRun();
         run.decisions.push({

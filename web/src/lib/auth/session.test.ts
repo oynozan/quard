@@ -30,9 +30,9 @@ describe("session reads", () => {
         expect(await requireSession()).toMatchObject({ sub: "u" });
     });
 
-    it("reads the sample account when sign-in is skipped", async () => {
+    it("reads the local account when sign-in is skipped", async () => {
         vi.stubEnv("QUARD_SKIP_SIGN_IN", "1");
-        expect(await getSession()).toMatchObject({ sub: "sample", email: "dana@acme.com" });
+        expect(await getSession()).toMatchObject({ sub: "local", email: "dev@localhost", github: null });
         vi.unstubAllEnvs();
     });
 

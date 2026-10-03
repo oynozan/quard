@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { DAY, HOUR, MINUTE } from "@/lib/data/rng";
+import { DAY, HOUR, MINUTE } from "@/lib/time";
 import {
     formatAge,
     formatClock,

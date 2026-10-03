@@ -80,13 +80,10 @@ describe("POST /api/auth/session", () => {
     });
 
     it("refuses requests from other sites", async () => {
-        expect(
-            (await POST(post({ accessToken: "t" }, { origin: "https://evil.com", host: "localhost:3100" }))).status,
-        ).toBe(403);
-        expect((await POST(post({ accessToken: "t" }, { host: "localhost:3100" }))).status).toBe(403);
-        expect((await POST(post({ accessToken: "t" }, { origin: "not a url", host: "localhost:3100" }))).status).toBe(
-            403,
-        );
+        const response = await POST(post({ accessToken: "t" }, { origin: "https://evil.com", host: "localhost:3100" }));
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ error: "Cross-site request" });
+        expect(verifyPrivyLogin).not.toHaveBeenCalled();
     });
 
     it("trusts the first forwarded host behind proxies", async () => {

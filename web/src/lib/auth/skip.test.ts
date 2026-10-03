@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { canEnter } from "./access";
-import { SAMPLE_SESSION, skipsSignIn } from "./skip";
+import { canEnter, displayName } from "./access";
+import { LOCAL_SESSION, skipsSignIn } from "./skip";
 
 describe("skipsSignIn", () => {
     it("skips sign-in only when the switch is 1 outside production", () => {
@@ -16,10 +16,11 @@ describe("skipsSignIn", () => {
     });
 });
 
-describe("SAMPLE_SESSION", () => {
-    it("is the sample data's account, and may enter", () => {
-        expect(SAMPLE_SESSION.email).toBe("dana@acme.com");
-        expect(canEnter(SAMPLE_SESSION)).toBe(true);
-        expect(SAMPLE_SESSION.exp * 1000).toBeGreaterThan(Date.now());
+describe("LOCAL_SESSION", () => {
+    it("is a neutral local account that may enter and never expires", () => {
+        expect(LOCAL_SESSION).toMatchObject({ sub: "local", email: "dev@localhost", github: null });
+        expect(displayName(LOCAL_SESSION)).toBe("dev@localhost");
+        expect(canEnter(LOCAL_SESSION)).toBe(true);
+        expect(LOCAL_SESSION.exp * 1000).toBeGreaterThan(Date.now());
     });
 });

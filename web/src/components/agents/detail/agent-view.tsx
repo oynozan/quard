@@ -1,7 +1,8 @@
 import { CellColumns } from "@/components/charts/cell-columns";
 import type { AgentDetail } from "@/lib/data/agents";
-import { HOUR, NOW } from "@/lib/data/rng";
+import { NOW } from "@/lib/data/rng";
 import { formatClock, formatInt } from "@/lib/format";
+import { HOUR } from "@/lib/time";
 import { CallTimeline } from "../timeline/call-timeline";
 import { AgentHeading } from "./agent-heading";
 import { AgentIncidents } from "./agent-incidents";

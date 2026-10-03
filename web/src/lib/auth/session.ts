@@ -2,12 +2,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { readAuthEnv } from "./env";
 import { sessionFromToken } from "./gate";
-import { SAMPLE_SESSION, skipsSignIn } from "./skip";
+import { LOCAL_SESSION, skipsSignIn } from "./skip";
 import { SESSION_COOKIE, type Session } from "./session-token";
 
 // The signed-in person for this request, or null.
 export async function getSession(): Promise<Session | null> {
-    if (skipsSignIn()) return SAMPLE_SESSION;
+    if (skipsSignIn()) return LOCAL_SESSION;
     const token = (await cookies()).get(SESSION_COOKIE)?.value;
     return sessionFromToken(token, readAuthEnv());
 }

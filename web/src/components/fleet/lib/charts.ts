@@ -2,7 +2,7 @@ import type { HeatSteps } from "@/components/charts/layout/heatmap";
 import type { BarItem } from "@/components/charts/cell-bars";
 import type { BlocksHeatmap } from "@/lib/data/fleet";
 import type { GuardType } from "@/lib/data/types";
-import { DAY } from "@/lib/data/rng";
+import { DAY } from "@/lib/time";
 import { formatInt, formatShortDate } from "@/lib/format";
 
 export const GUARD_NAMES: Record<GuardType, string> = {

@@ -8,7 +8,7 @@ import { Toolbar } from "@/components/kit/table/toolbar";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BlocksByGuard, BlocksHeatmap } from "@/lib/data/fleet";
-import { DAY } from "@/lib/data/rng";
+import { DAY } from "@/lib/time";
 import { formatInt } from "@/lib/format";
 import {
     BLOCK_HEAT_STEPS,

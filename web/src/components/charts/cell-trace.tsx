@@ -3,7 +3,7 @@
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
 import { traceLayout } from "@/lib/charts/trace";
 import { formatPercent, formatShortDate } from "@/lib/format";
-import { DAY } from "@/lib/data/rng";
+import { DAY } from "@/lib/time";
 import { useWidth } from "@/lib/hooks/use-width";
 import { WarningGlyph } from "@/components/icons/glyphs";
 import { ChartTooltip, TableToggle } from "./chart-parts";

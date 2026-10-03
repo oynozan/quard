@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { DAY, HOUR } from "@/lib/data/rng";
+import { DAY, HOUR } from "@/lib/time";
 import { columnsOf, rectsOf } from "../../../../test/charts-layout-hooks/paths";
 import { BAND_ROWS, bucketNames, columnsLayout, groupAt, groupOverlay, groupX, mergeValues } from "./columns";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { GAP } from "@/lib/charts/cells";
-import { DAY } from "@/lib/data/rng";
+import { DAY } from "@/lib/time";
 import { ChartPane, type ChartState, type ReadoutItem } from "./chart-pane";
 import { ChartTooltip } from "./chart-parts";
 import { ChartTable } from "./chart-table";

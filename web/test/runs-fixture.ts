@@ -1,4 +1,4 @@
-import type { RunDecision, RunDetail, RunLabel, RunStep } from "@quard/db";
+import type { RunDecisionDetail, RunDetail, RunLabel, RunStep } from "@quard/db";
 
 // A stored run, as @quard/db returns it: the poisoned-invoice attack, already redacted.
 // The model reads a web page, then tries to pay the IBAN on it, and the action guard blocks it.
@@ -29,7 +29,9 @@ const label = (fields: Partial<RunLabel> & Pick<RunLabel, "contentId" | "stepId"
     ...fields,
 });
 
-const decision = (fields: Partial<RunDecision> & Pick<RunDecision, "eventId" | "stepId" | "at">): RunDecision => ({
+const decision = (
+    fields: Partial<RunDecisionDetail> & Pick<RunDecisionDetail, "eventId" | "stepId" | "at">,
+): RunDecisionDetail => ({
     agent: "billing",
     tool: "payInvoice",
     guard: "action",
@@ -39,6 +41,8 @@ const decision = (fields: Partial<RunDecision> & Pick<RunDecision, "eventId" | "
     enforced: true,
     reason: null,
     field: null,
+    degraded: false,
+    score: null,
     ...fields,
 });
 

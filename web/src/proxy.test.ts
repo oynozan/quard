@@ -77,8 +77,9 @@ describe("proxy with sign-in skipped", () => {
     beforeEach(() => vi.stubEnv("QUARD_SKIP_SIGN_IN", "1"));
     afterEach(() => vi.unstubAllEnvs());
 
-    it("lets everyone in, and keeps the sign-in page visible", async () => {
+    it("lets everyone in, API calls included, and keeps the sign-in page visible", async () => {
         expect((await proxy(request("/runs"))).headers.get("x-middleware-next")).toBe("1");
+        expect((await proxy(request("/api/anything"))).headers.get("x-middleware-next")).toBe("1");
         expect((await proxy(request("/sign-in"))).headers.get("x-middleware-next")).toBe("1");
     });
 

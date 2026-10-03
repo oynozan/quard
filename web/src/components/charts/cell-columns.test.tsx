@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DAY, HOUR } from "@/lib/data/rng";
+import { DAY, HOUR } from "@/lib/time";
 import { liveText, resizeTo, runFrame, stubChartEnv, sweepFills, unstubChartEnv } from "../../../test/charts-cells/env";
 import { CellColumns } from "./cell-columns";
 

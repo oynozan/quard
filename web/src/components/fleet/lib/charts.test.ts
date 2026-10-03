@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { DAY } from "@/lib/data/rng";
+import { DAY } from "@/lib/time";
 import { barsSummary, dailySummary, heatSummary, HOUR_CAPTIONS, HOURS, peakIndex, sum } from "./charts";
 
 const OCT_1 = Date.UTC(2026, 9, 1);

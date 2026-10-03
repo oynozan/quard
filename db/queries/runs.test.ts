@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { Db } from "../connect/connect.ts";
 import type { RunItem } from "./ingest/rows.ts";
 import { content, decision, item, modelCall, RUN, started, toolCall } from "../test/events.ts";
 import { startTestDb, type TestDb } from "../test/pglite.ts";
 import { createProject } from "./projects.ts";
 import { ingestBatch } from "./ingest/store.ts";
-import { listRuns } from "./runs.ts";
+import { getRun, listRuns } from "./runs.ts";
 
 let test: TestDb;
 
@@ -75,5 +76,89 @@ describe("listRuns details", () => {
         await ingestBatch(test.db, projectId, [item(started())]);
 
         expect((await listRuns(test.db, projectId))[0]?.lastStep).toBeNull();
+    });
+});
+
+describe("listRuns by id", () => {
+    const [a, b, c, d] = ["a", "b", "c", "d"].map((char) => char.repeat(32)) as [string, string, string, string];
+
+    it("lists only the given runs of the project, newest first", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const other = await createProject(test.db, "Other");
+        await ingestBatch(test.db, projectId, [
+            item(startedAt(a, "2026-10-03T10:00:00.000Z")),
+            item(startedAt(b, "2026-10-03T11:00:00.000Z")),
+            item(startedAt(c, "2026-10-03T12:00:00.000Z")),
+        ]);
+        await ingestBatch(test.db, other, [item(startedAt(d, "2026-10-03T13:00:00.000Z"))]);
+
+        const rows = await listRuns(test.db, projectId, { runIds: [a, c, d, "e".repeat(32)] });
+        expect(rows.map((run) => run.runId)).toEqual([c, a]);
+
+        const page = await listRuns(test.db, projectId, { runIds: [a, b, c], limit: 2 });
+        expect(page.map((run) => run.runId)).toEqual([c, b]);
+    });
+
+    it("lists nothing for no ids, without reading the database", async () => {
+        expect(await listRuns({} as Db, "project", { runIds: [] })).toEqual([]);
+    });
+
+    it("keeps every given run past the default limit", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const ids = Array.from({ length: 51 }, (_, n) => n.toString(16).padStart(32, "0"));
+        await ingestBatch(
+            test.db,
+            projectId,
+            ids.map((id, n) => item(startedAt(id, new Date(Date.UTC(2026, 9, 3, 10, n)).toISOString()))),
+        );
+
+        expect(await listRuns(test.db, projectId)).toHaveLength(50);
+        expect(await listRuns(test.db, projectId, { runIds: ids })).toHaveLength(51);
+    });
+});
+
+describe("getRun", () => {
+    it("has no run for an unknown id or another project", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const other = await createProject(test.db, "Other");
+        await ingestBatch(test.db, other, [item(started())]);
+
+        expect(await getRun(test.db, projectId, RUN)).toBeUndefined();
+        expect(await getRun(test.db, other, "f".repeat(32))).toBeUndefined();
+    });
+
+    it("adds each decision's late flag and detector score from its event", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const detector = {
+            ...decision("2026-10-03T12:00:02.500Z"),
+            guard: "source",
+            rule: "detector:injection",
+            decision: "flag" as const,
+            score: 0.93,
+        };
+        await ingestBatch(test.db, projectId, [item(started()), item(decision()), item(detector, true)]);
+
+        const run = await getRun(test.db, projectId, RUN);
+
+        expect(run?.decisions.map(({ rule, degraded, score }) => ({ rule, degraded, score }))).toEqual([
+            { rule: "iban:from", degraded: false, score: null },
+            { rule: "detector:injection", degraded: true, score: 0.93 },
+        ]);
+        expect(run?.decisions[0]).toMatchObject({ guard: "action", decision: "block", enforced: true });
+    });
+
+    it("keeps a decision whose event row is gone", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const gone = item({ ...decision(), score: 0.5 }, true);
+        await ingestBatch(test.db, projectId, [item(started()), gone]);
+        await test.db
+            .deleteFrom("events")
+            .where("project_id", "=", projectId)
+            .where("event_id", "=", gone.id)
+            .execute();
+
+        const run = await getRun(test.db, projectId, RUN);
+
+        expect(run?.decisions).toMatchObject([{ eventId: gone.id, degraded: false, score: null }]);
     });
 });

@@ -1,4 +1,4 @@
-import { MINUTE, HOUR, DAY } from "@/lib/data/rng";
+import { MINUTE, HOUR, DAY } from "@/lib/time";
 import type { GuardMode, Outcome } from "@/lib/data/types";
 
 // A fixed locale and zone so the server and the browser print the same string.

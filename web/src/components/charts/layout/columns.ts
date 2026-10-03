@@ -1,5 +1,5 @@
 import { columnField, columnOverlay, gridlineY, niceScale, GAP, type ColumnField, type Rect } from "@/lib/charts/cells";
-import { DAY } from "@/lib/data/rng";
+import { DAY } from "@/lib/time";
 import { formatClock, formatShortDate } from "@/lib/format";
 import { fitCells } from "./fit";
 

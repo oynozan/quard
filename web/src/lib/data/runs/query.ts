@@ -1,10 +1,9 @@
 import { getRun as storedRun, listRuns as storedRuns } from "@quard/db";
-import { connection } from "next/server";
-import { requireSession } from "@/lib/auth/session";
-import { database } from "./live/client";
+import { projectScope } from "../scope";
 import { runDetailOf, runRowOf } from "./live/detail";
-import { currentProject } from "./live/project";
 import type { RunDetail, RunQuery, RunRow } from "./types";
+
+export { requestTime } from "../scope";
 
 // The newest runs the list filters over
 const WINDOW = 200;
@@ -17,26 +16,12 @@ function matches(row: RunRow, query: string): boolean {
     return words.every((word) => row.id.startsWith(word) || fields.some((field) => field.includes(word)));
 }
 
-// Reads are per request and only for signed-in people, so nothing is cached at build time
-async function project() {
-    await connection();
-    await requireSession();
-    const db = database();
-    return { db, project: await currentProject(db) };
-}
-
-// The time of this request, for ages and running durations
-export async function requestTime(): Promise<number> {
-    await connection();
-    return Date.now();
-}
-
 // Runs from Postgres, newest first, filtered
 export async function listRuns(filter: RunQuery = {}): Promise<RunRow[]> {
-    const { db, project: current } = await project();
-    if (!current) return [];
+    const scope = await projectScope();
+    if (!scope) return [];
     const now = Date.now();
-    const rows = (await storedRuns(db, current.id, { limit: WINDOW }))
+    const rows = (await storedRuns(scope.db, scope.project.id, { limit: WINDOW }))
         .map((run) => runRowOf(run, now))
         .filter(
             (row) =>
@@ -49,8 +34,8 @@ export async function listRuns(filter: RunQuery = {}): Promise<RunRow[]> {
 
 // One run with its agents and time-ordered steps, or null when the project has no such run
 export async function getRun(runId: string): Promise<RunDetail | null> {
-    const { db, project: current } = await project();
-    if (!current) return null;
-    const run = await storedRun(db, current.id, runId);
+    const scope = await projectScope();
+    if (!scope) return null;
+    const run = await storedRun(scope.db, scope.project.id, runId);
     return run ? runDetailOf(run, Date.now()) : null;
 }
