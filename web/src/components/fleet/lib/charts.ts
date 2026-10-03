@@ -1,5 +1,7 @@
 import type { HeatSteps } from "@/components/charts/layout/heatmap";
 import type { BarItem } from "@/components/charts/cell-bars";
+import type { ChartState } from "@/components/charts/chart-pane";
+import { unitWord } from "@/components/charts/layout/format";
 import type { BlocksHeatmap } from "@/lib/data/fleet";
 import type { GuardType } from "@/lib/data/types";
 import { DAY } from "@/lib/time";
@@ -29,12 +31,18 @@ export function sum(values: number[]): number {
     return values.reduce((total, value) => total + value, 0);
 }
 
+// Loading until the counts arrive, then empty when they add up to 0
+export function chartState(counts: number[] | null): ChartState {
+    if (!counts) return "loading";
+    return sum(counts) > 0 ? "ready" : "empty";
+}
+
 export function peakIndex(values: number[]): number {
     return values.reduce((best, value, index) => (value > values[best] ? index : best), 0);
 }
 
 export function dailySummary(what: string, values: number[], startAt: number): string {
-    if (!values.length) return `${what} per day over the last 30 days. No data yet.`;
+    if (sum(values) === 0) return `${what} per day: none in the last 30 days.`;
     const peak = peakIndex(values);
     const peakDay = formatShortDate(startAt + peak * DAY);
     const today = values[values.length - 1];
@@ -42,12 +50,13 @@ export function dailySummary(what: string, values: number[], startAt: number): s
 }
 
 export function heatSummary(heatmap: BlocksHeatmap): string {
+    if (heatmap.total === 0) return "Blocks by weekday and UTC hour: none in the last 30 days.";
     const busiest = peakIndex(heatmap.hourTotals);
     return `Blocks by weekday and UTC hour over the last 30 days, ${formatInt(heatmap.total)} in total. Busiest hour ${HOUR_CAPTIONS[busiest]}.`;
 }
 
-export function barsSummary(what: string, items: BarItem[], unit: string): string {
-    if (!items.length) return `${what}: none in the last 30 days.`;
+export function barsSummary(what: string, items: BarItem[], unit: string, unitOne: string): string {
+    if (sum(items.map((item) => item.value)) === 0) return `${what}: none in the last 30 days.`;
     const top = items[0];
-    return `${what} over the last 30 days. ${top.label} leads with ${formatInt(top.value)} ${unit}, out of ${items.length}.`;
+    return `${what} over the last 30 days. ${top.label} leads with ${formatInt(top.value)} ${unitWord(top.value, unit, unitOne)}, out of ${items.length}.`;
 }

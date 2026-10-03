@@ -1,6 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { expectNoChartsOrTables } from "../../../test/empty";
 import { APPROVALS, INCIDENTS, runRow } from "../../../test/overview/fixtures";
 import { HOUR, NOW } from "../../../test/time";
 import { ApprovalsSection, IncidentsSection, RunsSection } from "./overview-tables";
@@ -15,12 +14,15 @@ function cellsOf(row: HTMLElement) {
         .map((cell) => cell.textContent);
 }
 
-// A section with no rows shows its title and one line, with no chip, link or table
-function expectEmptySection(container: HTMLElement, title: string, line: string) {
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(title);
-    expect(screen.getByRole("status").textContent).toBe(line);
-    expect(screen.queryByRole("link")).toBeNull();
-    expectNoChartsOrTables(container);
+// A section with no rows keeps its zero count, link and header row, with one quiet line under it
+function expectEmptyTable(title: string, href: string, headers: string[], line: string) {
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(`${title}0`);
+    expect(screen.getByRole("link", { name: "View all" }).getAttribute("href")).toBe(href);
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(headers);
+    expect(bodyRows()).toHaveLength(0);
+    const quiet = screen.getByRole("status");
+    expect(quiet.textContent).toBe(line);
+    expect(quiet.previousElementSibling?.querySelector("table")).toBe(screen.getByRole("table"));
 }
 
 describe("ApprovalsSection", () => {
@@ -138,10 +140,15 @@ describe("RunsSection", () => {
         expect(within(cell).getByText("None yet").className).toContain("text-ink-absent");
     });
 
-    it("shows only its title and one line before the first run", () => {
-        const { container } = render(<RunsSection runs={[]} now={NOW} />);
+    it("keeps its header row with one quiet line before the first run", () => {
+        render(<RunsSection runs={[]} now={NOW} />);
 
-        expectEmptySection(container, "Recent runs", "No runs yet");
+        expectEmptyTable(
+            "Recent runs",
+            "/runs",
+            ["Run", "Status", "Guard decisions", "Cost", "Started"],
+            "No runs yet",
+        );
     });
 });
 
@@ -167,9 +174,9 @@ describe("IncidentsSection", () => {
         expect(bodyRows().map((row) => cellsOf(row)[2])).toEqual(["Replaying", "confirmed"]);
     });
 
-    it("shows only its title and one line before the first incident", () => {
-        const { container } = render(<IncidentsSection incidents={[]} now={NOW} />);
+    it("keeps its header row with one quiet line before the first incident", () => {
+        render(<IncidentsSection incidents={[]} now={NOW} />);
 
-        expectEmptySection(container, "Incidents", "No incidents yet");
+        expectEmptyTable("Incidents", "/incidents", ["Incident", "Cause", "Replay", "Opened"], "No incidents yet");
     });
 });

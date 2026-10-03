@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeResizeObserver, observers, resizeAll } from "../../../test/charts-rest/dom";
+import { cellCount, FakeResizeObserver, observers, pathByFill, resizeAll } from "../../../test/charts-rest/dom";
 import { CellTrace } from "./cell-trace";
 
 // 30 days from 1 May; day 15 reaches 9%, today sits at 2%
@@ -90,6 +90,69 @@ describe("CellTrace", () => {
         expect(rows[29].textContent).toBe("1 May1.00%—");
         fireEvent.click(screen.getByRole("button", { name: "Chart" }));
         expect(chart()).toBeTruthy();
+    });
+});
+
+describe("CellTrace with nothing to rate", () => {
+    const EMPTY = "No guarded tool calls in the last 30 days";
+
+    function empty(emptyText?: string) {
+        return render(
+            <CellTrace
+                title="Block rate"
+                values={[]}
+                startAt={START}
+                limit={5}
+                limitLabel="Limit"
+                emptyText={emptyText}
+            />,
+        );
+    }
+
+    it("keeps its frame, with every cell unlit under one sentence and dashes for values", () => {
+        const { container } = empty(EMPTY);
+        const field = screen.getByRole("img", { name: EMPTY });
+
+        expect(screen.getByRole("heading", { level: 2, name: "Block rate" })).toBeTruthy();
+        expect(screen.getByText("30D")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Table" })).toBeTruthy();
+        expect(screen.getByText("Today").textContent).toBe("Today —");
+        expect(screen.getByText("Limit").textContent).toBe("Limit 5.00%");
+        const [axis] = container.querySelectorAll("div[aria-hidden].w-\\[34px\\]");
+        expect(axis.textContent).toBe("————");
+        // 71 columns of 24 cells, none of them lit
+        expect(cellCount(pathByFill(container, "var(--chart-field)"))).toBe(71 * 24);
+        expect(pathByFill(container, "var(--signal)")?.getAttribute("d")).toBe("");
+        expect(pathByFill(container, "var(--warning)")?.getAttribute("d")).toBe("");
+        expect(container.querySelector('line[stroke="var(--warning)"]')).toBeTruthy();
+        expect(field.getAttribute("tabindex")).toBe("-1");
+        expect(screen.getByText(EMPTY).style.left).not.toBe("");
+        expect(screen.getByText("1 May")).toBeTruthy();
+        expect(screen.getByText("30 May")).toBeTruthy();
+    });
+
+    it("reads nothing on hover or keys", () => {
+        empty(EMPTY);
+        const field = screen.getByRole("img", { name: EMPTY });
+
+        fireEvent.pointerMove(field, { clientX: 100 });
+        fireEvent.keyDown(field, { key: "End" });
+        expect(tooltip()).toBeNull();
+        expect(document.querySelector('rect[fill="var(--highlight)"]')).toBeNull();
+    });
+
+    it("keeps the table header and says why it has no rows", () => {
+        empty(EMPTY);
+        fireEvent.click(screen.getByRole("button", { name: "Table" }));
+
+        expect(screen.getAllByRole("row").map((row) => row.textContent)).toEqual(["DayBlock rateOver the limit"]);
+        expect(screen.getByText(EMPTY).tagName).toBe("P");
+    });
+
+    it("falls back to a general sentence", () => {
+        empty();
+
+        expect(screen.getByRole("img", { name: "No data in this range" })).toBeTruthy();
     });
 });
 

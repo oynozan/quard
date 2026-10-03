@@ -1,11 +1,34 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { TableState } from "@/components/kit/data-table";
+import { DataTable, TableState } from "@/components/kit/data-table";
+import { RUNS_MIN_WIDTH, RunsColgroup, RunsHead } from "./runs-columns";
 
-// Filters that match nothing get the message and a way back, with no table under the toolbar
+// The header row with a centered state block under it, as full tables show empties
+function StateFrame({ children }: { children: React.ReactNode }) {
+    return (
+        <div>
+            <DataTable minWidth={RUNS_MIN_WIDTH} className="text-[14px]">
+                <RunsColgroup />
+                <RunsHead />
+            </DataTable>
+            <div role="status" className="min-h-[320px] border-b border-line [&>div]:min-h-[320px]">
+                {children}
+            </div>
+        </div>
+    );
+}
+
+export function RunsEmpty() {
+    return (
+        <StateFrame>
+            <TableState title="No runs yet" />
+        </StateFrame>
+    );
+}
+
 export function RunsNoMatch() {
     return (
-        <div role="status" className="[&>div]:min-h-[320px]">
+        <StateFrame>
             <TableState
                 title="No runs match"
                 action={
@@ -14,6 +37,6 @@ export function RunsNoMatch() {
                     </Link>
                 }
             />
-        </div>
+        </StateFrame>
     );
 }

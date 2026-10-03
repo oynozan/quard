@@ -22,7 +22,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             <div className="reveal">
                 <SettingsTabs
                     initial={pickTab(params.tab)}
-                    counts={{ keys: activeKeys }}
+                    counts={{ keys: activeKeys, code: data.rules.length }}
                     panels={{
                         keys: (
                             <KeysPanel keys={data.keys} now={now} createAction={createKey} revokeAction={revokeKey} />

@@ -2,7 +2,6 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agentCall, CALLS } from "../../../../test/agents-graph-timeline/fixtures";
 import { stubResizeObserver } from "../../../../test/agents-graph-timeline/resize";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { CallTimeline } from "./call-timeline";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -59,6 +58,8 @@ describe("CallTimeline", () => {
             "The last 1 call by planner, from 12:00:00 to 12:00:00 UTC. " +
             "0 ran with untrusted content in context, and guards blocked 0.";
         expect(screen.getByRole("img", { name: summary })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Table" }));
+        expect(screen.getByRole("table", { name: "The last 1 call by planner, newest first" })).toBeTruthy();
     });
 
     it("lists every call newest first behind the Table toggle", () => {
@@ -87,13 +88,28 @@ describe("CallTimeline", () => {
         error.mockRestore();
     });
 
-    it("says there are no calls yet when there are none, with no drawing, readouts or table", () => {
+    it("keeps the pane with an empty field and dashed readouts when the agent has made no calls", () => {
         render(<CallTimeline name="planner" calls={[]} />);
         const pane = screen.getByRole("region", { name: "Recent calls" });
-        expect(within(pane).getByRole("status").textContent).toBe("No calls yet");
-        expect(pane.textContent).not.toContain("LAST");
-        expect(screen.queryByText("Blocked")).toBeNull();
-        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
-        expectNoChartsOrTables();
+        expect(pane.textContent).toContain("LAST 0");
+        const field = within(pane).getByText("planner has made no calls yet").parentElement;
+        expect(field?.className).toContain("h-[140px]");
+        expect(field?.className).toContain("bg-chart-field");
+        expect(screen.queryByRole("img")).toBeNull();
+        expect(screen.queryByText("Legend:")).toBeNull();
+        for (const label of ["Untrusted context", "Asked", "Blocked"]) expect(readout(label)).toBe("—");
+    });
+
+    it("keeps the table header over a line saying there are no calls yet", () => {
+        render(<CallTimeline name="planner" calls={[]} />);
+        fireEvent.click(screen.getByRole("button", { name: "Table" }));
+        const table = screen.getByRole("table", { name: "The last 0 calls by planner, newest first" });
+        expect(
+            within(table)
+                .getAllByRole("columnheader")
+                .map((cell) => cell.textContent),
+        ).toEqual(["Time (UTC)", "Kind", "Name", "Context", "Guard", "Took", "Run"]);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        expect(screen.getByText("No calls yet")).toBeTruthy();
     });
 });

@@ -1,7 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { listIncidents } from "@/lib/data/incidents/query";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { INCIDENTS } from "../../../../test/incidents/list";
 import { NOW } from "../../../../test/time";
 import IncidentsPage, { metadata } from "./page";
@@ -32,12 +31,30 @@ describe("IncidentsPage", () => {
         expect(metadata.title).toBe("Incidents");
     });
 
-    it("shows only the heading and one line before the first incident", async () => {
-        const { container } = await showPage({ category: "bad input" });
+    it("keeps the toolbar and the table header over the empty state before the first incident", async () => {
+        await showPage();
         expect(screen.getByRole("heading", { level: 1, name: "Incidents" })).toBeTruthy();
-        expect(screen.getByRole("status").textContent).toBe("No incidents yet");
-        expect(screen.queryByRole("searchbox")).toBeNull();
-        expectNoChartsOrTables(container);
+        expect(screen.getByRole("searchbox", { name: "Search incidents" })).toBeTruthy();
+        expect(screen.getByRole("combobox", { name: "Category" }).textContent).toBe("All categories");
+        expect(screen.getByRole("combobox", { name: "Replay status" }).textContent).toBe("Any replay");
+        expect(shownCount()).toBe("0 of 0");
+        const table = screen.getByRole("table");
+        expect(
+            within(table)
+                .getAllByRole("columnheader")
+                .map((th) => th.textContent),
+        ).toEqual(["Incident", "Category", "Entry point", "Damage", "Agents", "Replay", "Opened"]);
+        expect(within(table).queryAllByRole("link")).toHaveLength(0);
+        expect(screen.getByRole("heading", { level: 3, name: "No incidents yet" })).toBeTruthy();
+        expect(screen.getByText("Blocked or flagged harm opens one here.")).toBeTruthy();
+    });
+
+    it("keeps a category from the address over the empty table, with a way to clear it", async () => {
+        await showPage({ category: "bad input" });
+        expect(screen.getByRole("combobox", { name: "Category" }).textContent).toBe("Bad input (0)");
+        expect(screen.getAllByRole("columnheader")).toHaveLength(7);
+        expect(screen.getByRole("heading", { level: 3, name: "No incidents match" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
     });
 
     it("lists every incident when no category is asked for", async () => {

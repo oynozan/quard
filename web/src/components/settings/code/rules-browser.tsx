@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EmptyLine } from "@/components/kit/empty";
+import { TableState } from "@/components/kit/data-table";
 import { SectionHeading } from "@/components/kit/headings";
 import { Toolbar } from "@/components/kit/table/toolbar";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,6 @@ export function RulesBrowser({ rules }: { rules: RuleRow[] }) {
         [rules, needle, guard, mode],
     );
     const filtered = needle !== "" || guard !== "all" || mode !== "all";
-    const count = filtered ? shown.length : rules.length;
 
     function clear() {
         setQuery("");
@@ -52,44 +51,46 @@ export function RulesBrowser({ rules }: { rules: RuleRow[] }) {
         setMode("all");
     }
 
-    if (rules.length === 0) {
-        return (
-            <section aria-label="Rules">
-                <SectionHeading title="Rules" />
-                <EmptyLine>No rules reported yet</EmptyLine>
-            </section>
-        );
-    }
-
     return (
         <section aria-label="Rules">
-            <SectionHeading title="Rules" count={count > 0 ? count : undefined} />
-            <Toolbar>
-                <SearchField
-                    placeholder="Search rules, tools or hashes"
-                    aria-label="Search rules"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+            <SectionHeading title="Rules" count={filtered ? shown.length : rules.length} />
+            {rules.length > 0 ? (
+                <Toolbar>
+                    <SearchField
+                        placeholder="Search rules, tools or hashes"
+                        aria-label="Search rules"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                    />
+                    <Select
+                        size="compact"
+                        aria-label="Guard type"
+                        options={GUARD_OPTIONS}
+                        value={guard}
+                        onValueChange={setGuard}
+                    />
+                    <Select
+                        size="compact"
+                        aria-label="Mode"
+                        options={MODE_OPTIONS}
+                        value={mode}
+                        onValueChange={setMode}
+                    />
+                </Toolbar>
+            ) : null}
+            <RulesTable rules={shown} />
+            {rules.length === 0 ? (
+                <TableState title="No rules reported yet" />
+            ) : shown.length === 0 ? (
+                <TableState
+                    title="No rules match"
+                    action={
+                        <Button size="sm" onClick={clear}>
+                            Clear filters
+                        </Button>
+                    }
                 />
-                <Select
-                    size="compact"
-                    aria-label="Guard type"
-                    options={GUARD_OPTIONS}
-                    value={guard}
-                    onValueChange={setGuard}
-                />
-                <Select size="compact" aria-label="Mode" options={MODE_OPTIONS} value={mode} onValueChange={setMode} />
-            </Toolbar>
-            {shown.length > 0 ? (
-                <RulesTable rules={shown} />
-            ) : (
-                <div className="flex flex-wrap items-center gap-3">
-                    <EmptyLine>No rules match</EmptyLine>
-                    <Button size="sm" onClick={clear}>
-                        Clear filters
-                    </Button>
-                </div>
-            )}
+            ) : null}
             <LiveNote message={filtered ? `${shown.length} of ${rules.length} rules shown` : ""} />
         </section>
     );

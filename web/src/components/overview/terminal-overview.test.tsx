@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OverviewData } from "@/lib/data/overview";
 import { stubResizeObserver } from "../../../test/overview/browser";
-import { expectNoChartsOrTables } from "../../../test/empty";
 import { overview, QUIET } from "../../../test/overview/fixtures";
 import { TerminalOverview } from "./terminal-overview";
 
@@ -99,30 +98,41 @@ describe("TerminalOverview", () => {
         expect(pane("Block rate").getByLabelText(/Today 0\.00%\.$/)).toBeTruthy();
     });
 
-    it("shows each pane's title and one line when its window had nothing", () => {
-        const { container } = renderParts(QUIET);
+    it("draws a missing runs series as 24 empty hours", () => {
+        renderParts({ runsPerHour: [] });
+        const runs = pane("Runs");
 
-        const lines = ["Runs", "Guarded tools", "Block rate", "Guard decisions"].map((name) => [
-            name,
-            pane(name).getByRole("heading").textContent,
-            pane(name).getByRole("status").textContent,
-        ]);
-        expect(lines).toEqual([
-            ["Runs", "Runs", "No runs in the last 24 hours"],
-            ["Guarded tools", "Guarded tools", "No tool calls in the last 24 hours"],
-            ["Block rate", "Block rate", "No guarded tool calls in the last 30 days"],
-            ["Guard decisions", "Guard decisions", "No blocks or asks in the last 24 hours"],
-        ]);
-        expect(pane("Block rate").getByText("30D")).toBeTruthy();
-        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
-        expect(screen.queryByText(/now$/)).toBeNull();
-        expect(container.querySelectorAll(".mono.text-\\[32px\\], .mono.text-\\[28px\\]")).toHaveLength(0);
-        expectNoChartsOrTables(container);
+        expect(runs.getByText("Per hour").parentElement?.textContent).toBe("Per hour0 now");
+        const sparkline = runs.getByRole("img", { name: "Runs per hour over the last 24 hours, 0 in the last hour" });
+        expect(Number(sparkline.getAttribute("width"))).toBeGreaterThan(0);
     });
 
-    it("counts runs from an all-zero day as no runs", () => {
-        renderParts({ runsPerHour: Array<number>(24).fill(0) });
+    it("keeps every pane with zeros, and the block rate frame unlit, when its window had nothing", () => {
+        renderParts(QUIET);
 
-        expect(pane("Runs").getByRole("status").textContent).toBe("No runs in the last 24 hours");
+        const runs = pane("Runs");
+        expect(runs.getByText("24H")).toBeTruthy();
+        expect(runs.getByText("Per hour").parentElement?.textContent).toBe("Per hour0 now");
+        const sparkline = runs.getByRole("img", { name: "Runs per hour over the last 24 hours, 0 in the last hour" });
+        expect(sparkline.querySelector('path[fill="var(--chart-field)"]')?.getAttribute("d")).not.toBe("");
+        expect(sparkline.querySelector('path[fill="var(--signal)"]')?.getAttribute("d")).toBe("");
+
+        const tools = pane("Guarded tools");
+        expect(tools.getByText("00")).toBeTruthy();
+        expect(tools.getByText("0 / 0")).toBeTruthy();
+        expect(tools.getByRole("progressbar", { name: "0 of 0 tools the agents use are guarded" })).toBeTruthy();
+
+        const trace = pane("Block rate");
+        expect(trace.getByText("30D")).toBeTruthy();
+        expect(trace.getByRole("button", { name: "Table" })).toBeTruthy();
+        expect(trace.getByText("Today").textContent).toBe("Today —");
+        expect(trace.getByText(/^Review at/).textContent).toBe("Review at 2.00%");
+        expect(trace.getByRole("img", { name: "No guarded tool calls in the last 30 days" })).toBeTruthy();
+        expect(trace.getByText("No guarded tool calls in the last 30 days")).toBeTruthy();
+        expect(trace.getByText("4 Sept")).toBeTruthy();
+
+        const decisions = pane("Guard decisions");
+        expect(decisions.getByText("Blocked").parentElement?.textContent).toBe("Blocked00");
+        expect(decisions.getByText("Asked a human").parentElement?.textContent).toBe("Asked a human00");
     });
 });

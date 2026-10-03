@@ -1,6 +1,5 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { RULES } from "../../../../test/settings/rules";
 import { pickOption } from "../../../../test/settings/select";
 import { RulesBrowser } from "./rules-browser";
@@ -24,6 +23,12 @@ function liveNote(): string {
 
 function heading(): string {
     return screen.getByRole("heading", { level: 2 }).textContent;
+}
+
+function headers(): string[] {
+    return within(screen.getByRole("table"))
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent);
 }
 
 describe("RulesBrowser", () => {
@@ -64,14 +69,15 @@ describe("RulesBrowser", () => {
         expect(shownRules()).toEqual(["crm-reads"]);
     });
 
-    it("keeps the filters but drops the table and count when nothing matches, and clearing shows every rule", async () => {
+    it("keeps the filters, the table header and a zero count when nothing matches, and clearing shows every rule", async () => {
         render(<RulesBrowser rules={RULES} />);
         await pickOption("Guard type", "Source");
         await pickOption("Mode", "Block");
         search("crm");
-        expect(screen.queryByRole("table")).toBeNull();
-        expect(screen.getByText("No rules match")).toBeTruthy();
-        expect(heading()).toBe("Rules");
+        expect(headers()).toEqual(["Rule", "Guard", "Mode", "Tools", "Apps", "Hash"]);
+        expect(shownRules()).toEqual([]);
+        expect(screen.getByRole("heading", { level: 3, name: "No rules match" })).toBeTruthy();
+        expect(heading()).toBe("Rules0");
         expect(liveNote()).toBe("0 of 3 rules shown");
 
         fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
@@ -83,13 +89,14 @@ describe("RulesBrowser", () => {
         expect(screen.queryByText("No rules match")).toBeNull();
     });
 
-    it("shows its heading and one line, with no table or filters, when no rules were reported", () => {
+    it("keeps its heading, a zero count and the table header, with no filters, when no rules were reported", () => {
         render(<RulesBrowser rules={[]} />);
-        const section = screen.getByRole("region", { name: "Rules" });
-        expect(heading()).toBe("Rules");
-        expect(screen.getByText("No rules reported yet")).toBeTruthy();
+        expect(heading()).toBe("Rules0");
+        expect(headers()).toEqual(["Rule", "Guard", "Mode", "Tools", "Apps", "Hash"]);
+        expect(shownRules()).toEqual([]);
+        expect(screen.getByRole("heading", { level: 3, name: "No rules reported yet" })).toBeTruthy();
+        expect(screen.queryByRole("button")).toBeNull();
         expect(screen.queryByRole("searchbox")).toBeNull();
         expect(screen.queryByRole("combobox")).toBeNull();
-        expectNoChartsOrTables(section);
     });
 });

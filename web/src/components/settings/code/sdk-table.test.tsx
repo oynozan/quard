@@ -48,4 +48,17 @@ describe("SdkTable", () => {
         expect(row[6]).toBe("Offline");
         expect(within(rowOf("deploy-runner")).queryByText(/Changed/)).toBeNull();
     });
+
+    it("keeps its header with a quiet line under it when no app is connected", () => {
+        render(<SdkTable sdks={[]} now={NOW} />);
+        const table = screen.getByRole("table", { name: "Connected apps and the rules hash each one reported" });
+        expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        expect(screen.getByRole("status").textContent).toBe("No SDK connected yet");
+    });
+
+    it("has no quiet line while apps are listed", () => {
+        render(<SdkTable sdks={SDKS} now={NOW} />);
+        expect(screen.queryByRole("status")).toBeNull();
+    });
 });

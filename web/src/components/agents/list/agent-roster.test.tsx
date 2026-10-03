@@ -35,5 +35,14 @@ describe("AgentRoster", () => {
         render(<AgentRoster agents={[node("a"), node("b")]} />);
         const pane = screen.getByRole("region", { name: "Agents" });
         expect(within(pane).getByText("2")).toBeTruthy();
+        expect(within(pane).queryByRole("status")).toBeNull();
+    });
+
+    it("keeps the pane with a zero count and says there are no agents yet when the list is empty", () => {
+        render(<AgentRoster agents={[]} />);
+        const pane = screen.getByRole("region", { name: "Agents" });
+        expect(within(pane).getByText("0")).toBeTruthy();
+        expect(within(pane).getByRole("status").textContent).toBe("No agents yet");
+        expect(within(pane).queryByRole("list")).toBeNull();
     });
 });

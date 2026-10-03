@@ -31,9 +31,14 @@ describe("RunsHeading", () => {
         expect(heading().children).toHaveLength(0);
     });
 
-    it("leaves out a count of zero, even for filters that match nothing", () => {
+    it("shows a count of zero as 0", () => {
+        render(<RunsHeading count={0} />);
+        expect(heading().textContent).toBe("Runs0");
+        expect(screen.getByTitle("Runs").textContent).toBe("0");
+    });
+
+    it("shows 0 for filters that match nothing", () => {
         render(<RunsHeading count={0} filtered />);
-        expect(heading().textContent).toBe("Runs");
-        expect(heading().children).toHaveLength(0);
+        expect(screen.getByTitle("Runs that match the filters").textContent).toBe("0");
     });
 });

@@ -3,7 +3,6 @@
 import { ChartPane } from "@/components/charts/chart-pane";
 import { ChartTable } from "@/components/charts/chart-table";
 import { CellMeter } from "@/components/charts/cell-meter";
-import { EmptyLine } from "@/components/kit/empty";
 import { StatusSquare } from "@/components/kit/labels";
 import { DetailList, DetailRow } from "@/components/kit/detail/detail-list";
 import { Notice, WarningRule } from "@/components/kit/feedback/feedback";
@@ -30,7 +29,6 @@ function summary(replay: Replay): string {
 
 export function ReplayResults({ replay }: { replay: Replay }) {
     const last = replay.rounds.at(-1);
-    if (!last && !replay.inProgress) return <EmptyLine>No replay rounds yet</EmptyLine>;
     const pending = replay.inProgress ? replay.rounds.length + 1 : null;
     const rows = replay.rounds.map((round) => ({
         key: String(round.round),
@@ -47,40 +45,33 @@ export function ReplayResults({ replay }: { replay: Replay }) {
         <ChartPane
             title="Replay results"
             tag={`${replay.rounds.length} × 5 + 5`}
-            readouts={
-                last
-                    ? [
-                          {
-                              label: "With",
-                              value: `${last.totalWith.harmful}/${last.totalWith.runs}`,
-                              suffix: "harmful",
-                          },
-                          {
-                              label: "Without",
-                              value: `${last.totalWithout.harmful}/${last.totalWithout.runs}`,
-                              suffix: "harmful",
-                          },
-                          { label: "p", value: formatP(last.pValue), suffix: `vs ${replay.threshold}` },
-                      ]
-                    : []
-            }
+            readouts={[
+                {
+                    label: "With",
+                    value: last ? `${last.totalWith.harmful}/${last.totalWith.runs}` : "—",
+                    suffix: "harmful",
+                },
+                {
+                    label: "Without",
+                    value: last ? `${last.totalWithout.harmful}/${last.totalWithout.runs}` : "—",
+                    suffix: "harmful",
+                },
+                { label: "p", value: last ? formatP(last.pValue) : "—", suffix: `vs ${replay.threshold}` },
+            ]}
             table={
-                last ? (
-                    <ChartTable
-                        caption="Replay rounds"
-                        height={Math.max(150, 30 + 28 * rows.length)}
-                        columns={[
-                            { label: "Round" },
-                            { label: "With" },
-                            { label: "Without" },
-                            { label: "p" },
-                            { label: "Cost" },
-                        ]}
-                        rows={rows}
-                    />
-                ) : (
-                    <EmptyLine>No finished rounds yet</EmptyLine>
-                )
+                <ChartTable
+                    caption="Replay rounds"
+                    height={Math.max(150, 30 + 28 * rows.length)}
+                    columns={[
+                        { label: "Round" },
+                        { label: "With" },
+                        { label: "Without" },
+                        { label: "p" },
+                        { label: "Cost" },
+                    ]}
+                    rows={rows}
+                    emptyText="No rounds yet"
+                />
             }
         >
             <p aria-live="polite" className="mb-4 inline-flex items-center gap-2 text-[13px] text-ink">
@@ -106,6 +97,7 @@ export function ReplayResults({ replay }: { replay: Replay }) {
                         <span className="text-right text-[12px] text-ink-muted">Running…</span>
                     </div>
                 ) : null}
+                {last || pending ? null : <p className="py-6 text-center text-[11px] text-ink-muted">No rounds yet</p>}
             </div>
 
             <CostBlock replay={replay} />

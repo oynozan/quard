@@ -2,8 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { DataTable } from "@/components/kit/data-table";
-import { EmptyLine } from "@/components/kit/empty";
+import { DataTable, TableState } from "@/components/kit/data-table";
 import { ErrorBox } from "@/components/kit/feedback/feedback";
 import { Button } from "@/components/ui/button";
 import type { AgentKey, CreateKeyResult, RevokeKeyResult } from "@/lib/data/settings";
@@ -65,36 +64,43 @@ export function KeysPanel({ keys, now, createAction, revokeAction }: KeysPanelPr
             </PanelIntro>
             {problem ? <ErrorBox className="mt-0 mb-[22px]">{problem}</ErrorBox> : null}
 
+            <DataTable minWidth={KEY_MIN_WIDTH} className="text-[14px]">
+                <caption className="sr-only">
+                    Agent keys: {active.length} active, {keys.length - active.length} revoked
+                </caption>
+                <Cols widths={KEY_WIDTHS} />
+                <Head
+                    first="Key"
+                    rest={[
+                        ...KEY_HEADERS,
+                        <span key="actions" className="sr-only">
+                            Actions
+                        </span>,
+                    ]}
+                />
+                <tbody>
+                    {rows.map((item) => (
+                        <KeyRow
+                            key={item.id}
+                            item={item}
+                            now={now}
+                            fresh={fresh === item.id}
+                            onRevoke={() => revoke(item)}
+                        />
+                    ))}
+                </tbody>
+            </DataTable>
             {rows.length === 0 ? (
-                <EmptyLine>No agent keys yet</EmptyLine>
-            ) : (
-                <DataTable minWidth={KEY_MIN_WIDTH} className="text-[14px]">
-                    <caption className="sr-only">
-                        Agent keys: {active.length} active, {keys.length - active.length} revoked
-                    </caption>
-                    <Cols widths={KEY_WIDTHS} />
-                    <Head
-                        first="Key"
-                        rest={[
-                            ...KEY_HEADERS,
-                            <span key="actions" className="sr-only">
-                                Actions
-                            </span>,
-                        ]}
-                    />
-                    <tbody>
-                        {rows.map((item) => (
-                            <KeyRow
-                                key={item.id}
-                                item={item}
-                                now={now}
-                                fresh={fresh === item.id}
-                                onRevoke={() => revoke(item)}
-                            />
-                        ))}
-                    </tbody>
-                </DataTable>
-            )}
+                <TableState
+                    title="No agent keys yet"
+                    body="One key per app that runs agents."
+                    action={
+                        <Button size="sm" onClick={() => setOpen(true)}>
+                            Create key
+                        </Button>
+                    }
+                />
+            ) : null}
 
             <LiveNote message={note} />
             <KeyDrawer

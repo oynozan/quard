@@ -1,5 +1,4 @@
-import { DataTable, Td, Th, Tr } from "@/components/kit/data-table";
-import { EmptyLine } from "@/components/kit/empty";
+import { DataTable, QuietEmpty, Td, Th, Tr } from "@/components/kit/data-table";
 import { SectionHeading } from "@/components/kit/headings";
 import { Badge } from "@/components/kit/labels";
 import type { AgentVersionRow } from "@/lib/data/agents";
@@ -27,14 +26,6 @@ function toolsTitle(row: AgentVersionRow, before: AgentVersionRow | undefined): 
 
 // Each version records its model, instructions and tools once, so an incident ties to the version behind it
 export function VersionsTable({ versions }: { versions: AgentVersionRow[] }) {
-    if (versions.length === 0) {
-        return (
-            <section aria-label="Versions">
-                <SectionHeading title="Versions" />
-                <EmptyLine>No versions yet</EmptyLine>
-            </section>
-        );
-    }
     return (
         <section aria-label="Versions">
             <SectionHeading title="Versions" count={versions.length} />
@@ -84,6 +75,7 @@ export function VersionsTable({ versions }: { versions: AgentVersionRow[] }) {
                     ))}
                 </tbody>
             </DataTable>
+            {versions.length === 0 ? <QuietEmpty>No versions yet</QuietEmpty> : null}
         </section>
     );
 }

@@ -21,7 +21,7 @@ describe("greetingFor", () => {
         expect(greetingFor(NOW, 12)).toBe("Good evening. 12 agents are running.");
     });
 
-    it("is only the greeting on a new install, where the line under it says the rest", () => {
+    it("is only the greeting on a new install, which has no agents to count", () => {
         expect(greetingFor(NOW)).toBe("Good evening.");
     });
 });

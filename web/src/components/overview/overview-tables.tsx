@@ -2,7 +2,6 @@ import { Bot, ListTree, Siren } from "lucide-react";
 import { OutcomeBar } from "@/components/charts/outcome-bar";
 import { DataTable, NameCell, QuietEmpty, Td, Th, Tr } from "@/components/kit/data-table";
 import { Absent } from "@/components/kit/detail/detail-list";
-import { EmptyLine } from "@/components/kit/empty";
 import { SectionHeading } from "@/components/kit/headings";
 import { RowChevron, RowLink } from "@/components/kit/links";
 import { Badge, LabelChip, RunStatusLabel, StatusSquare } from "@/components/kit/labels";
@@ -10,16 +9,6 @@ import { formatAge, formatUsd, shortId } from "@/lib/format";
 import type { ApprovalRequest, Incident, RunSummary } from "@/lib/data/types";
 import { REPLAY_TONE } from "@/components/incidents/lib/labels";
 import { costText } from "@/components/runs/detail/lib/cost";
-
-// A section with nothing to list shows its title and one line
-function EmptySection({ title, children }: { title: string; children: string }) {
-    return (
-        <section aria-label={title}>
-            <SectionHeading title={title} />
-            <EmptyLine>{children}</EmptyLine>
-        </section>
-    );
-}
 
 // The overview lists a few requests; the approvals page has them all
 const APPROVALS_SHOWN = 5;
@@ -103,7 +92,6 @@ export function ApprovalsSection({ approvals, total, now }: ApprovalsProps) {
 const decided = (run: RunSummary) => run.decisions.allowed + run.decisions.asked + run.decisions.blocked > 0;
 
 export function RunsSection({ runs, now }: { runs: RunSummary[]; now: number }) {
-    if (runs.length === 0) return <EmptySection title="Recent runs">No runs yet</EmptySection>;
     return (
         <section aria-label="Recent runs">
             <SectionHeading title="Recent runs" count={runs.length} href="/runs" />
@@ -163,12 +151,12 @@ export function RunsSection({ runs, now }: { runs: RunSummary[]; now: number }) 
                     ))}
                 </tbody>
             </DataTable>
+            {runs.length === 0 ? <QuietEmpty>No runs yet</QuietEmpty> : null}
         </section>
     );
 }
 
 export function IncidentsSection({ incidents, now }: { incidents: Incident[]; now: number }) {
-    if (incidents.length === 0) return <EmptySection title="Incidents">No incidents yet</EmptySection>;
     return (
         <section aria-label="Incidents">
             <SectionHeading title="Incidents" count={incidents.length} href="/incidents" />
@@ -216,6 +204,7 @@ export function IncidentsSection({ incidents, now }: { incidents: Incident[]; no
                     ))}
                 </tbody>
             </DataTable>
+            {incidents.length === 0 ? <QuietEmpty>No incidents yet</QuietEmpty> : null}
         </section>
     );
 }

@@ -1,7 +1,7 @@
 import { CountChip } from "@/components/kit/headings";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// The page title with a chip for the runs shown, or a skeleton chip while they load
+// The page title with a chip for the runs shown, a skeleton chip while they load, or none with no count
 export function RunsHeading({ count, filtered }: { count?: number | null; filtered?: boolean }) {
     return (
         <div className="mb-[26px] flex items-center gap-6 max-[760px]:mb-[22px]">
@@ -11,11 +11,11 @@ export function RunsHeading({ count, filtered }: { count?: number | null; filter
                     <span className="ml-2 inline-block align-[3px]">
                         <Skeleton width={22} height={18} />
                     </span>
-                ) : count ? (
+                ) : count === undefined ? null : (
                     <span title={filtered ? "Runs that match the filters" : "Runs"}>
                         <CountChip value={count} />
                     </span>
-                ) : null}
+                )}
             </h1>
         </div>
     );

@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { AgentEdge } from "@/lib/data/agents";
 import { edge } from "../../../../test/agents-lib-detail/fixtures";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { AgentPermissions } from "./agent-permissions";
 
 function renderFor(links: AgentEdge[]) {
@@ -86,18 +85,19 @@ describe("AgentPermissions", () => {
         expect(lines("Works for")).toEqual(["orchestrator1 delegation · 0% untrusted"]);
     });
 
-    it("shows one line for an agent with no links, with no tag or blocks", () => {
+    it("keeps the tag and both blocks for an agent with no links, saying none on each side", () => {
         renderFor([]);
         const pane = screen.getByRole("region", { name: "Permissions" });
-        expect(within(pane).getByRole("status").textContent).toBe("No delegations in the last 30 days");
-        expect(within(pane).queryByText("30D")).toBeNull();
-        expect(within(pane).queryByRole("heading", { level: 3 })).toBeNull();
-        expectNoChartsOrTables(pane);
+        expect(within(pane).getByText("30D")).toBeTruthy();
+        expect(block("Delegates to").textContent).toBe("Delegates toNone");
+        expect(block("Works for").textContent).toBe("Works forNone · starts its own runs");
+        expect(screen.queryByRole("heading", { name: "Handoffs" })).toBeNull();
     });
 
-    it("shows the same line when links carried only messages", () => {
+    it("leaves out links that carried only messages", () => {
         renderFor([edge("researcher", "billing", { messages: 40 })]);
-        expect(screen.getByRole("status").textContent).toBe("No delegations in the last 30 days");
-        expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+        expect(block("Delegates to").textContent).toBe("Delegates toNone");
+        expect(block("Works for").textContent).toBe("Works forNone · starts its own runs");
+        expect(screen.queryByRole("heading", { name: "Handoffs" })).toBeNull();
     });
 });

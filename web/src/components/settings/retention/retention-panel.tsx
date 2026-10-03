@@ -1,6 +1,5 @@
-import { DataTable, Td, Tr } from "@/components/kit/data-table";
+import { DataTable, TableState, Td, Tr } from "@/components/kit/data-table";
 import { DetailList, DetailRow } from "@/components/kit/detail/detail-list";
-import { EmptyLine } from "@/components/kit/empty";
 import { SectionHeading } from "@/components/kit/headings";
 import type { RetentionRow } from "@/lib/data/settings";
 import { Cols, FIRST_CELL, Head } from "../shared/table-parts";
@@ -16,15 +15,8 @@ function Keep({ row }: { row: RetentionRow }) {
     );
 }
 
-// Empty only before the install has a project
+// The rows are empty only before the install has a project
 export function RetentionPanel({ retention }: { retention: RetentionRow[] }) {
-    if (retention.length === 0) {
-        return (
-            <section aria-label="Retention">
-                <EmptyLine>No project yet</EmptyLine>
-            </section>
-        );
-    }
     return (
         <section aria-label="Retention">
             <DataTable minWidth={420} className="text-[14px]">
@@ -44,6 +36,9 @@ export function RetentionPanel({ retention }: { retention: RetentionRow[] }) {
                     ))}
                 </tbody>
             </DataTable>
+            {retention.length === 0 ? (
+                <TableState title="No project yet" body="Creating the first agent key sets up the project." />
+            ) : null}
 
             <div className="mt-10 grid grid-cols-2 gap-10 max-[980px]:grid-cols-1 max-[760px]:mt-8 max-[760px]:gap-8">
                 <div>

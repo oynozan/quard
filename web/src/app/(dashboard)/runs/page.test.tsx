@@ -1,6 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { makeRow } from "../../../../test/runs-detail-list/fixtures";
 import { HOUR, NOW } from "../../../../test/time";
 import type { RunQuery, RunRow } from "@/lib/data/runs/types";
@@ -40,6 +39,13 @@ async function showPage(searchParams: Record<string, string> = {}) {
 
 const heading = () => screen.getByRole("heading", { level: 1 });
 const runLink = (run: RunRow) => screen.getByRole("link", { name: `Run ${shortId(run.id)} by ${run.rootAgent}` });
+
+// The table keeps its header row, with no run rows under it
+function expectHeaderOnly() {
+    const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
+    expect(headers).toEqual(["Run", "Status", "Guard decisions", "Cost", "Duration", "Started"]);
+    expect(screen.getAllByRole("row")).toHaveLength(1);
+}
 
 describe("RunsPage", () => {
     beforeEach(() => {
@@ -88,39 +94,43 @@ describe("RunsPage", () => {
         expect(runLink(ROWS[0]!)).toBeTruthy();
     });
 
-    it("keeps the toolbar and offers to clear filters that match nothing, with no empty table", async () => {
+    it("keeps the toolbar and the header row and offers to clear filters that match nothing", async () => {
         query.shown = [];
         await showPage({ q: "nothing" });
-        expect(heading().textContent).toBe("Runs");
+        expect(heading().textContent).toBe("Runs0");
+        expect(heading().querySelector("[title]")!.getAttribute("title")).toBe("Runs that match the filters");
         expect(screen.getByText("0 runs match")).toBeTruthy();
         expect(screen.getByRole("searchbox", { name: "Search runs" })).toBeTruthy();
+        expectHeaderOnly();
         expect(screen.getByRole("heading", { level: 3, name: "No runs match" })).toBeTruthy();
         expect(screen.getByRole("link", { name: "Clear filters" }).getAttribute("href")).toBe("/runs");
-        expect(screen.queryByRole("table")).toBeNull();
-        expect(screen.queryByRole("columnheader")).toBeNull();
     });
 
-    it("shows a project with no runs as just the title and one line", async () => {
+    it("keeps the whole page for a project with no runs, with no runs yet under the header row", async () => {
         query.all = [];
         query.shown = [];
         await showPage();
-        expect(heading().textContent).toBe("Runs");
-        expect(heading().children).toHaveLength(0);
-        expect(screen.getByRole("status").textContent).toBe("No runs yet");
-        expect(screen.queryByRole("searchbox")).toBeNull();
-        expect(screen.queryByRole("combobox")).toBeNull();
-        expect(screen.queryByRole("list", { name: "Guard decision colors" })).toBeNull();
+        expect(heading().textContent).toBe("Runs0");
+        expect(heading().querySelector("[title]")!.getAttribute("title")).toBe("Runs");
+        expect(screen.getByRole("searchbox", { name: "Search runs" })).toBeTruthy();
+        expect(screen.getByRole("combobox", { name: "Filter by agent" })).toBeTruthy();
+        expect(screen.getByRole("combobox", { name: "Filter by status" })).toBeTruthy();
+        expect(screen.getByRole("list", { name: "Guard decision colors" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Refresh runs" })).toBeTruthy();
+        expectHeaderOnly();
+        expect(screen.getByRole("heading", { level: 3, name: "No runs yet" })).toBeTruthy();
         expect(screen.queryByRole("link", { name: "Clear filters" })).toBeNull();
-        expectNoChartsOrTables();
     });
 
     it("says there are no runs yet whatever filters the address carries", async () => {
         query.all = [];
         query.shown = [];
         await showPage({ q: "pay", status: "failed" });
-        expect(screen.getByRole("status").textContent).toBe("No runs yet");
+        expect(heading().querySelector("[title]")!.getAttribute("title")).toBe("Runs");
+        expect(screen.getByRole("searchbox", { name: "Search runs" })).toHaveProperty("value", "pay");
+        expectHeaderOnly();
+        expect(screen.getByRole("heading", { level: 3, name: "No runs yet" })).toBeTruthy();
         expect(screen.queryByText("0 runs match")).toBeNull();
         expect(screen.queryByRole("link", { name: "Clear filters" })).toBeNull();
-        expectNoChartsOrTables();
     });
 });

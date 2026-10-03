@@ -1,7 +1,6 @@
 import { CellTrace } from "@/components/charts/cell-trace";
 import { FitMeter, FitSparkline } from "@/components/charts/fit";
 import { CrossGlyph, WarningGlyph } from "@/components/icons/glyphs";
-import { EmptyLine } from "@/components/kit/empty";
 import { PaneHeader } from "@/components/kit/pane";
 import { formatCompact, formatInt, padCount } from "@/lib/format";
 import type { OverviewData } from "@/lib/data/overview";
@@ -11,6 +10,10 @@ type TerminalOverviewProps = Pick<OverviewData, "runsPerHour" | "coverage" | "bl
 
 // Square panes tiled with shared hairlines, like a terminal split into windows
 export function TerminalOverview({ runsPerHour, coverage, blockRate, decisions24h }: TerminalOverviewProps) {
+    const hours = runsPerHour.length > 0 ? runsPerHour : Array<number>(24).fill(0);
+    const runs24h = hours.reduce((sum, v) => sum + v, 0);
+    const lastHour = hours[hours.length - 1];
+
     return (
         <div
             className="terminal-grid reveal mt-7 max-[760px]:mt-[22px]"
@@ -19,85 +22,58 @@ export function TerminalOverview({ runsPerHour, coverage, blockRate, decisions24
         >
             <section className="terminal-pane" data-area="a" style={{ gridArea: "a" }} aria-label="Runs">
                 <PaneHeader title="Runs" tag="24H" />
-                <RunsBody runsPerHour={runsPerHour} />
+                <Counter value={formatInt(runs24h)} />
+                <LowerBlock label="Per hour" value={`${lastHour} now`}>
+                    <FitSparkline
+                        values={hours}
+                        rows={2}
+                        cell={7}
+                        label={`Runs per hour over the last 24 hours, ${lastHour} in the last hour`}
+                    />
+                </LowerBlock>
             </section>
 
             <section className="terminal-pane" data-area="b" style={{ gridArea: "b" }} aria-label="Guarded tools">
                 <PaneHeader title="Guarded tools" tag="24H" />
-                {coverage.seen === 0 ? (
-                    <EmptyLine inset>No tool calls in the last 24 hours</EmptyLine>
-                ) : (
-                    <>
-                        <Counter value={padCount(coverage.guarded)} />
-                        <LowerBlock label="Guarded / seen" value={`${coverage.guarded} / ${coverage.seen}`}>
-                            <FitMeter
-                                value={coverage.guarded}
-                                max={coverage.seen}
-                                cells={24}
-                                label={`${coverage.guarded} of ${coverage.seen} tools the agents use are guarded`}
-                            />
-                        </LowerBlock>
-                    </>
-                )}
+                <Counter value={padCount(coverage.guarded)} />
+                <LowerBlock label="Guarded / seen" value={`${coverage.guarded} / ${coverage.seen}`}>
+                    <FitMeter
+                        value={coverage.guarded}
+                        max={coverage.seen}
+                        cells={24}
+                        label={`${coverage.guarded} of ${coverage.seen} tools the agents use are guarded`}
+                    />
+                </LowerBlock>
             </section>
 
             <div className="terminal-pane" data-area="c" style={{ gridArea: "c" }}>
-                {blockRate.values.length === 0 ? (
-                    <section aria-label="Block rate">
-                        <PaneHeader title="Block rate" tag="30D" />
-                        <EmptyLine inset>No guarded tool calls in the last 30 days</EmptyLine>
-                    </section>
-                ) : (
-                    <CellTrace
-                        title="Block rate"
-                        values={blockRate.values}
-                        startAt={blockRate.startAt}
-                        limit={blockRate.limit}
-                        limitLabel="Review at"
-                    />
-                )}
+                <CellTrace
+                    title="Block rate"
+                    values={blockRate.values}
+                    startAt={blockRate.startAt}
+                    limit={blockRate.limit}
+                    limitLabel="Review at"
+                    emptyText="No guarded tool calls in the last 30 days"
+                />
             </div>
 
             <section className="terminal-pane" data-area="d" style={{ gridArea: "d" }} aria-label="Guard decisions">
                 <PaneHeader title="Guard decisions" tag="24H" />
-                {decisions24h.blocked + decisions24h.asked === 0 ? (
-                    <EmptyLine inset>No blocks or asks in the last 24 hours</EmptyLine>
-                ) : (
-                    <div className="grid flex-1 grid-cols-2">
-                        <SplitCell
-                            icon={<CrossGlyph className="text-danger" />}
-                            label="Blocked"
-                            value={decisions24h.blocked}
-                        />
-                        <SplitCell
-                            icon={<WarningGlyph className="text-warning" />}
-                            label="Asked a human"
-                            value={decisions24h.asked}
-                            divided
-                        />
-                    </div>
-                )}
+                <div className="grid flex-1 grid-cols-2">
+                    <SplitCell
+                        icon={<CrossGlyph className="text-danger" />}
+                        label="Blocked"
+                        value={decisions24h.blocked}
+                    />
+                    <SplitCell
+                        icon={<WarningGlyph className="text-warning" />}
+                        label="Asked a human"
+                        value={decisions24h.asked}
+                        divided
+                    />
+                </div>
             </section>
         </div>
-    );
-}
-
-function RunsBody({ runsPerHour }: { runsPerHour: number[] }) {
-    const runs24h = runsPerHour.reduce((sum, v) => sum + v, 0);
-    if (runs24h === 0) return <EmptyLine inset>No runs in the last 24 hours</EmptyLine>;
-    const lastHour = runsPerHour[runsPerHour.length - 1];
-    return (
-        <>
-            <Counter value={formatInt(runs24h)} />
-            <LowerBlock label="Per hour" value={`${lastHour} now`}>
-                <FitSparkline
-                    values={runsPerHour}
-                    rows={2}
-                    cell={7}
-                    label={`Runs per hour over the last 24 hours, ${lastHour} in the last hour`}
-                />
-            </LowerBlock>
-        </>
     );
 }
 

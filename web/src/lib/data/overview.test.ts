@@ -3,6 +3,7 @@ import { createProject, ingestBatch } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { decision, modelCall, started, stepId, toolCall, upload, type UploadItem } from "../../../test/overview/events";
+import { NEW_INSTALL, QUIET } from "../../../test/overview/fixtures";
 import { billing, FLEET, SUPPORT_CALL, support } from "../../../test/overview/fleet";
 import { DAY, HOUR, MINUTE, NOW } from "../../../test/time";
 
@@ -36,23 +37,23 @@ async function showProject(events: UploadItem["event"][]): Promise<void> {
 }
 
 describe("getOverview", () => {
-    it("has nothing to show before a project exists", async () => {
-        expect(await getOverview(NOW)).toBeNull();
+    it("is all zeros with a plain greeting before a project exists", async () => {
+        expect(await getOverview(NOW)).toEqual(NEW_INSTALL);
         expect(requireSession).toHaveBeenCalled();
     });
 
-    it("has nothing to show before the project's first run", async () => {
+    it("is all zeros with a plain greeting before the project's first run", async () => {
         await showProject([]);
 
-        expect(await getOverview(NOW)).toBeNull();
+        expect(await getOverview(NOW)).toEqual(NEW_INSTALL);
     });
 
     it("greets with the running agents and lists them first", async () => {
         await showProject(FLEET);
         const overview = await getOverview(NOW);
 
-        expect(overview?.greeting).toBe("Good evening. One agent is running.");
-        expect(overview?.agents).toEqual([
+        expect(overview.greeting).toBe("Good evening. One agent is running.");
+        expect(overview.agents).toEqual([
             { name: "billing", state: "running", model: "gpt-5.4-mini" },
             { name: "researcher", state: "idle", model: "o4-mini" },
             { name: "support", state: "idle", model: "gpt-5.4" },
@@ -61,7 +62,7 @@ describe("getOverview", () => {
 
     it("counts model calls in 10-minute buckets up to the next round 10 minutes", async () => {
         await showProject(FLEET);
-        const activity = (await getOverview(NOW))!.activity;
+        const activity = (await getOverview(NOW)).activity;
 
         expect(activity.endsAt).toBe(Date.UTC(2026, 9, 3, 18, 50));
         expect(activity.values).toHaveLength(144);
@@ -76,7 +77,7 @@ describe("getOverview", () => {
 
     it("counts run starts per hour and the guarded tools of the last 24 hours", async () => {
         await showProject(FLEET);
-        const overview = (await getOverview(NOW))!;
+        const overview = await getOverview(NOW);
 
         const started = overview.runsPerHour.flatMap((count, hour) => (count ? [[hour, count]] : []));
         expect(overview.runsPerHour).toHaveLength(24);
@@ -89,7 +90,7 @@ describe("getOverview", () => {
 
     it("gives the share of guarded calls blocked per UTC day for 30 days", async () => {
         await showProject(FLEET);
-        const { blockRate } = (await getOverview(NOW))!;
+        const { blockRate } = await getOverview(NOW);
 
         expect(blockRate.startAt).toBe(Date.UTC(2026, 8, 4));
         expect(blockRate.limit).toBe(2);
@@ -99,7 +100,7 @@ describe("getOverview", () => {
 
     it("totals enforced blocks and asks, and orders the guards with unknown ones last", async () => {
         await showProject(FLEET);
-        const overview = (await getOverview(NOW))!;
+        const overview = await getOverview(NOW);
 
         expect(overview.decisions24h).toEqual({ blocked: 3, asked: 1 });
         expect(overview.guardCounts).toEqual([
@@ -116,7 +117,7 @@ describe("getOverview", () => {
 
     it("logs the decisions oldest first, in the run timeline's words", async () => {
         await showProject(FLEET);
-        const { events } = (await getOverview(NOW))!;
+        const { events } = await getOverview(NOW);
 
         expect(events.map(({ guard, outcome, tool, detail }) => [guard, outcome, tool, detail])).toEqual([
             ["egress", "allow", "lookup", "allow"],
@@ -141,12 +142,12 @@ describe("getOverview", () => {
             }),
         );
         await showProject([started(billing, NOW - HOUR), ...blocks]);
-        const { events } = (await getOverview(NOW))!;
+        const { events } = await getOverview(NOW);
 
         expect(events.map((event) => event.at)).toEqual(Array.from({ length: 12 }, (_, n) => NOW - (12 - n) * MINUTE));
     });
 
-    it("leaves each part empty when the runs are older than its window", async () => {
+    it("keeps each part at zero when the runs are older than its window", async () => {
         const old = NOW - 40 * DAY;
         await showProject([
             started(billing, old),
@@ -155,17 +156,7 @@ describe("getOverview", () => {
             decision(billing, stepId(2), old, { tool: "payInvoice", guard: "action", rule: "a", decision: "block" }),
         ]);
 
-        expect(await getOverview(NOW)).toEqual({
-            greeting: "Good evening. No agents are running.",
-            activity: { values: [], endsAt: Date.UTC(2026, 9, 3, 18, 50) },
-            runsPerHour: [],
-            coverage: { seen: 0, guarded: 0 },
-            blockRate: { values: [], limit: 2, startAt: Date.UTC(2026, 8, 4) },
-            decisions24h: { blocked: 0, asked: 0 },
-            events: [],
-            agents: [],
-            guardCounts: [],
-        });
+        expect(await getOverview(NOW)).toEqual(QUIET);
     });
 
     it("stops at the sign-in redirect for people who are not signed in", async () => {

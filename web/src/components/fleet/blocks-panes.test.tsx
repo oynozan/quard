@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BlocksByGuard } from "@/lib/data/fleet";
-import { expectNoChartsOrTables } from "../../../test/empty";
+import { formatShortDate } from "@/lib/format";
 import { stubBrowser } from "../../../test/fleet-shell/env";
-import { BY_GUARD, HEATMAP, emptyFleet } from "../../../test/summary/fleet";
+import { expectEmptyChart } from "../../../test/summary/frames";
+import { BY_GUARD, HEATMAP, START_AT, emptyFleet } from "../../../test/summary/fleet";
 import { BlocksPanes } from "./blocks-panes";
 
 const HEAT = "Blocks by hour, all guards";
+const EMPTY = "No blocks in the last 30 days";
 
 function pane(name: string) {
     return screen.getByRole("region", { name });
@@ -20,6 +22,12 @@ function filterLabels(): (string | null)[] {
     return within(screen.getByRole("group", { name: "Guard type" }))
         .getAllByRole("button")
         .map((button) => button.textContent);
+}
+
+// Flips a chart pane to its table view
+function tableView(name: string) {
+    fireEvent.click(within(pane(name)).getByRole("button", { name: "Table" }));
+    return within(pane(name));
 }
 
 beforeEach(stubBrowser);
@@ -51,6 +59,7 @@ describe("BlocksPanes", () => {
         expect(chartLabel("Egress blocks per day")).toBe(
             "Egress blocks per day over the last 30 days. Peak 1,200 on 2 Oct, 3 today.",
         );
+        expect(filterLabels()[0]).toBe("All guards1210");
     });
 
     it("goes back to all guards when the picked guard no longer has blocks", () => {
@@ -79,14 +88,37 @@ describe("BlocksPanes", () => {
         );
     });
 
-    it("shows one line and no filter or charts when nothing was blocked", () => {
+    it("keeps the filter and both charts, unlit and with dashes, when nothing was blocked", () => {
         const { blocksByGuard, blocksHeatmap } = emptyFleet();
         render(<BlocksPanes byGuard={blocksByGuard} heatmap={blocksHeatmap} />);
-        const section = pane("What guards block");
 
-        expect(within(section).getByRole("status").textContent).toBe("No blocks in the last 30 days");
-        expect(screen.queryByRole("group", { name: "Guard type" })).toBeNull();
-        expectNoChartsOrTables(section);
+        expect(filterLabels()).toEqual(["All guards0"]);
+        const daily = expectEmptyChart("Blocks per day", EMPTY);
+        expect(daily.textContent).toContain("Today—");
+        // The readout and the y ticks read as dashes, and the gridlines and dates stay
+        expect(within(daily).getAllByText("—").length).toBeGreaterThanOrEqual(3);
+        expect(daily.querySelectorAll('rect[fill="var(--chart-grid)"]').length).toBeGreaterThan(0);
+        expect(within(daily).getByText(formatShortDate(START_AT))).toBeTruthy();
+        const hourly = expectEmptyChart(HEAT, EMPTY);
+        expect(hourly.textContent).toContain("Busiest hour—");
+        expect(hourly.textContent).toContain("Mon");
+    });
+
+    it("says there were no blocks in the empty table views", () => {
+        const { blocksByGuard, blocksHeatmap } = emptyFleet();
+        render(<BlocksPanes byGuard={blocksByGuard} heatmap={blocksHeatmap} />);
+
+        for (const name of ["Blocks per day", HEAT]) {
+            const table = tableView(name);
+            expect(table.getAllByRole("row")).toHaveLength(1);
+            expect(table.getByText(EMPTY)).toBeTruthy();
+        }
+        expect(pane("Blocks per day").querySelector("caption")?.textContent).toBe(
+            "Blocks per day: none in the last 30 days.",
+        );
+        expect(pane(HEAT).querySelector("caption")?.textContent).toBe(
+            "Blocks by weekday and UTC hour: none in the last 30 days.",
+        );
     });
 
     it("shows loading charts and no filter while the data loads", () => {
@@ -96,13 +128,12 @@ describe("BlocksPanes", () => {
         expect(chartLabel("Blocks per day")).toBe("Blocks per day, loading");
         expect(chartLabel(HEAT)).toBe("Blocks by hour, all guards, loading");
         expect(pane("Blocks per day").getAttribute("aria-busy")).toBe("true");
+        expect(screen.queryByText(EMPTY)).toBeNull();
     });
 
-    it("waits for the heatmap too, and says both charts are loading in their table views", () => {
-        render(<BlocksPanes byGuard={BY_GUARD} heatmap={null} />);
-        for (const name of ["Blocks per day", HEAT]) {
-            fireEvent.click(within(pane(name)).getByRole("button", { name: "Table" }));
-        }
+    it("says both charts are loading in their table views", () => {
+        render(<BlocksPanes byGuard={null} heatmap={null} />);
+        for (const name of ["Blocks per day", HEAT]) tableView(name);
 
         expect(pane("Blocks per day").querySelector("caption")?.textContent).toBe("Blocks per day are loading.");
         expect(pane(HEAT).querySelector("caption")?.textContent).toBe("Blocks by weekday and hour are loading.");

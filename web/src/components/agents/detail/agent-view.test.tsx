@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubBrowser } from "../../../../test/auth-app/browser";
 import { CALLS } from "../../../../test/agents-graph-timeline/fixtures";
 import { ACTIVITY_START, detail, edge } from "../../../../test/agents-lib-detail/fixtures";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { NOW } from "../../../../test/time";
 import { AgentView } from "./agent-view";
 
@@ -44,17 +43,26 @@ describe("AgentView", () => {
         expect(links.map((link) => link.textContent)).toEqual(["billing"]);
     });
 
-    it("shows a quiet agent as headings and one line each, with no charts or tables", () => {
+    it("keeps every pane for a quiet agent, with empty charts and table headers", () => {
         render(<AgentView detail={detail()} now={NOW} />);
         for (const name of SECTIONS) expect(screen.getByRole("region", { name })).toBeTruthy();
+        const calls = within(screen.getByRole("region", { name: "Recent calls" }));
+        expect(calls.getByText("researcher has made no calls yet")).toBeTruthy();
+        expect(calls.getByText("LAST 0")).toBeTruthy();
+        const hourly = within(screen.getByRole("region", { name: "Model calls per hour" }));
+        expect(hourly.getByRole("img", { name: "No model calls in the last 24 hours" })).toBeTruthy();
+        expect(screen.getAllByRole("button", { name: "Table" })).toHaveLength(2);
+        for (const name of ["Versions", "Incidents"]) {
+            const section = within(screen.getByRole("region", { name }));
+            expect(section.getAllByRole("columnheader")).toHaveLength(4);
+            expect(section.getAllByRole("row")).toHaveLength(1);
+        }
         expect(screen.getAllByRole("status").map((line) => line.textContent)).toEqual([
-            "No calls yet",
             "No versions yet",
             "No incidents yet",
-            "No delegations in the last 30 days",
-            "No model calls in the last 24 hours",
         ]);
-        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
-        expectNoChartsOrTables();
+        const permissions = within(screen.getByRole("region", { name: "Permissions" }));
+        expect(permissions.getByText("30D")).toBeTruthy();
+        expect(permissions.getByText("None · starts its own runs")).toBeTruthy();
     });
 });

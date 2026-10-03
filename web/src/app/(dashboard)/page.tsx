@@ -1,14 +1,11 @@
 import { HeroChart } from "@/components/charts/hero-chart";
-import { EmptyLine } from "@/components/kit/empty";
 import { PAGE_WIDE } from "@/components/kit/page";
 import { DecisionLog } from "@/components/overview/decision-log";
-import { Greeting } from "@/components/overview/greeting";
 import { ApprovalsSection, IncidentsSection, RunsSection } from "@/components/overview/overview-tables";
 import { OverviewRail } from "@/components/overview/overview-rail";
 import { TerminalOverview } from "@/components/overview/terminal-overview";
 import { openApprovalCount, openApprovalRequests } from "@/lib/data/approvals";
 import { getOverview } from "@/lib/data/overview";
-import { greetingFor } from "@/lib/data/overview/greeting";
 import { listRuns } from "@/lib/data/runs/query";
 import { requestTime } from "@/lib/data/scope";
 
@@ -20,15 +17,6 @@ export default async function OverviewPage() {
         openApprovalCount(),
         listRuns({ limit: 6 }),
     ]);
-
-    if (!data) {
-        return (
-            <div className={PAGE_WIDE}>
-                <Greeting text={greetingFor(now)} className="mb-[18px]" />
-                <EmptyLine>No activity yet</EmptyLine>
-            </div>
-        );
-    }
 
     return (
         <div className={PAGE_WIDE}>

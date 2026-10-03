@@ -1,13 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { expectNoChartsOrTables } from "../../../test/empty";
 import { stubBrowser } from "../../../test/fleet-shell/env";
+import { expectEmptyChart } from "../../../test/summary/frames";
 import { SOURCES, TOOLS, emptyFleet } from "../../../test/summary/fleet";
 import { IncidentPanes } from "./incident-panes";
 
-function section() {
-    return screen.getByRole("region", { name: "Where incidents start" });
-}
+const EMPTY = "No incidents in the last 30 days";
 
 function chart(name: string) {
     return within(screen.getByRole("region", { name })).getByRole("img");
@@ -20,7 +18,7 @@ function title() {
 
 // The tile grid sits under the heading
 function grid() {
-    return section().lastElementChild?.className.split(" ") ?? [];
+    return screen.getByRole("region", { name: "Where incidents start" }).lastElementChild?.className.split(" ") ?? [];
 }
 
 beforeEach(stubBrowser);
@@ -43,36 +41,37 @@ describe("IncidentPanes", () => {
         expect(grid()).toContain("grid-cols-2");
     });
 
-    it("draws only the sources, full width, when no damaging tool is known", () => {
+    it("keeps both panes side by side, unlit and with a dash for untrusted, when there were no incidents", () => {
+        render(<IncidentPanes fleet={emptyFleet()} />);
+
+        expect(title().textContent).toBe("Where incidents start0");
+        expect(expectEmptyChart("By entry source", EMPTY).textContent).toContain("Untrusted—incidents");
+        expectEmptyChart("By damaging tool", EMPTY);
+        expect(grid()).toContain("grid-cols-2");
+    });
+
+    it("keeps the damaging tool pane unlit when only the entry sources are known", () => {
         render(<IncidentPanes fleet={emptyFleet({ incidentsBySource: SOURCES })} />);
 
         expect(title().textContent).toBe("Where incidents start1205");
-        expect(chart("By entry source")).toBeTruthy();
-        expect(screen.queryByRole("region", { name: "By damaging tool" })).toBeNull();
-        expect(grid()).not.toContain("grid-cols-2");
+        expect(chart("By entry source").getAttribute("aria-label")).toContain("web page leads with 1,200 incidents");
+        expectEmptyChart("By damaging tool", EMPTY);
     });
 
-    it("draws only the tools, with no count chip, when no entry source is known", () => {
-        render(<IncidentPanes fleet={emptyFleet({ incidentsByTool: TOOLS })} />);
+    it("counts one untrusted incident in the singular", () => {
+        render(<IncidentPanes fleet={emptyFleet({ incidentsBySource: [{ ...SOURCES[0], count: 1 }] })} />);
 
-        expect(title().textContent).toBe("Where incidents start");
-        expect(chart("By damaging tool")).toBeTruthy();
-        expect(screen.queryByRole("region", { name: "By entry source" })).toBeNull();
+        expect(screen.getByRole("region", { name: "By entry source" }).textContent).toMatch(/Untrusted1incident(?!s)/);
+        expect(chart("By entry source").getAttribute("aria-label")).toContain("web page leads with 1 incident,");
     });
 
-    it("shows one line and no charts when there were no incidents", () => {
-        render(<IncidentPanes fleet={emptyFleet()} />);
-
-        expect(title().textContent).toBe("Where incidents start");
-        expect(within(section()).getByRole("status").textContent).toBe("No incidents in the last 30 days");
-        expectNoChartsOrTables(section());
-    });
-
-    it("shows only its title and a small bar while the summary loads", () => {
+    it("shows both charts loading and no count while the summary loads", () => {
         render(<IncidentPanes fleet={null} />);
 
-        expect(section().getAttribute("aria-busy")).toBe("true");
         expect(title().textContent).toBe("Where incidents start");
-        expect(within(section()).queryByRole("img")).toBeNull();
+        expect(chart("By entry source").getAttribute("aria-label")).toBe("By entry source, loading");
+        expect(chart("By damaging tool").getAttribute("aria-label")).toBe("By damaging tool, loading");
+        expect(screen.getByRole("region", { name: "By entry source" }).getAttribute("aria-busy")).toBe("true");
+        expect(screen.queryByText(EMPTY)).toBeNull();
     });
 });

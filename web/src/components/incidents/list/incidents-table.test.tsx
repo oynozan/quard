@@ -4,9 +4,17 @@ import { INCIDENTS } from "../../../../test/incidents/list";
 import { NOW } from "../../../../test/time";
 import { IncidentsTable } from "./incidents-table";
 
-function show(initialCategory = "all") {
-    render(<IncidentsTable incidents={INCIDENTS} now={NOW} initialCategory={initialCategory} />);
+function show(initialCategory = "all", incidents = INCIDENTS) {
+    render(<IncidentsTable incidents={incidents} now={NOW} initialCategory={initialCategory} />);
 }
+
+function columns() {
+    return within(screen.getByRole("table"))
+        .getAllByRole("columnheader")
+        .map((th) => th.textContent);
+}
+
+const COLUMNS = ["Incident", "Category", "Entry point", "Damage", "Agents", "Replay", "Opened"];
 
 // Opens a filter menu and picks one of its options
 async function pick(filter: string, option: string) {
@@ -118,15 +126,15 @@ describe("IncidentsTable", () => {
         expect(shownCount()).toBe("1 of 3");
     });
 
-    it("keeps the toolbar but drops the table when no incident matches, and clears every filter", async () => {
+    it("keeps the table header when no incident matches, and clears every filter", async () => {
         window.history.replaceState(null, "", "/incidents?category=bad+input");
         show("bad input");
         await pick("Replay status", "Confirmed");
         search("cap");
         expect(shownCount()).toBe("0 of 3");
+        expect(columns()).toEqual(COLUMNS);
+        expect(titles()).toEqual([]);
         expect(screen.getByRole("heading", { name: "No incidents match" })).toBeTruthy();
-        expect(screen.queryByRole("table")).toBeNull();
-        expect(screen.getByRole("searchbox", { name: "Search incidents" })).toBeTruthy();
 
         fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
         expect(shownCount()).toBe("3 of 3");
@@ -135,6 +143,17 @@ describe("IncidentsTable", () => {
         expect(window.location.search).toBe("");
         expect(screen.queryByRole("heading", { name: "No incidents match" })).toBeNull();
         expect(titles()).toHaveLength(3);
+    });
+
+    it("keeps the toolbar and the table header over the empty state when nothing has opened yet", () => {
+        show("all", []);
+        expect(shownCount()).toBe("0 of 0");
+        expect(screen.getByRole("searchbox", { name: "Search incidents" })).toBeTruthy();
+        expect(columns()).toEqual(COLUMNS);
+        expect(titles()).toEqual([]);
+        expect(screen.getByRole("heading", { name: "No incidents yet" })).toBeTruthy();
+        expect(screen.getByText("Blocked or flagged harm opens one here.")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
     });
 
     it("still filters when the address bar cannot be written", async () => {

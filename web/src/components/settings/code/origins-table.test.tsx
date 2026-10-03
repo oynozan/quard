@@ -26,5 +26,18 @@ describe("OriginsTable", () => {
         expect(cells).toEqual(["mcp:crm.internaltrusted", "untrusted · public", "billing, support", "12 min ago"]);
         expect(within(row).getByText("billing, support").getAttribute("title")).toBe("billing, support");
         expect(within(row).getByTitle("mcp:crm.internal · trusted · public")).toBeTruthy();
+        expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("keeps its header with a quiet line under it when no run reported an override", () => {
+        render(<OriginsTable origins={[]} now={NOW} />);
+        const table = screen.getByRole("table");
+        expect(
+            within(table)
+                .getAllByRole("columnheader")
+                .map((cell) => cell.textContent),
+        ).toEqual(["Override", "Default", "Agents", "Last seen"]);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        expect(screen.getByRole("status").textContent).toBe("No origin overrides yet");
     });
 });

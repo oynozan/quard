@@ -1,8 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { expectNoChartsOrTables } from "../../../test/empty";
 import { stubResizeObserver } from "../../../test/overview/browser";
-import { AGENTS } from "../../../test/overview/fixtures";
+import { AGENTS, QUIET } from "../../../test/overview/fixtures";
 import { OverviewRail } from "./overview-rail";
 
 const GUARDS = [
@@ -54,22 +53,20 @@ describe("OverviewRail", () => {
         expect(pairs).toEqual(["source2,140", "approval41"]);
     });
 
-    it("shows each title and one line when no agent or guard has data", () => {
-        const { container } = render(<OverviewRail agents={[]} guardCounts={[]} />);
+    it("keeps both sections with zero of zero, an empty meter and every guard at 0", () => {
+        const { container } = render(<OverviewRail agents={[]} guardCounts={QUIET.guardCounts} />);
 
         expect(
             rail()
                 .getAllByRole("heading")
                 .map((heading) => heading.textContent),
         ).toEqual(["Agents", "Guards"]);
-        expect(
-            rail()
-                .getAllByRole("status")
-                .map((line) => line.textContent),
-        ).toEqual(["No agents in the last 30 days", "No guard decisions in the last 24 hours"]);
-        expect(screen.queryByText("Running")).toBeNull();
-        expect(screen.queryByRole("list")).toBeNull();
-        expect(container.querySelector("dl")).toBeNull();
-        expectNoChartsOrTables(container);
+        expect(rail().getByText("Running").nextElementSibling?.textContent).toBe("0 / 0");
+        const meter = rail().getByRole("progressbar", { name: "0 of 0 agents running" });
+        expect(meter.getAttribute("aria-valuenow")).toBe("0");
+        expect(meter.querySelector('path[fill="var(--progress-fill, var(--signal))"]')?.getAttribute("d")).toBe("");
+        expect(rail().queryAllByRole("listitem")).toHaveLength(0);
+        const pairs = [...container.querySelectorAll("dl > div")].map((row) => row.textContent);
+        expect(pairs).toEqual(["source0", "action0", "egress0", "limit0", "approval0", "permission0", "signature0"]);
     });
 });

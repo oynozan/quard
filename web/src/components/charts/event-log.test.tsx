@@ -68,4 +68,19 @@ describe("EventLog", () => {
         const { container } = render(<EventLog events={[event("allow", "a")]} live={false} />);
         expect(container.querySelector(".cursor-blink")).toBeNull();
     });
+
+    it("says why it is empty in one quiet line above the cursor", () => {
+        const { container } = render(<EventLog events={[]} emptyText="No guard decisions in the last 24 hours" />);
+        const line = screen.getByText("No guard decisions in the last 24 hours");
+
+        expect(line.className).toContain("text-ink-muted");
+        expect(screen.queryByRole("list")).toBeNull();
+        expect(line.nextElementSibling?.className).toContain("cursor-blink");
+        expect(container.firstElementChild?.getAttribute("aria-live")).toBe("polite");
+    });
+
+    it("falls back to a general line when empty", () => {
+        render(<EventLog events={[]} />);
+        expect(screen.getByText("No guard decisions yet")).toBeTruthy();
+    });
 });

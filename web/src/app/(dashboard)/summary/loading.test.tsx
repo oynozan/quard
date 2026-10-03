@@ -24,27 +24,29 @@ describe("SummaryLoading", () => {
         expect(screen.getByText("Last 30 days").textContent).toBe("Last 30 days");
     });
 
-    it("shows sections without a source as their title and a small bar", () => {
+    it("draws every chart pane loading in place", () => {
         render(<SummaryLoading />);
 
-        for (const name of ["Where incidents start", "Run limits"]) {
-            expect(section(name).getAttribute("aria-busy")).toBe("true");
-            expect(within(section(name)).getByRole("heading", { level: 2 }).textContent).toBe(name);
-            expect(within(section(name)).queryByRole("img")).toBeNull();
-            expect(within(section(name)).queryByRole("table")).toBeNull();
-            expect(within(section(name)).queryByRole("progressbar")).toBeNull();
+        for (const name of [
+            "By entry source",
+            "By damaging tool",
+            "Blocks per day",
+            "Entry points",
+            "Turning points",
+        ]) {
+            expect(section(name).getAttribute("aria-busy"), name).toBe("true");
+            expect(within(section(name)).getByRole("img").getAttribute("aria-label")).toBe(`${name}, loading`);
         }
+        expect(section("Blocks by hour, all guards").getAttribute("aria-busy")).toBe("true");
     });
 
-    it("keeps the skeletons of the blocks charts and the links and quarantine tables, which have a source", () => {
+    it("keeps the run limit tiles and the tables' headers over loading rows", () => {
         render(<SummaryLoading />);
 
-        expect(section("Quarantine").getAttribute("aria-busy")).toBe("true");
-        expect(within(section("Quarantine")).getByRole("status").textContent).toBe("Loading quarantine…");
-
-        expect(section("Blocks per day").getAttribute("aria-busy")).toBe("true");
-        expect(section("Blocks by hour, all guards").getAttribute("aria-busy")).toBe("true");
+        expect(section("Run limits").getAttribute("aria-busy")).toBe("true");
+        expect(within(section("Run limits")).getAllByRole("progressbar")).toHaveLength(5);
         expect(within(section("Untrusted links")).getByRole("status").textContent).toBe("Loading links…");
-        expect(screen.queryByRole("region", { name: "Entry points" })).toBeNull();
+        expect(within(section("Quarantine")).getAllByRole("columnheader")).toHaveLength(6);
+        expect(within(section("Quarantine")).getByRole("status").textContent).toBe("Loading quarantine…");
     });
 });

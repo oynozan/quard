@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { EmptyLine } from "@/components/kit/empty";
 import { PageHeading } from "@/components/kit/headings";
 import { PAGE_LIST } from "@/components/kit/page";
 import { groupByRun, readQuery } from "@/components/search/lib/group";
@@ -7,7 +6,7 @@ import { SearchList } from "@/components/search/results/search-list";
 import { SearchResults } from "@/components/search/results/search-results";
 import { SearchSummary } from "@/components/search/results/search-summary";
 import { SearchBrowser } from "@/components/search/search-browser";
-import { SearchStopped } from "@/components/search/states/search-states";
+import { SearchIntro, SearchStopped } from "@/components/search/states/search-states";
 import { searchRuns, type SearchState } from "@/lib/data/search";
 
 export const metadata: Metadata = { title: "Search" };
@@ -19,20 +18,16 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
     return (
         <div className={PAGE_LIST}>
             <PageHeading title="Search" />
-            {search.state === "no-runs" ? (
-                <EmptyLine>No runs yet</EmptyLine>
-            ) : (
-                <SearchBrowser query={query}>
-                    <SearchOutcome search={search} />
-                </SearchBrowser>
-            )}
+            <SearchBrowser query={query}>
+                <SearchOutcome query={query} search={search} />
+            </SearchBrowser>
         </div>
     );
 }
 
-function SearchOutcome({ search }: { search: Exclude<SearchState, { state: "no-runs" }> }) {
-    // The field's placeholder already says what can be searched
-    if (search.state === "idle") return null;
+function SearchOutcome({ query, search }: { query: string; search: SearchState }) {
+    // An empty field says what can be searched, even before the first run
+    if (!query || search.state === "idle") return <SearchIntro />;
     if (search.state !== "searched") return <SearchStopped reason={search.state} />;
 
     const { result } = search;

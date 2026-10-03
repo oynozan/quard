@@ -42,7 +42,6 @@ function writeUrl(category: string) {
     }
 }
 
-// The page shows this only when incidents exist, so no rows means the filters match nothing
 export function IncidentsTable({ incidents, now, initialCategory }: Props) {
     const [category, setCategory] = useState(initialCategory);
     const [replay, setReplay] = useState<string>(ALL);
@@ -64,6 +63,7 @@ export function IncidentsTable({ incidents, now, initialCategory }: Props) {
         );
     }, [incidents, category, replay, query]);
 
+    const filtered = category !== ALL || replay !== ALL || query.trim() !== "";
     const clear = () => {
         setCategory(ALL);
         setReplay(ALL);
@@ -116,36 +116,36 @@ export function IncidentsTable({ incidents, now, initialCategory }: Props) {
                 </p>
             </Toolbar>
 
-            {rows.length > 0 ? (
-                <DataTable minWidth={960}>
-                    <colgroup>
-                        <col style={{ width: "24%" }} />
-                        <col style={{ width: "11%" }} />
-                        <col style={{ width: "16%" }} />
-                        <col style={{ width: "16%" }} />
-                        <col style={{ width: "12%" }} />
-                        <col style={{ width: "14%" }} />
-                        <col style={{ width: "7%" }} />
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <Th>Incident</Th>
-                            <Th>Category</Th>
-                            <Th>Entry point</Th>
-                            <Th>Damage</Th>
-                            <Th>Agents</Th>
-                            <Th>Replay</Th>
-                            <Th>Opened</Th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows.map((incident) => (
-                            <IncidentRow key={incident.id} incident={incident} now={now} />
-                        ))}
-                    </tbody>
-                </DataTable>
-            ) : (
-                <div className="border-y border-line">
+            <DataTable minWidth={960}>
+                <colgroup>
+                    <col style={{ width: "24%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "7%" }} />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <Th>Incident</Th>
+                        <Th>Category</Th>
+                        <Th>Entry point</Th>
+                        <Th>Damage</Th>
+                        <Th>Agents</Th>
+                        <Th>Replay</Th>
+                        <Th>Opened</Th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((incident) => (
+                        <IncidentRow key={incident.id} incident={incident} now={now} />
+                    ))}
+                </tbody>
+            </DataTable>
+
+            {rows.length === 0 ? (
+                filtered ? (
                     <TableState
                         title="No incidents match"
                         action={
@@ -154,8 +154,10 @@ export function IncidentsTable({ incidents, now, initialCategory }: Props) {
                             </Button>
                         }
                     />
-                </div>
-            )}
+                ) : (
+                    <TableState title="No incidents yet" body="Blocked or flagged harm opens one here." />
+                )
+            ) : null}
         </section>
     );
 }

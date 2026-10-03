@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeResizeObserver, observers, resizeAll } from "../../../test/charts-rest/dom";
-import { expectNoChartsOrTables } from "../../../test/empty";
 import { HeroChart } from "./hero-chart";
 
 // 144 ten-minute buckets ending at noon on 1 May: 100 each, a 900 peak at 20:20 and 120 now
 const ENDS_AT = Date.UTC(2026, 4, 1, 12, 0);
 const VALUES = Array.from({ length: 144 }, (_, i) => (i === 50 ? 900 : i === 143 ? 120 : 100));
+const EMPTY = "No model calls in the last 24 hours";
 
 function hero(live?: boolean) {
     return render(<HeroChart greeting="Good morning, Ada" values={VALUES} endsAt={ENDS_AT} live={live} />);
@@ -24,15 +24,16 @@ function announcement() {
     return document.querySelector('p[aria-live="polite"]')?.textContent;
 }
 
-// The x labels under the field: four times, then "now", then the hovered time
 // The x of every cell in a path, for checking which column it covers
 function columnXs(container: HTMLElement, fill: string) {
     const d = container.querySelector(`path[fill="${fill}"]`)?.getAttribute("d") ?? "";
     return [...new Set([...d.matchAll(/M([\d.]+) /g)].map((m) => m[1]))];
 }
 
+// The x labels under the field, four times and now, then the hovered time
 function xLabels() {
-    return [...(chart().nextElementSibling as HTMLElement).children] as HTMLElement[];
+    const row = document.querySelector("div[aria-hidden].mono.relative") as HTMLElement;
+    return [...row.children] as HTMLElement[];
 }
 
 beforeEach(() => {
@@ -81,19 +82,48 @@ describe("HeroChart", () => {
         expect(xLabels().every((s) => s.style.opacity === "1")).toBe(true);
     });
 
-    it("shows only the greeting and one line when no model call came in", () => {
+    it("keeps its whole frame unlit under one sentence when no model call came in", () => {
         for (const values of [VALUES.map(() => 0), []]) {
             const { container, unmount } = render(<HeroChart greeting="Hello" values={values} endsAt={ENDS_AT} />);
-            const hero = screen.getByRole("region", { name: "Model calls in the last 24 hours" });
+            const field = screen.getByRole("img", { name: EMPTY });
 
             expect(screen.getByRole("heading", { level: 1, name: "Hello" })).toBeTruthy();
-            expect(screen.getByRole("status").textContent).toBe("No model calls in the last 24 hours");
-            expect(hero.textContent).toBe("HelloNo model calls in the last 24 hours");
-            expect(screen.queryByRole("button")).toBeNull();
-            expect(container.querySelector(".cursor-blink")).toBeNull();
-            expectNoChartsOrTables(container);
+            expect(screen.getByText("Model calls per 10 min").parentElement?.textContent).toBe(
+                "Model calls per 10 min—in 24h",
+            );
+            expect(screen.getByText("Live")).toBeTruthy();
+            expect(screen.getByRole("button", { name: "Table" })).toBeTruthy();
+            expect(field.getAttribute("width")).toBe("978");
+            expect(field.getAttribute("tabindex")).toBe("-1");
+            expect(container.querySelector('path[fill="var(--chart-field)"]')?.getAttribute("d")).not.toBe("");
+            expect(container.querySelector('path[fill="var(--signal)"]')?.getAttribute("d")).toBe("");
+            expect(container.querySelectorAll('rect[fill="var(--chart-grid)"]')).toHaveLength(3);
+            expect(container.querySelector("rect.cursor-blink")).toBeTruthy();
+            expect(screen.getByText(EMPTY).className).toContain("absolute");
+            const axis = container.querySelector("div[aria-hidden].mono.pointer-events-none") as HTMLElement;
+            expect(axis.textContent).toBe("————");
+            expect(xLabels().map((s) => s.textContent)).toEqual(["12:00", "18:00", "00:00", "06:00", "now"]);
             unmount();
         }
+    });
+
+    it("reads nothing from an empty field on hover or keys", () => {
+        render(<HeroChart greeting="Hello" values={[]} endsAt={ENDS_AT} />);
+        const field = screen.getByRole("img", { name: EMPTY });
+
+        fireEvent.pointerMove(field, { clientX: 300 });
+        fireEvent.keyDown(field, { key: "End" });
+        expect(tooltip()).toBeNull();
+        expect(announcement()).toBe("");
+    });
+
+    it("keeps the table header and says why it has no rows when no model call came in", () => {
+        render(<HeroChart greeting="Hello" values={[]} endsAt={ENDS_AT} />);
+        fireEvent.click(screen.getByRole("button", { name: "Table" }));
+
+        expect(screen.getAllByRole("row").map((row) => row.textContent)).toEqual(["TimeModel calls"]);
+        expect(screen.getByRole("columnheader", { name: "Model calls" })).toBeTruthy();
+        expect(screen.getByText(EMPTY).tagName).toBe("P");
     });
 
     it("merges buckets into 20 minute columns on a narrow screen", () => {

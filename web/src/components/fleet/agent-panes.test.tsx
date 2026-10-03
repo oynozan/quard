@@ -1,9 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { expectNoChartsOrTables } from "../../../test/empty";
 import { stubBrowser } from "../../../test/fleet-shell/env";
+import { expectEmptyChart, expectEmptyTable } from "../../../test/summary/frames";
 import { LINKS, POINTS, emptyFleet } from "../../../test/summary/fleet";
 import { AgentPanes } from "./agent-panes";
+
+const HEADERS = ["Link", "Untrusted", "Delegations", "Untrusted share"];
+const NO_LINKS = "No agent-to-agent link carried untrusted content";
 
 function pane(name: string) {
     return within(screen.getByRole("region", { name }));
@@ -33,7 +36,7 @@ describe("AgentPanes", () => {
         expect(rankedNames("Entry points")).toEqual(["researcher", "billing", "support"]);
         expect(rankedNames("Turning points")).toEqual(["billing"]);
         expect(pane("Turning points").getByRole("table").querySelector("caption")?.textContent).toBe(
-            "Agents where an incident turned harmful over the last 30 days. billing leads with 1 incidents, out of 1.",
+            "Agents where an incident turned harmful over the last 30 days. billing leads with 1 incident, out of 1.",
         );
     });
 
@@ -44,7 +47,7 @@ describe("AgentPanes", () => {
             .map((cell) => cell.textContent);
         const rows = pane("Untrusted links").getAllByRole("row").slice(1);
 
-        expect(headers).toEqual(["Link", "Untrusted", "Delegations", "Untrusted share"]);
+        expect(headers).toEqual(HEADERS);
         expect(rows).toHaveLength(2);
         expect(
             within(rows[0])
@@ -54,15 +57,7 @@ describe("AgentPanes", () => {
         expect(within(rows[1]).getByRole("progressbar").getAttribute("aria-label")).toBe(
             "8% of delegations from support to billing carried untrusted content",
         );
-    });
-
-    it("shows only the links table when no agent was an entry or turning point", () => {
-        render(<AgentPanes fleet={emptyFleet({ untrustedLinks: LINKS })} />);
-
-        expect(screen.queryByRole("region", { name: "Entry points" })).toBeNull();
-        expect(screen.queryByRole("region", { name: "Turning points" })).toBeNull();
-        expect(screen.queryAllByRole("img")).toHaveLength(0);
-        expect(pane("Untrusted links").getAllByRole("row")).toHaveLength(3);
+        expect(pane("Untrusted links").queryByRole("status")).toBeNull();
     });
 
     it("keeps links apart when agent names contain hyphens", () => {
@@ -80,30 +75,41 @@ describe("AgentPanes", () => {
         expect(warnings).toEqual([]);
     });
 
-    it("draws only the entry points, full width, when nothing else has data", () => {
-        render(<AgentPanes fleet={emptyFleet({ agentPoints: [{ agent: "support", entry: 2, turning: 0 }] })} />);
+    it("keeps both charts unlit beside the links when no agent was an entry or turning point", () => {
+        render(<AgentPanes fleet={emptyFleet({ untrustedLinks: LINKS })} />);
 
-        expect(grid()).not.toContain("grid-cols-2");
-        expect(screen.queryByRole("region", { name: "Turning points" })).toBeNull();
-        expect(screen.queryByRole("region", { name: "Untrusted links" })).toBeNull();
-        expect(rankedNames("Entry points")).toEqual(["support"]);
+        expect(grid()).toContain("grid-cols-2");
+        expectEmptyChart("Entry points", "No agent was an entry point");
+        expectEmptyChart("Turning points", "No agent was a turning point");
+        expect(pane("Untrusted links").getAllByRole("row")).toHaveLength(3);
     });
 
-    it("shows one line and no charts or tables when there is nothing to show", () => {
+    it("keeps every pane, and the links table's header over one quiet line, when there is nothing to show", () => {
         render(<AgentPanes fleet={emptyFleet({ agentPoints: [{ agent: "planner", entry: 0, turning: 0 }] })} />);
-        const section = screen.getByRole("region", { name: "Agents and links" });
 
-        expect(within(section).getByRole("heading", { level: 2 }).textContent).toBe("Agents and links");
-        expect(within(section).getByRole("status").textContent).toBe("No untrusted links in the last 30 days");
-        expectNoChartsOrTables(section);
+        expectEmptyChart("Entry points", "No agent was an entry point");
+        expectEmptyChart("Turning points", "No agent was a turning point");
+        expectEmptyTable(screen.getByRole("region", { name: "Untrusted links" }), HEADERS, NO_LINKS);
+        // The grid's edge already closes the pane under the quiet line
+        expect(pane("Untrusted links").getByRole("status").parentElement?.className).toContain(
+            "[&>[role=status]]:border-b-0",
+        );
     });
 
-    it("waits with loading link rows and no charts before the summary arrives", () => {
+    it("draws the turning points while the entry points stay unlit", () => {
+        render(<AgentPanes fleet={emptyFleet({ agentPoints: [{ agent: "billing", entry: 0, turning: 2 }] })} />);
+
+        expectEmptyChart("Entry points", "No agent was an entry point");
+        expect(rankedNames("Turning points")).toEqual(["billing"]);
+    });
+
+    it("shows loading charts and loading link rows before the summary arrives", () => {
         render(<AgentPanes fleet={null} />);
 
+        expect(pane("Entry points").getByRole("img").getAttribute("aria-label")).toBe("Entry points, loading");
+        expect(pane("Turning points").getByRole("img").getAttribute("aria-label")).toBe("Turning points, loading");
         expect(pane("Untrusted links").getByRole("status").textContent).toBe("Loading links…");
         expect(pane("Untrusted links").getAllByRole("row")).toHaveLength(5);
-        expect(screen.queryByRole("img")).toBeNull();
-        expect(screen.queryByRole("region", { name: "Entry points" })).toBeNull();
+        expect(screen.queryByText(NO_LINKS)).toBeNull();
     });
 });

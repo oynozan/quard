@@ -2,10 +2,10 @@ import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAGE_WIDE } from "@/components/kit/page";
 import { formatShortDate } from "@/lib/format";
-import { expectNoChartsOrTables } from "../../../test/empty";
 import { stubBrowser } from "../../../test/fleet-shell/env";
 import { quarantineData } from "../../../test/fleet-shell/quarantine";
-import { BY_GUARD, HEATMAP, LINKS, emptyFleet, fullFleet } from "../../../test/summary/fleet";
+import { expectEmptyChart, expectEmptyTable } from "../../../test/summary/frames";
+import { BY_GUARD, HEATMAP, emptyFleet, fullFleet } from "../../../test/summary/fleet";
 import { FleetContainer, FleetView } from "./fleet-view";
 
 const NOTHING = quarantineData({ quarantine: [], watching: [] });
@@ -14,6 +14,15 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/data/fleet/actions", () => ({ markKnown: vi.fn() }));
 
 const SECTIONS = ["Where incidents start", "What guards block", "Agents and links", "Run limits", "Quarantine"];
+const CHARTS = [
+    "By entry source",
+    "By damaging tool",
+    "Blocks per day",
+    "Blocks by hour, all guards",
+    "Entry points",
+    "Turning points",
+];
+const LINK_HEADERS = ["Link", "Untrusted", "Delegations", "Untrusted share"];
 
 function sectionNames(): string[] {
     return screen
@@ -65,35 +74,32 @@ describe("FleetView", () => {
         expect(quarantine.getByText("No new values are being counted")).toBeTruthy();
     });
 
-    it("gives each empty section one line when another section has data", () => {
+    it("keeps every section's panes, tiles and table headers for a brand-new project", () => {
+        const fleet = emptyFleet();
+        render(<FleetView fleet={fleet} quarantine={NOTHING} />);
+
+        expect(screen.queryByText("Nothing to summarize yet")).toBeNull();
+        expectEmptyChart("By entry source", "No incidents in the last 30 days");
+        expectEmptyChart("By damaging tool", "No incidents in the last 30 days");
+        expectEmptyChart("Blocks per day", "No blocks in the last 30 days");
+        expectEmptyChart("Blocks by hour, all guards", "No blocks in the last 30 days");
+        expectEmptyChart("Entry points", "No agent was an entry point");
+        expectEmptyChart("Turning points", "No agent was a turning point");
+        expectEmptyTable(section("Untrusted links"), LINK_HEADERS, "No agent-to-agent link carried untrusted content");
+        expect(within(section("Run limits")).getAllByRole("progressbar")).toHaveLength(5);
+    });
+
+    it("keeps the empty panes unlit beside a section that has data", () => {
         render(
             <FleetView fleet={emptyFleet({ blocksByGuard: BY_GUARD, blocksHeatmap: HEATMAP })} quarantine={NOTHING} />,
         );
-        const lines = screen
-            .getAllByRole("status")
-            .map((line) => line.textContent)
-            .filter(Boolean);
 
-        expect(sectionNames()).toEqual(SECTIONS);
-        expect(lines).toEqual([
-            "No incidents in the last 30 days",
-            "No untrusted links in the last 30 days",
-            "No runs over a limit in the last 30 days",
-            "No new values are being counted",
-        ]);
-        expect(within(section("What guards block")).getAllByRole("img")).toHaveLength(2);
-        for (const name of ["Where incidents start", "Agents and links", "Run limits"]) {
-            expectNoChartsOrTables(section(name));
-        }
-    });
-
-    it("shows the untrusted links on their own when nothing was blocked", () => {
-        render(<FleetView fleet={emptyFleet({ untrustedLinks: LINKS })} quarantine={NOTHING} />);
-
-        expect(within(section("What guards block")).getByRole("status").textContent).toBe(
-            "No blocks in the last 30 days",
+        expect(within(section("Blocks per day")).getByRole("img").getAttribute("aria-label")).toContain(
+            "Peak 1,200 on 2 Oct",
         );
-        expect(within(section("Untrusted links")).getAllByRole("row")).toHaveLength(3);
+        expectEmptyChart("By entry source", "No incidents in the last 30 days");
+        expectEmptyChart("Entry points", "No agent was an entry point");
+        expectEmptyTable(section("Untrusted links"), LINK_HEADERS, "No agent-to-agent link carried untrusted content");
     });
 
     it("shows every section loading while the summary is on its way", () => {
@@ -102,14 +108,9 @@ describe("FleetView", () => {
         expect(screen.getByText("Last 30 days").textContent).toBe("Last 30 days");
         expect(screen.queryByText(/ – /)).toBeNull();
         expect(sectionNames()).toEqual(SECTIONS);
-        for (const name of ["Where incidents start", "Run limits"]) {
-            expect(section(name).getAttribute("aria-busy")).toBe("true");
-            expect(within(section(name)).queryByRole("img")).toBeNull();
-            expect(within(section(name)).queryByRole("table")).toBeNull();
+        for (const name of [...CHARTS, "Run limits", "Quarantine"]) {
+            expect(section(name).getAttribute("aria-busy"), name).toBe("true");
         }
-        // The quarantine has a source, so its table keeps a skeleton
-        expect(section("Quarantine").getAttribute("aria-busy")).toBe("true");
-        expect(within(section("Quarantine")).getByRole("table")).toBeTruthy();
         // Nothing is called empty while it loads
         expect(screen.getAllByRole("status").map((line) => line.textContent)).toEqual([
             "Loading links…",

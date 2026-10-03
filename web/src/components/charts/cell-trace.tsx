@@ -7,27 +7,44 @@ import { DAY } from "@/lib/time";
 import { useWidth } from "@/lib/hooks/use-width";
 import { WarningGlyph } from "@/components/icons/glyphs";
 import { ChartTooltip, TableToggle } from "./chart-parts";
+import { FieldMessage } from "./field-parts";
+import { sansWidth } from "./layout/format";
+import { centerKnockout } from "./layout/sweep";
 
 const AXIS = 40;
 const CELL = 4;
 const ROWS = 24;
+const DAYS = 30;
 
 type CellTraceProps = {
     title: string;
+    // One rate per day, oldest first, or none when there was nothing to rate
     values: number[];
     startAt: number;
     limit: number;
     limitLabel: string;
+    emptyText?: string;
 };
 
-// A rate over time, rasterized onto cells, against a dashed limit.
-export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTraceProps) {
+// A rate over time, rasterized onto cells, against a dashed limit
+export function CellTrace({
+    title,
+    values: given,
+    startAt,
+    limit,
+    limitLabel,
+    emptyText = "No data in this range",
+}: CellTraceProps) {
     const [ref, width] = useWidth<HTMLDivElement>(464);
     const [hover, setHover] = useState<number | null>(null);
     const [table, setTable] = useState(false);
 
+    const empty = given.length === 0;
+    const values = empty ? Array<number>(DAYS).fill(0) : given;
     const columns = Math.max(20, Math.floor((width - AXIS + 2) / (CELL + 2)));
     const layout = traceLayout({ values, columns, rows: ROWS, cell: CELL, limit });
+    // A zero line still lights its row, so an empty field takes those cells back
+    const cells = empty ? { field: layout.field + layout.lit + layout.over, lit: "", over: "" } : layout;
     // A limit is always given, so the layout always places its line
     const limitY = layout.limitY! + 0.5;
     const dayOf = (i: number) => startAt + i * DAY;
@@ -52,6 +69,8 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
         setHover(Math.min(last, Math.max(0, next[event.key])));
     }
 
+    const clear = () => setHover(null);
+    const reading = empty ? {} : { onPointerMove, onPointerLeave: clear, onKeyDown, onBlur: clear };
     const hoverColumn = hover === null ? null : layout.columnOf(hover);
     const summary = `${title} per day over 30 days. ${breach === null ? "Never" : "Once"} over the ${formatPercent(
         limit,
@@ -70,7 +89,7 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
 
             <div ref={ref} className="relative flex-1 p-3">
                 {table ? (
-                    <TraceTable values={values} dayOf={dayOf} limit={limit} />
+                    <TraceTable values={given} dayOf={dayOf} limit={limit} emptyText={emptyText} />
                 ) : (
                     <>
                         <div className="mb-3 flex items-center gap-5 text-[11px] font-light text-ink-muted">
@@ -80,7 +99,9 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
                                     <span className="size-1 bg-signal" />
                                 </span>
                                 Today{" "}
-                                <span className="mono text-[12px] font-normal text-ink">{formatPercent(today)}</span>
+                                <span className="mono text-[12px] font-normal text-ink">
+                                    {empty ? "—" : formatPercent(today)}
+                                </span>
                             </span>
                             <span className="inline-flex items-center gap-[7px]">
                                 <span aria-hidden className="w-[13px] border-t border-dashed border-warning" />
@@ -96,28 +117,25 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
                             >
                                 {layout.ticks.map((tick) => (
                                     <span key={tick.value} className="absolute right-0" style={{ top: tick.y - 5 }}>
-                                        {tick.value}%
+                                        {empty ? "—" : `${tick.value}%`}
                                     </span>
                                 ))}
                                 <span className="absolute right-0" style={{ top: layout.height - 10 }}>
-                                    0%
+                                    {empty ? "—" : "0%"}
                                 </span>
                             </div>
                             <svg
                                 role="img"
-                                aria-label={summary}
-                                tabIndex={0}
+                                aria-label={empty ? emptyText : summary}
+                                tabIndex={empty ? -1 : 0}
                                 width={layout.width}
                                 height={layout.height}
                                 shapeRendering="crispEdges"
                                 className="block outline-offset-[6px]"
                                 style={{ marginLeft: AXIS }}
-                                onPointerMove={onPointerMove}
-                                onPointerLeave={() => setHover(null)}
-                                onKeyDown={onKeyDown}
-                                onBlur={() => setHover(null)}
+                                {...reading}
                             >
-                                <path d={layout.field} fill="var(--chart-field)" />
+                                <path d={cells.field} fill="var(--chart-field)" />
                                 {hoverColumn !== null ? (
                                     <rect
                                         x={hoverColumn * layout.pitch}
@@ -127,8 +145,8 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
                                         fill="var(--highlight)"
                                     />
                                 ) : null}
-                                <path d={layout.lit} fill="var(--signal)" />
-                                <path d={layout.over} fill="var(--warning)" />
+                                <path d={cells.lit} fill="var(--signal)" />
+                                <path d={cells.over} fill="var(--warning)" />
                                 <line
                                     x1={0}
                                     x2={layout.width}
@@ -138,6 +156,19 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
                                     strokeDasharray={`${CELL} 2`}
                                 />
                             </svg>
+                            {empty ? (
+                                <FieldMessage
+                                    text={emptyText}
+                                    left={AXIS}
+                                    box={centerKnockout(
+                                        layout.width,
+                                        layout.height,
+                                        layout.pitch,
+                                        sansWidth(emptyText, 11),
+                                        15,
+                                    )}
+                                />
+                            ) : null}
                             {breach !== null ? (
                                 <span
                                     className="mono absolute top-[-2px] inline-flex items-center gap-1 bg-page whitespace-nowrap px-[6px] text-[10px] leading-[14px] text-ink"
@@ -180,9 +211,9 @@ export function CellTrace({ title, values, startAt, limit, limitLabel }: CellTra
     );
 }
 
-type TraceTableProps = { values: number[]; dayOf: (i: number) => number; limit: number };
+type TraceTableProps = { values: number[]; dayOf: (i: number) => number; limit: number; emptyText: string };
 
-function TraceTable({ values, dayOf, limit }: TraceTableProps) {
+function TraceTable({ values, dayOf, limit, emptyText }: TraceTableProps) {
     return (
         <div className="table-scroll max-h-[190px] overflow-y-auto">
             <table className="w-full text-left">
@@ -206,6 +237,7 @@ function TraceTable({ values, dayOf, limit }: TraceTableProps) {
                     })}
                 </tbody>
             </table>
+            {values.length === 0 ? <p className="py-6 text-center text-[11px] text-ink-muted">{emptyText}</p> : null}
         </div>
     );
 }

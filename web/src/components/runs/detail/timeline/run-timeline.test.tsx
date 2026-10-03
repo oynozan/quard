@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Step } from "@/lib/data/runs/types";
-import { expectNoChartsOrTables } from "../../../../../test/empty";
 import { START, UNTRUSTED_PUBLIC, makeStep } from "../../../../../test/runs-timeline-lib/steps";
 import { RunTimeline } from "./run-timeline";
 
@@ -73,16 +72,43 @@ describe("RunTimeline summary", () => {
         );
     });
 
-    it("shows a run with no steps as the pane title and one line", () => {
+    it("keeps the pane, a dash readout, an unlit lane and the legend when the run has no steps", () => {
         render(<RunTimeline steps={[]} lanes={["billing"]} startedAt={START} initialStep="0000000000000001" />);
-        const pane = screen.getByRole("region", { name: "Timeline" });
-        expect(pane.textContent).toBe("TimelineNo steps yet");
-        expect(screen.getByRole("status").textContent).toBe("No steps yet");
-        expect(screen.queryByText("Untrusted context")).toBeNull();
-        expect(screen.queryByText("Legend:")).toBeNull();
-        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
+        expect(screen.getByRole("region", { name: "Timeline" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Table" })).toBeTruthy();
+        expect(readout()).toBe("Untrusted context—steps");
+        const field = screen.getByRole("img", { name: "No steps yet" });
+        expect(field.textContent).toBe("billingNo steps yet");
+        expect(field.querySelectorAll(".bg-chart-field")).toHaveLength(1);
+        expect(screen.getByText("Legend:")).toBeTruthy();
+        expect(screen.getByText("Untrusted public")).toBeTruthy();
         expect(screen.queryByRole("dialog")).toBeNull();
-        expectNoChartsOrTables(pane);
+    });
+
+    it("draws an unlit band for each agent, or one bare band when none is known", () => {
+        const { rerender } = render(<RunTimeline steps={[]} lanes={LANES} startedAt={START} />);
+        const field = () => screen.getByRole("img", { name: "No steps yet" });
+        expect(field().querySelectorAll(".bg-chart-field")).toHaveLength(2);
+        // The sentence sits in the first lane only
+        expect(field().textContent).toBe("billingNo steps yetresearcher");
+        rerender(<RunTimeline steps={[]} lanes={[]} startedAt={START} />);
+        expect(field().querySelectorAll(".bg-chart-field")).toHaveLength(1);
+        expect(field().textContent).toBe("No steps yet");
+    });
+
+    it("narrows the empty lane labels when the pane shrinks below 520 px", () => {
+        render(<RunTimeline steps={[]} lanes={["billing"]} startedAt={START} />);
+        expect(screen.getByTitle("billing").style.width).toBe("102px");
+        report?.(400);
+        expect(screen.getByTitle("billing").style.width).toBe("66px");
+    });
+
+    it("keeps the step table header with no steps yet under it", () => {
+        render(<RunTimeline steps={[]} lanes={["billing"]} startedAt={START} />);
+        fireEvent.click(screen.getByRole("button", { name: "Table" }));
+        expect(screen.getAllByRole("columnheader")).toHaveLength(9);
+        expect(screen.getAllByRole("row")).toHaveLength(1);
+        expect(screen.getByText("No steps yet")).toBeTruthy();
     });
 
     it("draws the steps once a run that had none records some", () => {

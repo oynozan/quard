@@ -57,7 +57,30 @@ describe("guardRows", () => {
         ]);
     });
 
-    it("has no rows when no guard decided anything", () => {
-        expect(guardRows([])).toEqual([]);
+    it("keeps a known guard that decided nothing at 0", () => {
+        const rows = guardRows([
+            { guard: "budget", count: 3 },
+            { guard: "action", count: 2 },
+        ]);
+
+        expect(rows.map((row) => `${row.type} ${row.count}`)).toEqual([
+            "source 0",
+            "action 2",
+            "egress 0",
+            "limit 0",
+            "approval 0",
+            "permission 0",
+            "signature 0",
+            "budget 3",
+        ]);
+    });
+
+    it("lists every known guard at 0 when no guard decided anything", () => {
+        expect(guardRows([])).toEqual(
+            ["source", "action", "egress", "limit", "approval", "permission", "signature"].map((type) => ({
+                type,
+                count: 0,
+            })),
+        );
     });
 });

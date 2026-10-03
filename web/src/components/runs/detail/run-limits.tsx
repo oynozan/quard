@@ -18,7 +18,18 @@ function modeWord(limit: RunLimitUse): string {
 
 // Each run limit as a meter against its default, with the mode it runs in and passed limits first
 export function RunLimits({ limits }: { limits: RunLimitUse[] }) {
-    if (limits.length === 0) return null;
+    if (limits.length === 0) {
+        return (
+            <Pane title="Run limits">
+                <p
+                    role="status"
+                    className="flex h-[84px] items-center justify-center px-3 text-center text-[12px] text-ink-muted"
+                >
+                    No limits reported
+                </p>
+            </Pane>
+        );
+    }
     const sorted = [...limits].sort((a, b) => Number(b.over) - Number(a.over));
     return (
         <Pane title="Run limits">

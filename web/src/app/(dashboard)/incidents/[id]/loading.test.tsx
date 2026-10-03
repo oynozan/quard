@@ -9,9 +9,17 @@ describe("IncidentLoading", () => {
         expect(container.firstElementChild!.getAttribute("aria-busy")).toBe("true");
     });
 
-    it("draws a title bar and one small bar, with no path, replay or verdict skeletons", () => {
+    it("keeps bars for the title, the five path steps, the replay pane and the verdict rows", () => {
         const { container } = render(<IncidentLoading />);
-        expect(container.querySelectorAll(".skel")).toHaveLength(2);
-        expect(container.querySelectorAll("[class*='border']")).toHaveLength(0);
+        const page = container.firstElementChild as HTMLElement;
+        const [back, title, path, columns] = [...page.children].slice(1) as HTMLElement[];
+        expect(back.style.width).toBe("80px");
+        expect(title.style.width).toBe("420px");
+        expect(path.children).toHaveLength(5);
+        for (const step of path.children) expect(step.querySelectorAll(".skel")).toHaveLength(3);
+        const [replay, verdict] = [...columns.children] as HTMLElement[];
+        expect(replay.className).toContain("h-[320px]");
+        expect(verdict.children).toHaveLength(5);
+        for (const row of verdict.children) expect(row.querySelectorAll(".skel")).toHaveLength(2);
     });
 });

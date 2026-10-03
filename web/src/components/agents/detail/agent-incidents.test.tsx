@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { AgentDetail } from "@/lib/data/agents";
 import { version } from "../../../../test/agents-lib-detail/fixtures";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { NOW } from "../../../../test/time";
 import { AgentIncidents } from "./agent-incidents";
 
@@ -10,6 +9,13 @@ type Row = AgentDetail["incidents"][number];
 
 function incident(id: string, roles: Row["roles"], title = `Incident ${id}`): Row {
     return { id, title, roles, openedAt: NOW };
+}
+
+// The table keeps its header row with no rows under it
+function expectHeaderOnly() {
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    expect(headers).toEqual(["Incident", "Version", "Role", "Opened"]);
+    expect(screen.getAllByRole("row")).toHaveLength(1);
 }
 
 describe("AgentIncidents", () => {
@@ -53,21 +59,22 @@ describe("AgentIncidents", () => {
         expect(cells).toEqual(["v1", "v2"]);
     });
 
-    it("says the agent only took damage when no incident names it otherwise, with no table", () => {
+    it("says the agent only took damage under the table header when no incident names it otherwise", () => {
         const { rerender } = render(<AgentIncidents incidents={[incident("inc-3", ["damage"])]} versions={[]} />);
         expect(screen.getByRole("status").textContent).toBe("Damage only, in 1 incident");
+        expectHeaderOnly();
         const two = [incident("inc-3", ["damage"]), incident("inc-4", ["damage"])];
         rerender(<AgentIncidents incidents={two} versions={[]} />);
         expect(screen.getByRole("status").textContent).toBe("Damage only, in 2 incidents");
-        expectNoChartsOrTables();
+        expectHeaderOnly();
     });
 
-    it("says there are no incidents yet, with no table, count or link", () => {
+    it("keeps the count, the link and the table header when there are no incidents yet", () => {
         render(<AgentIncidents incidents={[]} versions={[]} />);
+        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Incidents0");
+        expect(screen.getByRole("link", { name: "View all" }).getAttribute("href")).toBe("/incidents");
+        expectHeaderOnly();
         expect(screen.getByRole("status").textContent).toBe("No incidents yet");
-        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Incidents");
-        expect(screen.queryByRole("link")).toBeNull();
-        expectNoChartsOrTables();
     });
 
     it("dates each incident by when it opened", () => {

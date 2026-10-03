@@ -54,5 +54,13 @@ describe("StepTable", () => {
     it("caps its height so long runs scroll", () => {
         const { container } = render(<StepTable steps={steps()} startedAt={START} height={340} onOpen={() => {}} />);
         expect((container.firstChild as HTMLElement).style.maxHeight).toBe("340px");
+        expect(screen.queryByText("No steps yet")).toBeNull();
+    });
+
+    it("keeps its header row and says so when the run has no steps", () => {
+        render(<StepTable steps={[]} startedAt={START} height={260} onOpen={() => {}} />);
+        expect(screen.getAllByRole("columnheader")).toHaveLength(9);
+        expect(screen.getAllByRole("row")).toHaveLength(1);
+        expect(screen.getByText("No steps yet")).toBeTruthy();
     });
 });

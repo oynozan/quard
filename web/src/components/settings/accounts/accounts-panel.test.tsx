@@ -1,14 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { AccountsPanel } from "./accounts-panel";
 
 describe("AccountsPanel", () => {
-    it("says sign-in is open, with no table and nothing to invite", () => {
+    it("keeps the table header and says under it that sign-in is open, with no rows and nothing to invite", () => {
         render(<AccountsPanel />);
         const panel = screen.getByRole("region", { name: "Accounts" });
-        expect(panel.textContent).toBe("Anyone who signs in with email or GitHub can use Quard");
-        expect(screen.queryByRole("button")).toBeNull();
-        expectNoChartsOrTables(panel);
+        const table = within(panel).getByRole("table", { name: "Accounts" });
+        const headers = within(table)
+            .getAllByRole("columnheader")
+            .map((cell) => cell.textContent);
+        expect(headers).toEqual(["Person", "Added", "Last sign-in"]);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        expect(within(panel).getByRole("heading", { level: 3, name: "No accounts to manage" })).toBeTruthy();
+        expect(within(panel).getByText("Anyone who signs in with email or GitHub can use Quard.")).toBeTruthy();
+        expect(within(panel).queryByRole("button")).toBeNull();
     });
 });

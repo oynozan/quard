@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { EmptyLine } from "@/components/kit/empty";
 import { RunsBrowser } from "@/components/runs/list/runs-browser";
 import { RunsHeading } from "@/components/runs/list/runs-heading";
-import { RunsNoMatch } from "@/components/runs/list/runs-states";
+import { RunsEmpty, RunsNoMatch } from "@/components/runs/list/runs-states";
 import { RunsTable } from "@/components/runs/list/runs-table";
 import { isFiltered, parseRunsFilter } from "@/components/runs/list/lib/params";
 import { listRuns } from "@/lib/data/runs/query";
@@ -13,11 +12,11 @@ export const metadata: Metadata = { title: "Runs" };
 
 export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
     const filter = parseRunsFilter(await searchParams);
-    const filtered = isFiltered(filter);
+    const narrowed = isFiltered(filter);
     // Every run feeds the agent filter, and without filters it is also the list shown
     const [all, matched, now] = await Promise.all([
         listRuns(),
-        filtered
+        narrowed
             ? listRuns({
                   query: filter.q || undefined,
                   agent: filter.agent || undefined,
@@ -26,18 +25,10 @@ export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
             : null,
         requestTime(),
     ]);
-
-    if (all.length === 0) {
-        return (
-            <div className={PAGE_LIST}>
-                <RunsHeading />
-                <EmptyLine>No runs yet</EmptyLine>
-            </div>
-        );
-    }
-
     const runs = matched ?? all;
     const agents = [...new Set(all.flatMap((run) => run.agents))].sort();
+    // With no runs at all there is nothing to filter, so clearing the filters would not help
+    const filtered = narrowed && all.length > 0;
 
     return (
         <div className={PAGE_LIST}>
@@ -46,7 +37,7 @@ export default async function RunsPage({ searchParams }: PageProps<"/runs">) {
                 <p role="status" className="sr-only">
                     {filtered ? `${runs.length} ${runs.length === 1 ? "run matches" : "runs match"}` : ""}
                 </p>
-                {runs.length > 0 ? <RunsTable runs={runs} now={now} /> : <RunsNoMatch />}
+                {runs.length > 0 ? <RunsTable runs={runs} now={now} /> : filtered ? <RunsNoMatch /> : <RunsEmpty />}
             </RunsBrowser>
         </div>
     );

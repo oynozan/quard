@@ -2,7 +2,6 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubBrowser } from "../../../../test/auth-app/browser";
 import { ACTIVITY_START } from "../../../../test/agents-lib-detail/fixtures";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { CallsPerHour } from "./calls-per-hour";
 
 beforeEach(stubBrowser);
@@ -11,6 +10,19 @@ afterEach(() => {
 });
 
 const hours = (count: (hour: number) => number) => Array.from({ length: 24 }, (_, hour) => count(hour));
+
+const EMPTY = "No model calls in the last 24 hours";
+
+// The empty chart keeps its tag, its x labels and an unlit field, with dashes for the readout
+function expectEmptyChart(): HTMLElement {
+    const pane = screen.getByRole("region", { name: "Model calls per hour" });
+    expect(within(pane).getByText("24H")).toBeTruthy();
+    expect(within(pane).getByRole("img", { name: EMPTY })).toBeTruthy();
+    expect(within(pane).getByText(EMPTY)).toBeTruthy();
+    expect(within(pane).getByText("19:00")).toBeTruthy();
+    expect(within(pane).getByText("Total").nextElementSibling?.textContent).toBe("—");
+    return pane;
+}
 
 describe("CallsPerHour", () => {
     it("describes the hourly model calls with the peak hour and the latest count", () => {
@@ -32,12 +44,23 @@ describe("CallsPerHour", () => {
         expect(rows[23]?.firstElementChild?.textContent).toBe("18:00–19:00");
     });
 
-    it("says the agent made no model calls, with no chart, when every hour is empty", () => {
+    it("keeps the chart frame with the knockout sentence when every hour is empty", () => {
         render(<CallsPerHour name="researcher" activity={{ startAt: ACTIVITY_START, perHour: hours(() => 0) }} />);
-        const pane = screen.getByRole("region", { name: "Model calls per hour" });
-        expect(within(pane).getByRole("status").textContent).toBe("No model calls in the last 24 hours");
-        expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
-        expect(within(pane).queryByText("24H")).toBeNull();
-        expectNoChartsOrTables();
+        const pane = expectEmptyChart();
+        fireEvent.click(within(pane).getByRole("button", { name: "Table" }));
+        const table = within(pane).getByRole("table", { name: "researcher made no model calls in the last 24 hours" });
+        expect(
+            within(table)
+                .getAllByRole("columnheader")
+                .map((cell) => cell.textContent),
+        ).toEqual(["Time", "Calls"]);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        expect(within(pane).getByText(EMPTY)).toBeTruthy();
+    });
+
+    it("draws the same empty chart from no hours at all, with no broken numbers", () => {
+        render(<CallsPerHour name="researcher" activity={{ startAt: ACTIVITY_START, perHour: [] }} />);
+        const pane = expectEmptyChart();
+        expect(pane.textContent).not.toMatch(/NaN|Infinity|undefined/);
     });
 });

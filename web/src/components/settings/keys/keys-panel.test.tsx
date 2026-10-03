@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentKey, CreateKeyResult, RevokeKeyResult } from "@/lib/data/settings";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { agentKey, KEYS } from "../../../../test/settings/keys";
 import { NOW } from "../../../../test/time";
 import { KeysPanel } from "./keys-panel";
@@ -136,15 +135,33 @@ describe("KeysPanel", () => {
         expect(screen.queryByText("An active key already has this name.")).toBeNull();
     });
 
-    it("shows the intro, the create button and one line when there are no keys", async () => {
+    it("keeps the intro and the table header when there are no keys, with an empty state under the header", () => {
         setup([]);
-        const panel = screen.getByRole("region", { name: "Agent keys" });
         expect(screen.getByText("Keys the SDK uses to send events.")).toBeTruthy();
-        expect(screen.getByText("No agent keys yet")).toBeTruthy();
-        expectNoChartsOrTables(panel);
+        const table = screen.getByRole("table", { name: "Agent keys: 0 active, 0 revoked" });
+        const headers = within(table)
+            .getAllByRole("columnheader")
+            .map((cell) => cell.textContent);
+        expect(headers).toEqual(["Key", "Created", "Last used", "Status", "Actions"]);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        const empty = screen.getByRole("heading", { level: 3, name: "No agent keys yet" });
+        expect(table.compareDocumentPosition(empty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByText("One key per app that runs agents.")).toBeTruthy();
+    });
 
-        fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    it("opens the create drawer from the empty state's own button", async () => {
+        setup([]);
+        const buttons = screen.getAllByRole("button", { name: "Create key" });
+        expect(buttons).toHaveLength(2);
+        fireEvent.click(buttons[1]);
         await act(async () => {});
         expect(screen.getByRole("dialog", { name: "Create key" })).toBeTruthy();
+    });
+
+    it("drops the empty state once a key is listed", () => {
+        const { reload } = setup([]);
+        reload([agentKey("reports", { createdAt: NOW })]);
+        expect(screen.queryByText("No agent keys yet")).toBeNull();
+        expect(names()).toEqual(["reports"]);
     });
 });

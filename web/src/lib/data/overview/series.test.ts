@@ -12,8 +12,8 @@ describe("bucketSeries", () => {
         expect(bucketSeries(rows, 5)).toEqual([2, 0, 0, 5, 0]);
     });
 
-    it("gives no series when nothing happened, so no chart is drawn", () => {
-        expect(bucketSeries([], 144)).toEqual([]);
+    it("keeps every bucket at 0 when nothing happened, so the chart keeps its frame", () => {
+        expect(bucketSeries([], 144)).toEqual(Array<number>(144).fill(0));
     });
 });
 
@@ -31,7 +31,7 @@ describe("blockRates", () => {
         expect(blockRates([{ day: 29, calls: 3, blocked: 0 }], 30)).toEqual(Array<number>(30).fill(0));
     });
 
-    it("gives no series when no day had calls", () => {
+    it("gives no series when no day had calls, since there is no rate to draw", () => {
         expect(blockRates([], 30)).toEqual([]);
         expect(blockRates([{ day: 1, calls: 0, blocked: 0 }], 30)).toEqual([]);
     });

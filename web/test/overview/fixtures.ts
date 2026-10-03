@@ -134,15 +134,23 @@ export function overview(fields: Partial<OverviewData> = {}): OverviewData {
     };
 }
 
-// A project whose runs are all older than every window
+const zeros = (length: number) => Array<number>(length).fill(0);
+
+// A project whose runs are all older than every window, as getOverview gives it
 export const QUIET: OverviewData = {
     greeting: "Good evening. No agents are running.",
-    activity: { values: [], endsAt: HERO_END },
-    runsPerHour: [],
+    activity: { values: zeros(144), endsAt: HERO_END },
+    runsPerHour: zeros(24),
     coverage: { guarded: 0, seen: 0 },
     blockRate: { values: [], limit: 2, startAt: RATE_START },
     decisions24h: { blocked: 0, asked: 0 },
     events: [],
     agents: [],
-    guardCounts: [],
+    guardCounts: ["source", "action", "egress", "limit", "approval", "permission", "signature"].map((type) => ({
+        type,
+        count: 0,
+    })),
 };
+
+// A new install, before any project or run
+export const NEW_INSTALL: OverviewData = { ...QUIET, greeting: "Good evening." };

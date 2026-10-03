@@ -1,7 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubBrowser } from "../../../../../test/auth-app/browser";
-import { expectNoChartsOrTables } from "../../../../../test/empty";
 import { RUN, T2, at, storedRun } from "../../../../../test/runs-fixture";
 import { runDetailOf } from "@/lib/data/runs/live/detail";
 import type { RunDetail } from "@/lib/data/runs/types";
@@ -46,14 +45,16 @@ describe("RunPage", () => {
         expect(screen.getByRole("dialog").textContent).toContain("payInvoice");
     });
 
-    it("shows a run that has only started with one timeline line and no charts or tables", async () => {
+    it("keeps every pane for a run that has only started, with an empty timeline and no limits", async () => {
         const started = { ...storedRun(), steps: [], labels: [], decisions: [], lastEventAt: at(0) };
         query.getRun.mockResolvedValueOnce(runDetailOf(started, at(600).getTime()));
         render(await RunPage(props(RUN)));
-        expect(screen.getByRole("region", { name: "Timeline" }).textContent).toBe("TimelineNo steps yet");
+        const timeline = screen.getByRole("region", { name: "Timeline" });
+        expect(within(timeline).getByRole("button", { name: "Table" })).toBeTruthy();
+        expect(within(timeline).getByRole("img", { name: "No steps yet" }).textContent).toBe("billingNo steps yet");
+        expect(within(timeline).getByText("Legend:")).toBeTruthy();
         expect(screen.getByRole("region", { name: "Run graph" })).toBeTruthy();
-        expect(screen.queryByRole("region", { name: "Run limits" })).toBeNull();
-        expectNoChartsOrTables();
+        expect(screen.getByRole("region", { name: "Run limits" }).textContent).toBe("Run limitsNo limits reported");
     });
 
     it("shows the not-found page for an id that is not 32 hex characters, without a lookup", async () => {

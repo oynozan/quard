@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Absent } from "@/components/kit/detail/detail-list";
-import { EmptyLine } from "@/components/kit/empty";
 import { TextLink } from "@/components/kit/links";
 import { Pane } from "@/components/kit/pane";
 import type { AgentEdge } from "@/lib/data/agents";
@@ -69,13 +68,6 @@ export function AgentPermissions({ name, links }: { name: string; links: AgentEd
     const handsTo = peersOf(out, (edge) => edge.handoffs, "to");
     const handsFrom = peersOf(into, (edge) => edge.handoffs, "from");
 
-    if (!delegatesTo.length && !delegatedBy.length && !handsTo.length && !handsFrom.length) {
-        return (
-            <Pane title="Permissions">
-                <EmptyLine inset>{`No delegations in the last ${WINDOW_DAYS} days`}</EmptyLine>
-            </Pane>
-        );
-    }
     return (
         <Pane title="Permissions" tag={`${WINDOW_DAYS}D`}>
             <Block title="Delegates to">

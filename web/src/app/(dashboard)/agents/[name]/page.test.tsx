@@ -1,8 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubBrowser } from "../../../../../test/auth-app/browser";
 import { detail } from "../../../../../test/agents-lib-detail/fixtures";
-import { expectNoChartsOrTables } from "../../../../../test/empty";
 import { NOW } from "../../../../../test/time";
 import type { AgentDetail } from "@/lib/data/agents";
 import AgentPage, { generateMetadata } from "./page";
@@ -47,12 +46,15 @@ describe("AgentPage", () => {
         expect(screen.getByText("claude-sonnet").parentElement?.textContent).toBe("claude-sonnet·seen 3 h ago");
     });
 
-    it("shows a quiet agent as headings and short lines, with no charts or tables", async () => {
+    it("keeps every pane for a quiet agent, with empty charts and table headers", async () => {
         render(await AgentPage(props("researcher")));
-        expect(screen.getByText("No calls yet")).toBeTruthy();
-        expect(screen.getByText("No delegations in the last 30 days")).toBeTruthy();
-        expect(screen.getByText("No model calls in the last 24 hours")).toBeTruthy();
-        expectNoChartsOrTables();
+        expect(screen.getByText("researcher has made no calls yet")).toBeTruthy();
+        expect(screen.getByRole("img", { name: "No model calls in the last 24 hours" })).toBeTruthy();
+        expect(screen.getAllByRole("button", { name: "Table" })).toHaveLength(2);
+        for (const name of ["Versions", "Incidents"]) {
+            expect(within(screen.getByRole("region", { name })).getAllByRole("columnheader")).toHaveLength(4);
+        }
+        expect(screen.getByText("None · starts its own runs")).toBeTruthy();
     });
 
     it("shows the not-found page for an unknown agent", async () => {

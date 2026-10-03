@@ -1,7 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { RetentionRow } from "@/lib/data/settings";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { RETENTION } from "../../../../test/settings/data";
 import { RetentionPanel } from "./retention-panel";
 
@@ -49,10 +48,21 @@ describe("RetentionPanel", () => {
         expect(screen.queryByRole("heading", { name: "Detector" })).toBeNull();
     });
 
-    it("shows one line and no table before the install has a project", () => {
+    it("keeps the table header and the redaction facts before the install has a project", () => {
         render(<RetentionPanel retention={[]} />);
-        const panel = screen.getByRole("region", { name: "Retention" });
-        expect(panel.textContent).toBe("No project yet");
-        expectNoChartsOrTables(panel);
+        const table = screen.getByRole("table", { name: "What Quard keeps and for how long" });
+        const headers = within(table)
+            .getAllByRole("columnheader")
+            .map((cell) => cell.textContent);
+        expect(headers).toEqual(["Data", "Kept for"]);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        expect(screen.getByRole("heading", { level: 3, name: "No project yet" })).toBeTruthy();
+        expect(screen.getByText("Creating the first agent key sets up the project.")).toBeTruthy();
+        expect(detail("Stored as").textContent).toBe("HMAC-SHA-256");
+    });
+
+    it("shows no empty state once the project has retention rows", () => {
+        render(<RetentionPanel retention={RETENTION} />);
+        expect(screen.queryByText("No project yet")).toBeNull();
     });
 });

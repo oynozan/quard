@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getIncident } from "@/lib/data/incidents/query";
 import { formatLongDate } from "@/lib/format";
 import { INCIDENT_DETAIL } from "../../../../../test/incidents/detail";
+import { replayOf } from "../../../../../test/incidents-search/replay";
 import { NOW } from "../../../../../test/time";
 import IncidentPage, { generateMetadata } from "./page";
 
@@ -50,6 +51,19 @@ describe("IncidentPage", () => {
         const replay = within(screen.getByRole("region", { name: "Replay" }));
         expect(replay.getByText("Confirmed")).toBeTruthy();
         expect(screen.getByText(INCIDENT_DETAIL.reviewer!.paragraphs[0])).toBeTruthy();
+        expect(within(screen.getByRole("region", { name: "Verdict" })).getByText("bad input")).toBeTruthy();
+    });
+
+    it("keeps the replay and AI reviewer panes before the first round and note", async () => {
+        vi.mocked(getIncident).mockResolvedValueOnce({ ...INCIDENT_DETAIL, replay: replayOf([]), reviewer: null });
+        render(await IncidentPage(props(incident.id)));
+        const replay = within(screen.getByRole("region", { name: "Replay results" }));
+        expect(replay.getByText("0 × 5 + 5")).toBeTruthy();
+        expect(replay.getByRole("img").getAttribute("aria-label")).toBe("No replay rounds yet.");
+        expect(replay.getByText("No rounds yet")).toBeTruthy();
+        const [, reviewer] = screen.getAllByRole("region", { name: "AI reviewer" });
+        expect(within(reviewer).getByText("not the verdict")).toBeTruthy();
+        expect(within(reviewer).getByRole("status").textContent).toBe("No explanation yet");
         expect(within(screen.getByRole("region", { name: "Verdict" })).getByText("bad input")).toBeTruthy();
     });
 

@@ -1,7 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApprovalInfo } from "@/lib/data/runs/types";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { makeAgent, makeDetail, makeGuard, makeRow, makeStep } from "../../../../test/runs-detail-list/fixtures";
 import { RunView } from "./run-view";
 
@@ -45,7 +44,7 @@ describe("RunView", () => {
         expect(screen.queryByRole("dialog")).toBeNull();
     });
 
-    it("shows a run that has only started as its heading, summary, graph and one timeline line", () => {
+    it("keeps every pane for a run that has only started, with an empty timeline and no limits", () => {
         const agent = makeAgent({ name: "billing", version: "", model: "" });
         const run = makeDetail({
             summary: makeRow({ steps: 0, costUsd: 0, decisions: { allowed: 0, asked: 0, blocked: 0 } }),
@@ -55,12 +54,18 @@ describe("RunView", () => {
             limits: [],
         });
         render(<RunView run={run} />);
-        expect(screen.getByRole("region", { name: "Timeline" }).textContent).toBe("TimelineNo steps yet");
-        expect(screen.queryByRole("region", { name: "Run limits" })).toBeNull();
-        // Without limits the graph takes the whole width
-        expect(graphRow().className).not.toContain("grid");
+        const timeline = screen.getByRole("region", { name: "Timeline" });
+        expect(within(timeline).getByRole("button", { name: "Table" })).toBeTruthy();
+        expect(within(timeline).getByText("Untrusted context").parentElement!.textContent).toBe(
+            "Untrusted context—steps",
+        );
+        expect(within(timeline).getByRole("img", { name: "No steps yet" }).textContent).toBe("billingNo steps yet");
+        expect(within(timeline).getByText("Legend:")).toBeTruthy();
+        expect(screen.getByRole("region", { name: "Run graph" })).toBeTruthy();
+        expect(screen.getByRole("region", { name: "Run limits" }).textContent).toBe("Run limitsNo limits reported");
+        // The limits keep their column beside the graph
+        expect(graphRow().className).toContain("grid-cols-[minmax(0,1fr)_268px]");
         expect(decisions()).toBe("0allowed");
-        expectNoChartsOrTables();
     });
 
     it("links to the approval from the heading when no step is waiting", () => {

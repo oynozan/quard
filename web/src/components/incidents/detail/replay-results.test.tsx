@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Replay } from "@/lib/data/incidents/types";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { replayOf } from "../../../../test/incidents-search/replay";
 import { ReplayResults } from "./replay-results";
 
@@ -19,25 +18,45 @@ function chart() {
 }
 
 describe("ReplayResults", () => {
-    it("shows one line and nothing drawn before the first round", () => {
-        const { container } = show(replayOf([]));
-        expect(container.textContent).toBe("No replay rounds yet");
-        expect(screen.getByRole("status").textContent).toBe("No replay rounds yet");
-        expect(screen.queryByText("Replay results")).toBeNull();
-        expectNoChartsOrTables(container);
+    it("keeps the pane with dashes and an empty field before the first round", () => {
+        show(replayOf([]));
+        expect(screen.getByRole("region", { name: "Replay results" })).toBeTruthy();
+        expect(screen.getByText("0 × 5 + 5")).toBeTruthy();
+        expect(readouts()).toBe("With—harmfulWithout—harmfulp—vs 0.0182");
+        expect(screen.getByText("Not decided yet")).toBeTruthy();
+        expect(chart().getAttribute("aria-label")).toBe("No replay rounds yet.");
+        expect(chart().textContent).toBe("RoundWithWithoutp after roundNo rounds yet");
+        const meter = screen.getByRole("progressbar");
+        expect(meter.previousElementSibling?.textContent).toBe("Cost $0.0000 / $5.00 cap");
+        expect(screen.getByRole("button", { name: "Setup" })).toBeTruthy();
     });
 
-    it("shows the first round running, with no readouts and no table yet", () => {
+    it("keeps the table header over an empty table view", () => {
+        show(replayOf([]));
+        fireEvent.click(screen.getByRole("button", { name: "Table" }));
+        const table = screen.getByRole("table", { name: "Replay rounds" });
+        expect(
+            within(table)
+                .getAllByRole("row")
+                .map((row) => row.textContent),
+        ).toEqual(["RoundWithWithoutpCost"]);
+        expect(screen.getByText("No rounds yet")).toBeTruthy();
+        expect(table.parentElement?.style.height).toBe("150px");
+    });
+
+    it("shows the first round running, with dashes until it finishes", () => {
         show(replayOf([], [], { inProgress: true }));
         expect(screen.getByText("Replaying round 1…")).toBeTruthy();
         expect(screen.getByText("0 × 5 + 5")).toBeTruthy();
-        expect(screen.queryByText(/^vs /)).toBeNull();
+        expect(readouts()).toBe("With—harmfulWithout—harmfulp—vs 0.0182");
         expect(chart().getAttribute("aria-label")).toBe("No replay rounds yet.");
         const pending = within(chart()).getByText("Round 1").parentElement as HTMLElement;
         expect(pending.textContent).toBe("Round 1Running…");
+        expect(within(chart()).queryByText("No rounds yet")).toBeNull();
         fireEvent.click(screen.getByRole("button", { name: "Table" }));
-        expect(screen.getByText("No finished rounds yet")).toBeTruthy();
-        expect(screen.queryByRole("table")).toBeNull();
+        const table = screen.getByRole("table", { name: "Replay rounds" });
+        expect(within(table).getAllByRole("columnheader")).toHaveLength(5);
+        expect(screen.getByText("No rounds yet")).toBeTruthy();
     });
 
     it("reads the running totals after the last round in the readouts and the chart's label", () => {
@@ -51,6 +70,7 @@ describe("ReplayResults", () => {
         expect(chart().getAttribute("aria-label")).toBe(
             "2 rounds. Harmful with the content 8 of 10, without 1 of 10. p 0.0027.",
         );
+        expect(within(chart()).queryByText("No rounds yet")).toBeNull();
     });
 
     it("names a confirmed replay", () => {

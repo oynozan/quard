@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
-import { EmptyLine } from "@/components/kit/empty";
 import { Greeting } from "@/components/overview/greeting";
 import { columnOverlay } from "@/lib/charts/cells";
 import { heroLayout, HERO_DATA_ROWS } from "@/lib/charts/hero";
 import { formatClock, formatCompact, formatInt } from "@/lib/format";
 import { useWidth } from "@/lib/hooks/use-width";
-import { MINUTE } from "@/lib/time";
+import { DAY, MINUTE } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { ChartTooltip, HeaderDivider, LiveMark, Readout, TableToggle } from "./chart-parts";
+import { FieldMessage } from "./field-parts";
+import { sansWidth } from "./layout/format";
+import { centerKnockout } from "./layout/sweep";
 
 const BUCKET_MS = 10 * MINUTE;
+const EMPTY = "No model calls in the last 24 hours";
 
 type HeroChartProps = {
     greeting: string;
@@ -20,27 +23,15 @@ type HeroChartProps = {
     live?: boolean;
 };
 
-const LABEL = "Model calls in the last 24 hours";
-
 // The greeting over the last 24 hours of model calls as green cell columns
-export function HeroChart(props: HeroChartProps) {
-    const total = props.values.reduce((sum, v) => sum + v, 0);
-    if (total === 0) {
-        return (
-            <section aria-label={LABEL} className="reveal">
-                <Greeting text={props.greeting} className="mb-[18px]" />
-                <EmptyLine>No model calls in the last 24 hours</EmptyLine>
-            </section>
-        );
-    }
-    return <HeroField {...props} total={total} />;
-}
-
-function HeroField({ greeting, values, endsAt, live = true, total }: HeroChartProps & { total: number }) {
+export function HeroChart({ greeting, values: given, endsAt, live = true }: HeroChartProps) {
     const [ref, width] = useWidth<HTMLDivElement>(978);
     const [hover, setHover] = useState<number | null>(null);
     const [table, setTable] = useState(false);
 
+    const values = given.length > 0 ? given : Array<number>(DAY / BUCKET_MS).fill(0);
+    const total = values.reduce((sum, v) => sum + v, 0);
+    const empty = total === 0;
     const startsAt = endsAt - values.length * BUCKET_MS;
     const layout = heroLayout(values, Math.max(240, width));
     const { field, buckets, bucketSize, peak } = layout;
@@ -76,16 +67,18 @@ function HeroField({ greeting, values, endsAt, live = true, total }: HeroChartPr
         setHover(Math.min(last, Math.max(0, next[event.key])));
     }
 
+    const clear = () => setHover(null);
+    const reading = empty ? {} : { onPointerMove, onPointerLeave: clear, onKeyDown, onBlur: clear };
     const summary = `Model calls per ${per} over the last 24 hours. Peak ${formatInt(peak.value)} at ${formatClock(
         bucketStart(peak.index),
     )}, now ${formatInt(buckets[buckets.length - 1])}.`;
 
     return (
-        <section aria-label={LABEL} className="reveal">
+        <section aria-label="Model calls in the last 24 hours" className="reveal">
             <div className="mb-[18px] flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
                 <Greeting text={greeting} />
                 <div className="flex items-center gap-[14px] pb-[5px]">
-                    <Readout label={`Model calls per ${per}`} value={formatInt(total)} suffix="in 24h" />
+                    <Readout label={`Model calls per ${per}`} value={empty ? "—" : formatInt(total)} suffix="in 24h" />
                     <LiveMark live={live} />
                     <HeaderDivider />
                     <TableToggle pressed={table} onToggle={() => setTable(!table)} />
@@ -94,10 +87,10 @@ function HeroField({ greeting, values, endsAt, live = true, total }: HeroChartPr
 
             <div ref={ref} className="group relative">
                 {table ? (
-                    <HeroTable buckets={buckets} bucketStart={bucketStart} height={field.height} />
+                    <HeroTable buckets={empty ? [] : buckets} bucketStart={bucketStart} height={field.height} />
                 ) : (
                     <>
-                        {/* Y ticks hang in the page gutter and show while the chart is hovered or focused. */}
+                        {/* Y ticks hang in the page gutter and show while the chart is hovered or focused */}
                         <div
                             aria-hidden
                             className={cn(
@@ -109,26 +102,23 @@ function HeroField({ greeting, values, endsAt, live = true, total }: HeroChartPr
                         >
                             {layout.ticks.map((tick) => (
                                 <span key={tick.value} className="absolute right-0" style={{ top: tick.y - 5 }}>
-                                    {formatCompact(tick.value)}
+                                    {empty ? "—" : formatCompact(tick.value)}
                                 </span>
                             ))}
                             <span className="absolute right-0" style={{ top: field.height - 10 }}>
-                                0
+                                {empty ? "—" : "0"}
                             </span>
                         </div>
 
                         <svg
                             role="img"
-                            aria-label={summary}
-                            tabIndex={0}
+                            aria-label={empty ? EMPTY : summary}
+                            tabIndex={empty ? -1 : 0}
                             width={field.width}
                             height={field.height}
                             className="block outline-offset-[6px]"
                             shapeRendering="crispEdges"
-                            onPointerMove={onPointerMove}
-                            onPointerLeave={() => setHover(null)}
-                            onKeyDown={onKeyDown}
-                            onBlur={() => setHover(null)}
+                            {...reading}
                         >
                             <path d={field.field} fill="var(--chart-field)" />
                             {layout.ticks.map((tick) => (
@@ -141,7 +131,7 @@ function HeroField({ greeting, values, endsAt, live = true, total }: HeroChartPr
                                     fill="var(--chart-grid)"
                                 />
                             ))}
-                            <path d={field.lit.lit} fill="var(--signal)" />
+                            <path d={field.lit.lit ?? ""} fill="var(--signal)" />
                             {overlay ? (
                                 <>
                                     <path d={overlay.unlit} fill="var(--highlight)" />
@@ -150,6 +140,13 @@ function HeroField({ greeting, values, endsAt, live = true, total }: HeroChartPr
                             ) : null}
                             {live ? <rect className="cursor-blink" {...layout.cursor} fill="var(--signal)" /> : null}
                         </svg>
+
+                        {empty ? (
+                            <FieldMessage
+                                text={EMPTY}
+                                box={centerKnockout(field.width, field.height, field.pitch, sansWidth(EMPTY, 11), 15)}
+                            />
+                        ) : null}
 
                         <div
                             aria-hidden
@@ -221,6 +218,7 @@ function HeroTable({ buckets, bucketStart, height }: HeroTableProps) {
                     ))}
                 </tbody>
             </table>
+            {buckets.length === 0 ? <p className="py-6 text-center text-[11px] text-ink-muted">{EMPTY}</p> : null}
         </div>
     );
 }

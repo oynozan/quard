@@ -1,6 +1,5 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { expectNoChartsOrTables } from "../../../../test/empty";
 import { IN_USE, NEW_INSTALL } from "../../../../test/settings/data";
 import { agentKey } from "../../../../test/settings/keys";
 import SettingsPage, { metadata } from "./page";
@@ -32,19 +31,19 @@ describe("SettingsPage", () => {
         expect(metadata.title).toBe("Settings");
     });
 
-    it("counts only the active keys, on their own tab", async () => {
+    it("counts the active keys and the reported rules on their tabs", async () => {
         await showPage();
         expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
         expect(tab(/^Agent keys/).textContent).toBe("Agent keys3");
         expect(tab(/^Accounts/).textContent).toBe("Accounts");
         expect(tab(/^Retention/).textContent).toBe("Retention");
-        expect(tab(/^Rules from code/).textContent).toBe("Rules from code");
+        expect(tab(/^Rules from code/).textContent).toBe("Rules from code0");
     });
 
-    it("shows no key count when no key is active", async () => {
+    it("counts zero keys when no key is active", async () => {
         mocks.getSettings.mockResolvedValue({ ...IN_USE, keys: [agentKey("old", { revokedAt: 0 })] });
         await showPage();
-        expect(tab(/^Agent keys/).textContent).toBe("Agent keys");
+        expect(tab(/^Agent keys/).textContent).toBe("Agent keys0");
     });
 
     it("ages keys against the request time and revokes them through the server action", async () => {
@@ -71,15 +70,27 @@ describe("SettingsPage", () => {
     });
 
     it.each([
-        ["keys", "No agent keys yet"],
-        ["accounts", "Anyone who signs in with email or GitHub can use Quard"],
-        ["retention", "No project yet"],
-        ["code", "Nothing reported yet"],
-    ])("shows the %s tab of a new install as one line, with no tables or charts", async (name, line) => {
+        ["keys", "Key", "No agent keys yet"],
+        ["accounts", "Person", "No accounts to manage"],
+        ["retention", "Data", "No project yet"],
+    ])("keeps the %s table header on a new install, with its empty state under it", async (name, first, title) => {
         mocks.getSettings.mockResolvedValue(NEW_INSTALL);
         await showPage({ tab: name });
-        expect(screen.getByText(line)).toBeTruthy();
-        expect(tab(/^Agent keys/).textContent).toBe("Agent keys");
-        expectNoChartsOrTables();
+        const table = screen.getByRole("table");
+        expect(within(table).getAllByRole("columnheader")[0].textContent).toBe(first);
+        expect(within(table).getAllByRole("row")).toHaveLength(1);
+        expect(screen.getByRole("heading", { level: 3, name: title })).toBeTruthy();
+        expect(tab(/^Agent keys/).textContent).toBe("Agent keys0");
+    });
+
+    it("keeps every rules-from-code section and table header on a new install", async () => {
+        mocks.getSettings.mockResolvedValue(NEW_INSTALL);
+        await showPage({ tab: "code" });
+        expect(tab(/^Rules from code/).textContent).toBe("Rules from code0");
+        const firstHeaders = screen.getAllByRole("table").map((table) => within(table).getAllByRole("columnheader")[0]);
+        expect(firstHeaders.map((cell) => cell.textContent)).toEqual(["App", "Rule", "Override"]);
+        expect(screen.getByText("No SDK connected yet")).toBeTruthy();
+        expect(screen.getByRole("heading", { level: 3, name: "No rules reported yet" })).toBeTruthy();
+        expect(screen.getByText("No origin overrides yet")).toBeTruthy();
     });
 });

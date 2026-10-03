@@ -46,9 +46,12 @@ describe("RunLimits", () => {
         expect(alerted).toEqual([true, true, false]);
     });
 
-    it("draws nothing when no limits are reported", () => {
-        const { container } = render(<RunLimits limits={[]} />);
-        expect(container.childElementCount).toBe(0);
-        expect(screen.queryByRole("region", { name: "Run limits" })).toBeNull();
+    it("keeps the pane with a quiet line when no limits are reported", () => {
+        render(<RunLimits limits={[]} />);
+        const pane = screen.getByRole("region", { name: "Run limits" });
+        expect(screen.getByRole("heading", { level: 2, name: "Run limits" })).toBeTruthy();
+        expect(screen.getByRole("status").textContent).toBe("No limits reported");
+        expect(pane.textContent).toBe("Run limitsNo limits reported");
+        expect(screen.queryByRole("list")).toBeNull();
     });
 });
