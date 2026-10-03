@@ -101,13 +101,15 @@ function ibanSource(spec: GuardSpec, facts: CallFacts): Verdict {
     if (iban.label.generated)
         return verdict(spec, "block", "The IBAN was model-generated, not taken from supplier records");
     const first = iban.label.appearances[0];
+    if (!first) return verdict(spec, "block", "The IBAN does not appear in supplier records");
     return verdict(spec, "block", `The IBAN first appeared in ${placeOf(first.label.origin)}, not in supplier records`);
 }
 
 function emailEgress(spec: GuardSpec, facts: CallFacts): Verdict {
     const to = find(facts, "to");
     if (!to) return verdict(spec, "allow", "No recipient");
-    const domain = mainDomain(hostOf(to.raw, "email") ?? "");
+    // An email always has a host
+    const domain = mainDomain(hostOf(to.raw, "email")!);
     if (EGRESS_ALLOW.includes(domain)) return verdict(spec, "allow", `Recipient domain ${domain} is on the allowlist`);
     const trusted = to.label.appearances.find((a) => a.label.trust === "trusted");
     if (trusted) return verdict(spec, "allow", `Recipient is on file in ${trusted.label.origin}`);
