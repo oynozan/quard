@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { cleanText, combineLabels, extractValues, type ContextLabel, type Label } from "@quard/shared";
 
 export type Match = "exact" | "host" | "domain";
@@ -54,12 +54,15 @@ export function printOf(text: string): string {
 
 // Everything the model read in one run, with labels and value keys
 export class ContentIndex {
+    // A run resumed in another process gets its own index, so ids carry a random tag
+    readonly #tag = randomBytes(4).toString("hex");
     readonly #records: ContentRecord[] = [];
     readonly #byKey = new Map<string, ContentRecord[]>();
     readonly #seen = new Set<string>();
 
     #push(entry: Omit<ContentRecord, "id" | "order">): ContentRecord {
-        const record: ContentRecord = { ...entry, id: `c${this.#records.length + 1}`, order: this.#records.length };
+        const id = `c${this.#records.length + 1}-${this.#tag}`;
+        const record: ContentRecord = { ...entry, id, order: this.#records.length };
         this.#records.push(record);
         for (const key of record.keys) {
             this.#byKey.set(key, [...(this.#byKey.get(key) ?? []), record]);

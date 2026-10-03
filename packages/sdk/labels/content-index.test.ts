@@ -12,7 +12,7 @@ describe("ContentIndex", () => {
         expect(record?.keys).toContain(`iban:${IBAN}`);
         expect(index.lookup([`iban:${IBAN}`])).toEqual([
             {
-                contentId: "c1",
+                contentId: expect.stringMatching(/^c1-[0-9a-f]{8}$/),
                 origin: "web:evil.com",
                 trust: "untrusted",
                 sensitivity: "public",
@@ -92,6 +92,15 @@ describe("ContentIndex options", () => {
         expect(index.lookup(["email:new@a.com"]).map((o) => o.origin)).toEqual(["user"]);
     });
 
+    it("gives ids no other index of the same run reuses", () => {
+        const here = new ContentIndex().add("hello", labelFor("user"), "s1");
+        const elsewhere = new ContentIndex().add("hello", labelFor("user"), "s1");
+
+        expect(here?.id).toMatch(/^c1-/);
+        expect(elsewhere?.id).toMatch(/^c1-/);
+        expect(here?.id).not.toBe(elsewhere?.id);
+    });
+
     it("takes in what another run read, once", () => {
         const first = new ContentIndex();
         first.add(`page says ${IBAN}`, labelFor("web:evil.com"), "s1");
@@ -102,7 +111,11 @@ describe("ContentIndex options", () => {
         second.absorb(first);
 
         expect(second.size).toBe(2);
-        expect(second.lookup([`iban:${IBAN}`])[0]).toMatchObject({ origin: "web:evil.com", order: 1, contentId: "c2" });
+        expect(second.lookup([`iban:${IBAN}`])[0]).toMatchObject({
+            origin: "web:evil.com",
+            order: 1,
+            contentId: expect.stringMatching(/^c2-/),
+        });
         expect(second.context().trust).toBe("untrusted");
     });
 });
