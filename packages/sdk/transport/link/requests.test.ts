@@ -54,6 +54,24 @@ describe("requests to control", () => {
         expect(socket.held).toBe(false);
     });
 
+    it("matches the answer to a run count the same way", async () => {
+        const { fake, requests } = setup();
+        const socket = fake.connect();
+        const runCount: RunCountMessage = {
+            type: "run_count",
+            id: ID,
+            runId: "d".repeat(32),
+            counter: "steps",
+            add: 1,
+        };
+
+        const reply = requests.request(runCount, { ms: 5000 });
+        expect(socket.sent.at(-1)).toEqual(runCount);
+        socket.reply({ type: "counted", id: ID, ok: true, used: 12 });
+
+        expect(await reply).toEqual({ type: "counted", id: ID, ok: true, used: 12 });
+    });
+
     it("answers undefined at once when control is away", async () => {
         const { fake, requests } = setup();
 
