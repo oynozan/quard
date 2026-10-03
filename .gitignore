@@ -4,3 +4,5 @@ coverage
 .env*
 *.tsbuildinfo
 .DS_Store
+# Local examples to try the guards
+sandbox/
