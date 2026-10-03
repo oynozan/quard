@@ -81,12 +81,13 @@ function runIds(): Set<string> {
     return new Set(events.flatMap((event) => ("runId" in event ? [event.runId] : [])));
 }
 
-function run(scripts: Record<string, Turn[]>, tools: ReturnType<typeof makeTools>, research = false) {
+// With a researcher, the orchestrator reads pages through an agent run as a tool
+function run(scripts: Record<string, Turn[]>, tools: ReturnType<typeof makeTools>, withResearcher = false) {
     const billing = testAgent("billing", { tools: [tools.payInvoice] });
     const researcher = testAgent("researcher", { tools: [tools.fetchPage] });
     const asTool = researcher.asTool({ toolName: "research", toolDescription: "Read a web page" });
     const orchestrator = testAgent("orchestrator", {
-        tools: research ? [asTool] : [tools.fetchPage, tools.getSupplier],
+        tools: withResearcher ? [asTool] : [tools.fetchPage, tools.getSupplier],
         handoffs: [billing],
     });
     const { client, bodies } = scriptedClient(scripts);

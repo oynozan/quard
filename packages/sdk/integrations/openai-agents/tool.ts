@@ -29,7 +29,7 @@ export function guardedTool<TParameters extends ToolInputParameters = undefined,
             try {
                 return await extras.run({ context, details }, () => guarded(input));
             } catch (error) {
-                // The guardrail stops the run with it
+                // Quard's guardrail stops the run with it
                 if (error instanceof GuardBlockedError) {
                     return error;
                 }
