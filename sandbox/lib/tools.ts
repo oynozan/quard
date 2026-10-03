@@ -36,6 +36,17 @@ const TOOLS = [
         message: ["string", "Message text"],
     }),
     define("crmLookup", "Look up a company in our CRM", { company: ["string", "Company name"] }),
+    define("delegate", "Hand a task to another agent and get its reply", {
+        to: ["string", "Agent name"],
+        brief: ["string", "What the agent should do, with every detail it needs"],
+    }),
+    define("readMessage", "Read the newest message from another agent", {}),
+    define("sendMessage", "Send a message to another agent", {
+        to: ["string", "Agent name"],
+        text: ["string", "Message text"],
+    }),
+    define("saveNote", "Save a note for later", { key: ["string", "Short name"], text: ["string", "Note text"] }),
+    define("readNote", "Read a saved note", { key: ["string", "Short name"] }),
 ];
 
 export function definitions(names: string[]): OpenAI.Responses.FunctionTool[] {
