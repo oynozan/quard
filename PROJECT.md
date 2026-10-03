@@ -8,8 +8,9 @@ Every piece of content gets a label that says where it came from. Guards use the
 
 - Product spec: [Agent monitor, SDK and guards](https://claude.ai/artifact/GA9gWjEHoHnuzDGVdLBx43). It has three tabs: the spec, "Guards in depth" and "Open questions".
 - Q1 to Q27 are the questions in the spec's "Open questions" tab. The [Decision record](#decision-record) lists each answer and who decided it.
-- This file records the decisions made on 2026-10-03. Where it disagrees with the spec, this file wins. The differences are listed in [Changes to the spec](#changes-to-the-spec).
+- This file records the decisions made on 2026-10-03. Where it disagrees with the spec, this file wins. Past changes to the spec are listed in [Changes to the spec](#changes-to-the-spec).
 - Decisions marked **Claude's pick** were chosen by Claude after the owner said "go with your own picks". Review those first.
+- Build order: [ROADMAP.md](ROADMAP.md).
 - Coding rules: [AGENTS.md](AGENTS.md). Dashboard look and feel: [web/DESIGN.md](web/DESIGN.md).
 
 ## Contents
@@ -637,7 +638,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 
 ## Changes to the spec
 
-Where this file differs from the spec text:
+These points changed the spec. The spec doc was updated to match them on 2026-10-03.
 
 1. **monitor wraps the client.** The spec shows `monitor(await client.responses.create(...))`. Now `monitor.wrap(client)` wraps the client once (Q1).
 2. **Approvals don't expire.** The spec says an approval is void "if any argument changes or it expires". Now it is void only if an argument changes (Q24).
