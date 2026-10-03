@@ -1,5 +1,6 @@
 export { readPort } from "./config/port.ts";
 export {
+    configErrorEvent,
     contentEvent,
     decisionEvent,
     modelCallEvent,
@@ -9,6 +10,7 @@ export {
     warningEvent,
 } from "./events/schema.ts";
 export type {
+    ConfigErrorEvent,
     ContentEvent,
     DecisionEvent,
     ModelCallEvent,
@@ -36,6 +38,8 @@ export { findIds, isIdentifierLike } from "./normalize/identifier.ts";
 export { findPaths, normalizePath } from "./normalize/path.ts";
 export { cleanText, hasInvisible, INVISIBLE } from "./normalize/text.ts";
 export { findUrls, normalizeUrl, urlHost } from "./normalize/url.ts";
+export { findSensitive, maskSensitive } from "./redact/sensitive.ts";
+export type { Sensitive, SensitiveKind } from "./redact/sensitive.ts";
 export { refusalText } from "./refusals/templates.ts";
 export type { ReasonCode, RefusalInput } from "./refusals/templates.ts";
 export { extractValues } from "./values/extract.ts";

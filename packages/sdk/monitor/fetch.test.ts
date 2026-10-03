@@ -40,7 +40,7 @@ describe("createMonitorFetch", () => {
         );
 
         expect(inner).toHaveBeenCalledTimes(2);
-        expect(events().map((event) => [event.type, event.agent])).toEqual([
+        expect(events().map((event) => [event.type, "agent" in event ? event.agent : undefined])).toEqual([
             ["warning", "default"],
             ["warning", "scoped"],
         ]);

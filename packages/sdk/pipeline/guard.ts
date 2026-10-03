@@ -4,9 +4,11 @@ import { GuardBlockedError, GuardRefusal } from "../core/refusal.ts";
 import { claimCall, registerGuardedTool, type RequestedCall } from "../context/registry.ts";
 import { currentScope, mayUse, newScope, withScope, type Scope } from "../context/scope.ts";
 import type { FailResult, GuardCall, RuleResult } from "../guards/call.ts";
+import { maskArgs } from "../guards/egress/payload.ts";
 import type { GuardOptions } from "../guards/options.ts";
 import { isGuardType } from "../guards/types.ts";
 import { labelArguments } from "../labels/value-labels.ts";
+import { policyOptions, refreshSources, sourcesReady } from "../policy/state.ts";
 import { askHuman } from "./approve.ts";
 import { countLimits, decide, preChecks, recordDecision } from "./checks.ts";
 import { finishOutput, recordToolCall, runTool } from "./output.ts";
@@ -17,6 +19,11 @@ type Spec = {
     list: GuardOptions[];
     tool: string;
 };
+
+// One argument is checked as itself, several as a list
+function inputOf(args: unknown[]): unknown {
+    return args.length === 1 ? args[0] : args;
+}
 
 function buildCall(tool: string, input: unknown, scope: Scope, stepId: string): GuardCall {
     return {
@@ -64,10 +71,15 @@ function refuse(spec: Spec, call: GuardCall, requested: RequestedCall | undefine
     return refused;
 }
 
-async function runPipeline(spec: Spec, args: unknown[]): Promise<unknown> {
+async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
     // One copy of the arguments is used for checks, approval and the run
-    const runArgs = snapshot(args);
-    const input = runArgs.length === 1 ? runArgs[0] : runArgs;
+    let runArgs = snapshot(args);
+    let input = inputOf(runArgs);
+
+    // 0. A changed policy file or feed applies from this call on
+    refreshSources(Date.now());
+    await sourcesReady();
+    const spec: Spec = { ...code, list: policyOptions(code.tool) ?? code.list };
 
     // 1. Context: the current scope, or the run of the call the model asked for
     const current = currentScope();
@@ -82,6 +94,15 @@ async function runPipeline(spec: Spec, args: unknown[]): Promise<unknown> {
     recordDecision(call, allowed);
     if (allowed.decision === "block") {
         return refuse(spec, call, requested, allowed);
+    }
+
+    // Masked data is what gets checked, approved and sent
+    const masked = maskArgs(spec.list, runArgs);
+    if (masked !== undefined) {
+        runArgs = masked;
+        input = inputOf(runArgs);
+        call = buildCall(spec.tool, input, scope, stepId);
+        recordDecision(call, { guard: "egress", rule: "payload:mask", decision: "strip", mode: "block" });
     }
 
     // 3 to 5. Labels, checks and the decision
@@ -112,15 +133,9 @@ async function runPipeline(spec: Spec, args: unknown[]): Promise<unknown> {
     const output = await withScope(scope, () => runTool(spec.fn, runArgs, ran, requested));
 
     // 8 and 9. Output checks; every step above was recorded
-    const shown = finishOutput(spec.list, call, output, requested);
-    if (shown === "blocked") {
-        return refuse(spec, call, undefined, {
-            guard: "source",
-            rule: "source",
-            decision: "block",
-            mode: "block",
-            reason: "content_blocked",
-        });
+    const shown = await finishOutput(spec.list, call, output, requested);
+    if ("blocked" in shown) {
+        return refuse(spec, call, undefined, shown.blocked);
     }
     return shown.output;
 }

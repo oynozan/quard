@@ -3,6 +3,7 @@ import type { Match } from "../../labels/content-index.ts";
 import { firstAppearance, labelArguments } from "../../labels/value-labels.ts";
 import type { GuardCall, Mode, RuleResult } from "../call.ts";
 import type { EgressOptions } from "../options.ts";
+import { checkPayload } from "./payload.ts";
 
 const DESTINATION_FIELDS = /^(to|cc|bcc|recipients?|emails?|url|endpoint|host|webhook|target|destination)$/i;
 
@@ -94,5 +95,6 @@ export function checkEgress(call: GuardCall, options: EgressOptions): RuleResult
                   }
                 : undefined,
         ),
+        ...checkPayload(call, options),
     ];
 }

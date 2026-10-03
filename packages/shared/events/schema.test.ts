@@ -45,6 +45,19 @@ describe("runEvent", () => {
             keys: [],
         },
         { type: "warning", ...base, code: "unwrapped_tool", tool: "t" },
+        {
+            type: "decision",
+            ...base,
+            tool: "t",
+            guard: "detector",
+            rule: "jev",
+            decision: "flag",
+            mode: "observe",
+            enforced: false,
+            policy: "2026-10-03.1",
+            score: 0.93,
+        },
+        { type: "config_error", at: "t", source: "policy", message: "bad file" },
     ])("accepts a $type event", (event) => {
         expect(runEvent.parse(event)).toEqual(event);
     });
@@ -63,6 +76,21 @@ describe("runEvent", () => {
             decision: "maybe",
             mode: "block",
             enforced: true,
+        };
+
+        expect(runEvent.safeParse(event).success).toBe(false);
+    });
+    it("rejects a detector score outside 0 to 1", () => {
+        const event = {
+            type: "decision",
+            ...base,
+            tool: "t",
+            guard: "detector",
+            rule: "r",
+            decision: "flag",
+            mode: "observe",
+            enforced: false,
+            score: 1.5,
         };
 
         expect(runEvent.safeParse(event).success).toBe(false);

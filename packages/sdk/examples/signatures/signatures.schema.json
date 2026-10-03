@@ -1,0 +1,111 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "version": {
+            "type": "string",
+            "minLength": 1
+        },
+        "signatures": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": "^[A-Z0-9-]{3,40}$"
+                    },
+                    "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "code-execution",
+                            "unsafe-deserialization",
+                            "supply-chain",
+                            "ssrf",
+                            "path-traversal",
+                            "prompt-injection",
+                            "other"
+                        ]
+                    },
+                    "where": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "input",
+                                "content"
+                            ]
+                        }
+                    },
+                    "tools": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "all": {
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                        }
+                    },
+                    "any": {
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                        }
+                    },
+                    "none": {
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                        }
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "block",
+                            "flag"
+                        ]
+                    },
+                    "source": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                },
+                "required": [
+                    "id",
+                    "title",
+                    "category",
+                    "where",
+                    "action"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "version",
+        "signatures"
+    ],
+    "additionalProperties": false
+}
