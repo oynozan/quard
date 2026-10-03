@@ -14,20 +14,23 @@ A run is one task from start to finish, across every agent that worked on it. Th
 
 The list holds the newest 200 runs. The refresh button at the end of the toolbar loads new ones. Before your first run, the table is drawn empty with the note "No runs yet".
 
-| Status    | Meaning                                                           |
-| --------- | ----------------------------------------------------------------- |
-| Running   | Has not ended, and sent an event in the last two minutes          |
-| Completed | Ended, or went quiet for two minutes, without an error or a block |
-| Failed    | Ended on an error                                                 |
-| Blocked   | Ended on a call that a guard blocked                              |
+| Status    | Meaning                                                                            |
+| --------- | ---------------------------------------------------------------------------------- |
+| Running   | Has not ended, and sent an event in the last two minutes                           |
+| Waiting   | Has not ended, and a call waits for a person to answer it, however long that takes |
+| Completed | Ended, or went quiet for two minutes, without an error or a block                  |
+| Failed    | Ended on an error                                                                  |
+| Blocked   | Ended on a call that a guard blocked                                               |
+
+A run counts as waiting only while the waiting process still runs. If that process stops, for example after a crash, the request stays open in Approvals and the run's status comes from the rest of the table.
 
 ## Read a run
 
 ![A run page](/images/guides/run.webp)
 
-1. **Header.** The run id with a copy button, the status, when the run started and how long it has taken.
+1. **Header.** The run id with a copy button, the status, when the run started and how long it has taken. While a call waits for a person, a note under it names the call, with a link to answer it in Approvals. If the waiting process stopped, **Open approval** links to the request it left open.
 2. **Summary.** How many agents and steps the run has, its estimated cost and its guard decisions. **Would block** counts decisions by rules in observe mode, which record but never stop a call.
-3. **Timeline.** One lane per agent and one cell per step, in time order. A step is a model call, a tool call or a guard decision. A cell's color is the label of everything the agent had read before that step: grey for trusted and public, blue for trusted and internal, light peach for untrusted and public, and copper for untrusted and internal. Untrusted cells also have a hole in the middle, so you can tell them apart without color. A mark under a cell shows a decision: amber when a person was asked, red when a call was blocked, and an outline for a rule in observe mode.
+3. **Timeline.** One lane per agent and one cell per step, in time order. A step is a model call, a tool call, a guard decision or a call waiting for a person. A cell's color is the label of everything the agent had read before that step: grey for trusted and public, blue for trusted and internal, light peach for untrusted and public, and copper for untrusted and internal. Untrusted cells also have a hole in the middle, so you can tell them apart without color. A mark under a cell shows a decision: amber when a person was asked, red when a call was blocked, and an outline for a rule in observe mode.
 4. **Run graph.** Who delegated to whom. Each agent shows its model, steps and cost, and its name opens its agent page. **untrusted** marks an agent that read untrusted content.
 5. **Run limits.** How close the run came to each limit: delegation depth, fan-out, loops, model calls and cost. **Observe** means the limit only records. **Enforced** means it stops the run. **No limits reported** means the run sent none.
 
@@ -43,6 +46,6 @@ Click a cell in the timeline, or a row in its table, to open the step in the dra
 2. **Details.** The kind of step, the agent, its status, when it started and how long it took. **Context** is the label of everything the agent had read before this step, with the origin that made it untrusted. **Parent step** is the step that led here.
 3. **Arguments.** Each argument of a tool call with where its value first appeared. **First seen in** names the origin, then the agent, the time and how the value matched: an exact match, found inside a longer value, the same host or the same domain. **+1 more** means it appeared in other places too. **model-generated** means the value appeared nowhere earlier in the run. **not traced** means the value is a plain word, date or amount, which Quard does not trace on its own.
 
-Other sections show what the step has. A guard decision shows the guard, rule, mode and reason. A model call shows its tokens, its cost and the tools it asked for. A tool call shows the label of its output, and a failed step shows its error.
+Other sections show what the step has. A guard decision shows the guard, rule, mode and reason. A model call shows its tokens, its cost and the tools it asked for. A tool call shows the label of its output, and a failed step shows its error. A call waiting for a person shows its request, with a link to answer it.
 
 The open step is part of the page address, so you can share a link that opens it.
