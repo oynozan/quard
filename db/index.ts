@@ -36,6 +36,12 @@ export type {
     RunWaiter,
 } from "./queries/approvals/types.ts";
 export { addWaiter, beatWaiters, finishWaiters } from "./queries/approvals/waiters.ts";
+export { connectedApps } from "./queries/control/connect/apps.ts";
+export type { ConnectedAppRow } from "./queries/control/connect/apps.ts";
+export { ruleSets } from "./queries/control/connect/rule-sets.ts";
+export type { RuleSetRow } from "./queries/control/connect/rule-sets.ts";
+export { agentVersions } from "./queries/control/connect/versions.ts";
+export type { AgentVersionItem } from "./queries/control/connect/versions.ts";
 export { closeConnection, openConnection, saveAgentVersion, saveRules } from "./queries/control/connections.ts";
 export type { AgentVersionInput, ConnectionInput } from "./queries/control/connections.ts";
 export { addDayCount, dayCounts } from "./queries/control/counters.ts";
