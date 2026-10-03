@@ -69,6 +69,8 @@ export type {
     ToolCoverage,
 } from "./queries/decisions.ts";
 export { ingestBatch } from "./queries/ingest/store.ts";
+export { findMemoryRecords, findMessageRecord } from "./queries/labels/find.ts";
+export { labelHash, storeLabelRecords } from "./queries/labels/store.ts";
 export {
     agentKeyFor,
     createAgentKey,
