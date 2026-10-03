@@ -4,6 +4,7 @@ import { clearRegistry } from "../context/registry.ts";
 import { clearApprovals } from "../guards/approval/approval.ts";
 import { clearDayCounts } from "../guards/limit/daily.ts";
 import { clearRecords } from "../labels/records.ts";
+import { clearMemory } from "../memory/kept.ts";
 import { clearVersions } from "../monitor/versions.ts";
 import { stopLink, stopUploads } from "../transport/configure.ts";
 
@@ -14,6 +15,7 @@ export function resetAll(): void {
     clearRegistry();
     clearApprovals();
     clearRecords();
+    clearMemory();
     stopUploads();
     stopLink();
     clearDayCounts();
