@@ -1,16 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OPEN } from "../../../test/approvals/requests";
 import { stubBrowser } from "../../../test/auth-app/browser";
 import { shadersModule } from "../../../test/auth-app/shell";
 import { signSession, type Session } from "@/lib/auth/session-token";
-import { getApprovals } from "@/lib/data/approvals";
 import DashboardLayout from "./layout";
 
-vi.mock("@/lib/data/approvals", async (importOriginal) => {
-    const real = await importOriginal<typeof import("@/lib/data/approvals")>();
-    return { ...real, getApprovals: vi.fn(real.getApprovals) };
-});
+// The count of open requests comes from Postgres
+const approvals = vi.hoisted(() => ({ openApprovalCount: vi.fn(async () => 0) }));
+vi.mock("@/lib/data/approvals", () => approvals);
 
 const jar = vi.hoisted(() => new Map<string, string>());
 vi.mock("next/headers", () => ({
@@ -64,7 +61,7 @@ describe("DashboardLayout", () => {
     });
 
     it("counts the open approval requests in the sidebar", async () => {
-        vi.mocked(getApprovals).mockResolvedValueOnce({ open: OPEN.slice(0, 2), grants: [], decisions: [] });
+        approvals.openApprovalCount.mockResolvedValueOnce(2);
         await signIn({ email: "jo@example.com", github: null });
         await showLayout();
         expect(screen.getByRole("link", { name: "Approvals2" })).toBeTruthy();

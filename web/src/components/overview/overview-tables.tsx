@@ -1,6 +1,6 @@
 import { Bot, ListTree, Siren } from "lucide-react";
 import { OutcomeBar } from "@/components/charts/outcome-bar";
-import { DataTable, NameCell, Td, Th, Tr } from "@/components/kit/data-table";
+import { DataTable, NameCell, QuietEmpty, Td, Th, Tr } from "@/components/kit/data-table";
 import { Absent } from "@/components/kit/detail/detail-list";
 import { EmptyLine } from "@/components/kit/empty";
 import { SectionHeading } from "@/components/kit/headings";
@@ -21,11 +21,18 @@ function EmptySection({ title, children }: { title: string; children: string }) 
     );
 }
 
-export function ApprovalsSection({ approvals, now }: { approvals: ApprovalRequest[]; now: number }) {
-    if (approvals.length === 0) return <EmptySection title="Approvals waiting">No approvals waiting</EmptySection>;
+// The overview lists a few requests; the approvals page has them all
+const APPROVALS_SHOWN = 5;
+
+type ApprovalsProps = { approvals: ApprovalRequest[]; total: number; now: number };
+
+// total counts every open request, which can be more than the list holds
+export function ApprovalsSection({ approvals, total, now }: ApprovalsProps) {
+    // Calls that still wait come first, in list order within each group
+    const shown = [...approvals].sort((a, b) => Number(b.waiting) - Number(a.waiting)).slice(0, APPROVALS_SHOWN);
     return (
         <section aria-label="Approvals waiting">
-            <SectionHeading title="Approvals waiting" count={approvals.length} href="/approvals" />
+            <SectionHeading title="Approvals waiting" count={Math.max(total, approvals.length)} href="/approvals" />
             <DataTable minWidth={680}>
                 <colgroup>
                     <col style={{ width: "30%" }} />
@@ -44,7 +51,7 @@ export function ApprovalsSection({ approvals, now }: { approvals: ApprovalReques
                     </tr>
                 </thead>
                 <tbody>
-                    {approvals.map((request) => {
+                    {shown.map((request) => {
                         const untrusted = request.args
                             .flatMap((arg) => arg.origins)
                             .filter((o) => o.trust === "untrusted");
@@ -87,6 +94,7 @@ export function ApprovalsSection({ approvals, now }: { approvals: ApprovalReques
                     })}
                 </tbody>
             </DataTable>
+            {approvals.length === 0 ? <QuietEmpty>No approvals waiting</QuietEmpty> : null}
         </section>
     );
 }

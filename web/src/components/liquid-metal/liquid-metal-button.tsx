@@ -81,8 +81,9 @@ export function LiquidMetalButton({
     }, []);
 
     const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // The timer after a press can fire once the button is gone, with no shader left to change
     const speed = (value: number) => {
-        if (!reducedMotion()) mount.current?.setSpeed(value);
+        if (mount.current !== null && !reducedMotion()) mount.current.setSpeed(value);
     };
 
     // React sends no mouse events to a disabled button, so enter and press need no check

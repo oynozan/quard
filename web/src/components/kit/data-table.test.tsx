@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { DataTable, NameCell, TableState, Td, Th, Tr } from "./data-table";
+import { DataTable, NameCell, QuietEmpty, TableState, Td, Th, Tr } from "./data-table";
 
 describe("DataTable", () => {
     it("lays out header and body cells, with column headers scoped to their column", () => {
@@ -68,6 +68,13 @@ describe("NameCell", () => {
         expect(container.querySelector("small")).toBeNull();
         expect(container.querySelector("strong")?.className).toContain("mono");
         expect(container.textContent).toBe("run_42");
+    });
+});
+
+describe("QuietEmpty", () => {
+    it("announces a quiet empty row", () => {
+        render(<QuietEmpty>No runs yet</QuietEmpty>);
+        expect(screen.getByRole("status").textContent).toBe("No runs yet");
     });
 });
 

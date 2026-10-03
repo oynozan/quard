@@ -145,6 +145,19 @@ describe("LiquidMetalButton", () => {
         expect(shader.setSpeed.mock.calls).toEqual([[0.6]]);
     });
 
+    it("leaves the rim alone when the timer after a press fires once the button is gone", async () => {
+        const { unmount } = render(<LiquidMetalButton label="Deploy" />);
+        await mounted();
+        vi.useFakeTimers();
+        fireEvent.click(surface());
+        unmount();
+        vi.unstubAllGlobals();
+        shader.setSpeed.mockClear();
+
+        expect(() => vi.advanceTimersByTime(300)).not.toThrow();
+        expect(shader.setSpeed).not.toHaveBeenCalled();
+    });
+
     it("keeps the rim still and skips the ripple for reduced motion", async () => {
         stubMotion(true);
         const onClick = vi.fn();

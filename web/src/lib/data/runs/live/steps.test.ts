@@ -139,6 +139,8 @@ describe("buildSteps", () => {
             enforced: true,
             reason: null,
             field: null,
+            rulesHash: null,
+            requestId: null,
             at: at(3),
         };
         const [step] = buildSteps({ steps: [], labels: [], decisions: [check] });

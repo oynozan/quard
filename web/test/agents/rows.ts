@@ -42,6 +42,8 @@ export const decision = (
     enforced: true,
     reason: null,
     field: null,
+    rulesHash: null,
+    requestId: null,
     degraded: false,
     score: null,
     ...fields,

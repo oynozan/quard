@@ -11,6 +11,8 @@ export default defineConfig({
         environment: "jsdom",
         setupFiles: ["./test/setup.ts"],
         passWithNoTests: true,
+        // The biggest renders are slow while every package's tests run at once
+        testTimeout: 30_000,
         coverage: {
             provider: "v8",
             include: ["src/**/*.{ts,tsx}"],

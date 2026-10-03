@@ -83,6 +83,18 @@ export function NameCell({
     );
 }
 
+// A quiet one-line empty, no-match or unavailable row under a compact table.
+export function QuietEmpty({ children }: { children: ReactNode }) {
+    return (
+        <div
+            role="status"
+            className="flex h-[84px] items-center justify-center border-b border-line text-center text-[12px] whitespace-normal text-ink-muted"
+        >
+            {children}
+        </div>
+    );
+}
+
 // The centered state block under a full table: heading, one sentence, at most one action.
 export function TableState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
     return (

@@ -23,6 +23,8 @@ function row(fields: Partial<DecisionRow> = {}): DecisionRow {
         enforced: true,
         reason: "value_not_from_allowed_origin",
         field: "iban",
+        rulesHash: null,
+        requestId: null,
         at: new Date(NOW - MINUTE),
         ...fields,
     };

@@ -25,7 +25,7 @@ function expectEmptySection(container: HTMLElement, title: string, line: string)
 
 describe("ApprovalsSection", () => {
     it("counts the waiting approvals and links to the approvals page", () => {
-        render(<ApprovalsSection approvals={APPROVALS} now={NOW} />);
+        render(<ApprovalsSection approvals={APPROVALS} total={2} now={NOW} />);
 
         expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Approvals waiting2");
         expect(screen.getByRole("link", { name: "View all" }).getAttribute("href")).toBe("/approvals");
@@ -33,7 +33,7 @@ describe("ApprovalsSection", () => {
     });
 
     it("links each row to its card and shows the first untrusted origin", () => {
-        render(<ApprovalsSection approvals={APPROVALS} now={NOW} />);
+        render(<ApprovalsSection approvals={APPROVALS} total={2} now={NOW} />);
 
         const link = screen.getByRole("link", { name: "Review pay_invoice by billing" });
         expect(link.getAttribute("href")).toBe("/approvals#apr_7f31");
@@ -46,17 +46,50 @@ describe("ApprovalsSection", () => {
     });
 
     it("says when only trusted sources fed a call and when a call no longer waits", () => {
-        render(<ApprovalsSection approvals={APPROVALS} now={NOW} />);
+        render(<ApprovalsSection approvals={APPROVALS} total={2} now={NOW} />);
         const deploy = cellsOf(bodyRows()[1]);
 
         expect(deploy[1]).toBe("Trusted sources only");
         expect(deploy[2]).toBe("No longer waiting");
     });
 
-    it("shows only its title and one line when nothing is waiting", () => {
-        const { container } = render(<ApprovalsSection approvals={[]} now={NOW} />);
+    it("lists the first five, still-waiting calls first, and counts every open request", () => {
+        const [waiting, stopped] = APPROVALS;
+        const many = Array.from({ length: 7 }, (_, n) => ({
+            ...(n < 2 ? stopped : waiting),
+            id: `apr_${n}`,
+            tool: `tool_${n}`,
+        }));
+        render(<ApprovalsSection approvals={many} total={120} now={NOW} />);
 
-        expectEmptySection(container, "Approvals waiting", "No approvals waiting");
+        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Approvals waiting120");
+        expect(bodyRows().map((row) => cellsOf(row)[0]?.split("billing")[0].split("deploy-bot")[0])).toEqual([
+            "tool_2",
+            "tool_3",
+            "tool_4",
+            "tool_5",
+            "tool_6",
+        ]);
+    });
+
+    it("never counts fewer requests than it lists", () => {
+        render(<ApprovalsSection approvals={APPROVALS} total={0} now={NOW} />);
+
+        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Approvals waiting2");
+    });
+
+    it("keeps its table header and says nothing is waiting", () => {
+        render(<ApprovalsSection approvals={[]} total={0} now={NOW} />);
+
+        expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Approvals waiting0");
+        expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+            "Call",
+            "Influenced by",
+            "Waiting",
+            "Actions",
+        ]);
+        expect(screen.getByRole("status").textContent).toBe("No approvals waiting");
+        expect(bodyRows()).toHaveLength(0);
     });
 });
 

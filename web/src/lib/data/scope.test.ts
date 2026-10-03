@@ -8,7 +8,7 @@ const connection = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/lib/auth/session", () => ({ requireSession }));
 vi.mock("next/server", () => ({ connection }));
 
-const { projectScope, requestTime } = await import("./scope");
+const { actionScope, projectScope, requestTime } = await import("./scope");
 const { database } = await import("./runs/live/client");
 
 let test: TestDb;
@@ -43,6 +43,7 @@ describe("projectScope", () => {
         expect(await projectScope()).toBeNull();
         expect(connection).toHaveBeenCalledTimes(1);
         expect(requireSession).toHaveBeenCalledTimes(1);
+        expect(await actionScope()).toBeNull();
     });
 
     it("gives the shared database and the install's first project", async () => {
@@ -64,5 +65,23 @@ describe("projectScope", () => {
         requireSession.mockRejectedValueOnce(new Error("redirect:/sign-in"));
 
         await expect(projectScope()).rejects.toThrow("redirect:/sign-in");
+    });
+});
+
+describe("actionScope", () => {
+    it("gives who acts with the project, without waiting for a render", async () => {
+        connection.mockClear();
+        const scope = await actionScope();
+
+        expect(scope?.session).toMatchObject({ sub: "did:privy:1" });
+        expect(scope?.project.name).toBe("Staging");
+        expect(scope?.db).toBe(database());
+        expect(connection).not.toHaveBeenCalled();
+    });
+
+    it("stops at the sign-in redirect for people who are not signed in", async () => {
+        requireSession.mockRejectedValueOnce(new Error("redirect:/sign-in"));
+
+        await expect(actionScope()).rejects.toThrow("redirect:/sign-in");
     });
 });

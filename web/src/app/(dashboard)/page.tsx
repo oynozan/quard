@@ -6,6 +6,7 @@ import { Greeting } from "@/components/overview/greeting";
 import { ApprovalsSection, IncidentsSection, RunsSection } from "@/components/overview/overview-tables";
 import { OverviewRail } from "@/components/overview/overview-rail";
 import { TerminalOverview } from "@/components/overview/terminal-overview";
+import { openApprovalCount, openApprovalRequests } from "@/lib/data/approvals";
 import { getOverview } from "@/lib/data/overview";
 import { greetingFor } from "@/lib/data/overview/greeting";
 import { listRuns } from "@/lib/data/runs/query";
@@ -13,7 +14,12 @@ import { requestTime } from "@/lib/data/scope";
 
 export default async function OverviewPage() {
     const now = await requestTime();
-    const [data, runs] = await Promise.all([getOverview(now), listRuns({ limit: 6 })]);
+    const [data, approvals, waiting, runs] = await Promise.all([
+        getOverview(now),
+        openApprovalRequests(),
+        openApprovalCount(),
+        listRuns({ limit: 6 }),
+    ]);
 
     if (!data) {
         return (
@@ -40,9 +46,9 @@ export default async function OverviewPage() {
                     className="reveal grid min-w-0 grid-cols-1 gap-7 max-[760px]:gap-[25px]"
                     style={{ animationDelay: "80ms" }}
                 >
-                    {/* Approvals and incidents have no source until their services exist */}
-                    <ApprovalsSection approvals={[]} now={now} />
+                    <ApprovalsSection approvals={approvals} total={waiting} now={now} />
                     <RunsSection runs={runs} now={now} />
+                    {/* Incidents have no source until their service exists */}
                     <IncidentsSection incidents={[]} now={now} />
                     <DecisionLog events={data.events} />
                 </div>

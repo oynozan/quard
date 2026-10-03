@@ -2,6 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OverviewData } from "@/lib/data/overview";
 import type { RunRow } from "@/lib/data/runs/types";
+import type { ApprovalRequest } from "@/lib/data/types";
+import { openRequests } from "../../../test/approvals-overview/fixtures";
 import { expectNoChartsOrTables } from "../../../test/empty";
 import { stubResizeObserver } from "../../../test/overview/browser";
 import { overview, QUIET, runRow } from "../../../test/overview/fixtures";
@@ -11,10 +13,16 @@ import OverviewPage from "./page";
 const data = vi.hoisted(() => ({
     getOverview: vi.fn<(now: number) => Promise<OverviewData | null>>(),
     listRuns: vi.fn<(filter: { limit: number }) => Promise<RunRow[]>>(),
+    openApprovalRequests: vi.fn<() => Promise<ApprovalRequest[]>>(),
+    openApprovalCount: vi.fn<() => Promise<number>>(),
 }));
 vi.mock("@/lib/data/overview", () => ({ getOverview: data.getOverview }));
 vi.mock("@/lib/data/runs/query", () => ({ listRuns: data.listRuns }));
 vi.mock("@/lib/data/scope", () => ({ requestTime: async () => NOW }));
+vi.mock("@/lib/data/approvals", () => ({
+    openApprovalRequests: data.openApprovalRequests,
+    openApprovalCount: data.openApprovalCount,
+}));
 
 // Six runs that started two days before the request
 const RUNS = Array.from({ length: 6 }, (_, n) => runRow({ id: `${n}`.repeat(32), startedAt: NOW - 2 * DAY }));
@@ -23,6 +31,8 @@ beforeEach(() => {
     stubResizeObserver();
     data.getOverview.mockResolvedValue(overview());
     data.listRuns.mockResolvedValue(RUNS);
+    data.openApprovalRequests.mockResolvedValue([]);
+    data.openApprovalCount.mockResolvedValue(0);
 });
 
 afterEach(() => {
@@ -72,13 +82,22 @@ describe("OverviewPage", () => {
         expect(rows.map((row) => row.textContent!.endsWith("2 d ago"))).toEqual(Array(6).fill(true));
     });
 
-    it("shows approvals and incidents as empty until they have a source, with the decision log under them", async () => {
+    it("lists the open approval requests from the database", async () => {
+        data.openApprovalRequests.mockResolvedValue(openRequests().map((item) => item.request));
+        data.openApprovalCount.mockResolvedValue(4);
+        render(await OverviewPage());
+
+        expect(region("Approvals waiting").getByRole("heading", { level: 2 }).textContent).toBe("Approvals waiting4");
+        expect(region("Approvals waiting").getAllByRole("row")).toHaveLength(5);
+    });
+
+    it("shows approvals and incidents as empty with nothing open, with the decision log under them", async () => {
         render(await OverviewPage());
 
         expect(region("Approvals waiting").getByRole("status").textContent).toBe("No approvals waiting");
+        expect(region("Approvals waiting").getAllByRole("columnheader")).toHaveLength(4);
         expect(region("Incidents").getByRole("status").textContent).toBe("No incidents yet");
         expect(region("Decision log").getAllByRole("listitem")).toHaveLength(2);
-        expectNoChartsOrTables(screen.getByRole("region", { name: "Approvals waiting" }));
         expectNoChartsOrTables(screen.getByRole("region", { name: "Incidents" }));
     });
 
@@ -101,6 +120,8 @@ describe("OverviewPage", () => {
             "No guard decisions in the last 24 hours",
         ]);
         expect(screen.queryByText("Live")).toBeNull();
+        // The approvals pane keeps its table header over its empty row
+        screen.getByRole("region", { name: "Approvals waiting" }).remove();
         expectNoChartsOrTables(container);
     });
 });
