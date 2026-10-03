@@ -52,6 +52,13 @@ describe("VersionsTable", () => {
         expect(hash.getAttribute("title")).toBe("abcdef0123456789abcdef");
     });
 
+    it("says None for a version that ran without instructions", () => {
+        render(<VersionsTable versions={[version("v1", { instructionsHash: null })]} />);
+        const hash = rows()[0].children[2];
+        expect(hash.textContent).toBe("None");
+        expect(hash.hasAttribute("title")).toBe(false);
+    });
+
     it("shows how long each version was live, up to now for the current one", () => {
         render(<VersionsTable versions={versions} />);
         expect(rows().map((row) => row.children[3].textContent)).toEqual([

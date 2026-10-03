@@ -1,4 +1,5 @@
 import { DataTable, QuietEmpty, Td, Th, Tr } from "@/components/kit/data-table";
+import { Absent } from "@/components/kit/detail/detail-list";
 import { SectionHeading } from "@/components/kit/headings";
 import { Badge } from "@/components/kit/labels";
 import type { AgentVersionRow } from "@/lib/data/agents";
@@ -57,8 +58,8 @@ export function VersionsTable({ versions }: { versions: AgentVersionRow[] }) {
                                 </span>
                             </Td>
                             <Td className="mono text-ink-2">{row.model}</Td>
-                            <Td className="mono text-ink-2" title={row.instructionsHash}>
-                                {shortHash(row.instructionsHash)}
+                            <Td className="mono text-ink-2" title={row.instructionsHash ?? undefined}>
+                                {row.instructionsHash ? shortHash(row.instructionsHash) : <Absent>None</Absent>}
                             </Td>
                             <Td className="text-ink-2">
                                 <span className="mono">{formatShortDate(row.since)}</span>

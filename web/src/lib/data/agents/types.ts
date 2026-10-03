@@ -1,7 +1,7 @@
 import type { StepStatus } from "../runs/types";
 import type { GuardMode, Label, Outcome, StepKind } from "../types";
 
-// Offline needs the SDK connection state, which is not stored yet
+// No offline state, since control does not record which agents a connection runs
 export type AgentState = "running" | "idle";
 
 export type AgentNode = {
@@ -36,7 +36,8 @@ export type AgentGraph = {
 export type AgentVersionRow = {
     version: string;
     model: string;
-    instructionsHash: string;
+    // Null for a version that ran without instructions
+    instructionsHash: string | null;
     tools: string[];
     since: number;
     // When the next version replaced it. Null for the current version.
@@ -80,8 +81,9 @@ export type AgentDetail = {
     stats: AgentStats;
     activity: AgentActivity;
     links: AgentEdge[];
-    // Versions and incidents are not recorded yet
+    // Newest first
     versions: AgentVersionRow[];
+    // Incidents are not recorded yet
     incidents: { id: string; title: string; roles: ("entry" | "turning" | "damage")[]; openedAt: number }[];
     // Newest first.
     timeline: AgentCall[];
