@@ -1,6 +1,6 @@
 # Quard v1 roadmap
 
-Seven milestones, in order. Each one ends with something that runs. The details are in [PROJECT.md](PROJECT.md).
+Seven milestones, in order. Each one ends with something that runs, with 100% test coverage. The details are in [PROJECT.md](PROJECT.md).
 
 ## Start now
 
@@ -10,11 +10,11 @@ Milestones 0 and 1 need no more decisions. Two open items must be settled during
 
 - A root pnpm workspace with `packages/shared`, `packages/sdk`, `services/webhook`, `services/control`, `services/worker` and `web`.
 - Move `web/.prettierrc` and the settings in `web/pnpm-workspace.yaml` to the root. Add a shared `tsconfig` and pin TypeScript 5.9 or 6.x.
-- Vitest in every package. A Hono health route in `webhook` and `control`.
+- Vitest in every package, with a 100% coverage gate. A Hono health route in `webhook` and `control`.
 - A `docker-compose.yml` with Postgres 18, and a small script that runs `db/migrations` in order.
 - CI: format check, lint, type check and tests.
 
-**Done when** `pnpm test`, `pnpm typecheck` and `pnpm format:check` pass, and `docker compose up` starts Postgres and both services.
+**Done when** `pnpm test` passes at 100% coverage, `pnpm typecheck`, `pnpm lint` and `pnpm format:check` pass, and `docker compose up` starts Postgres and both services.
 
 ## M1. SDK core, no backend
 

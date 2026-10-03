@@ -129,7 +129,8 @@ All **Claude's pick**, except the parts already set up in `web/`.
 - Postgres 18 as the only database. Plain SQL migrations in `db/migrations`. Kysely for typed queries.
 - pg-boss for the job queue, on the same Postgres.
 - Zod for schemas, shared through `packages/shared`.
-- Vitest for tests. tsdown to build the SDK.
+- Vitest for tests. Coverage must be 100% for lines, branches, functions and statements in every package, every service and `web/`. CI fails below that.
+- tsdown to build the SDK.
 - The dashboard already uses Next.js 16.3.8, React 19.2.8, Tailwind CSS 4 and shadcn.
 - IDs use the W3C trace format: a 32-hex run id and a 16-hex step id. This keeps OpenTelemetry export open for later.
 
