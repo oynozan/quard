@@ -26,6 +26,7 @@
     },
     "exports": {
         ".": "./index.ts",
-        "./testing": "./test/pglite.ts"
+        "./testing": "./test/pglite.ts",
+        "./migrate": "./migrate/cli.ts"
     }
 }

@@ -1,8 +1,11 @@
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { runMigrations } from "./runner.ts";
 
-export const MIGRATIONS_DIR = fileURLToPath(new URL("../migrations", import.meta.url));
+// Built from path parts, not `new URL("../migrations", import.meta.url)`: bundlers such as Next's
+// treat that form as a file to bundle and fail on a folder.
+export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
 // Returns the process exit code
 export async function migrateFromEnv(
