@@ -1,0 +1,477 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Quard is dark only. Tokens follow web/DESIGN.md. */
+:root {
+    color-scheme: dark;
+
+    /* Signal */
+    --signal: #00da71;
+    --mint: #5dda9d;
+    --on-signal: #161616;
+    --mint-wash: #25372e;
+
+    /* Surfaces, from the page upward */
+    --page: #161616;
+    --rail: #181818;
+    --panel: #191919;
+    --recess: #1a1a1a;
+    --surface: #1c1c1c;
+    --nav-hover: #202020;
+    --control: #222222;
+    --hover: #242424;
+    --tile: #252525;
+    --selected: #2a2a2a;
+    --control-hover: #2b2b2b;
+    --highlight: #333333;
+
+    /* Lines */
+    --line: #2b2b2b;
+    --line-strong: #3a3a3a;
+    --line-hover: #4d4d4d;
+    --field-focus: #929288;
+    --segment-off: #2f2f2f;
+
+    /* Text ramp */
+    --ink-bright: #f2f2ed;
+    --ink: #ededeb;
+    --ink-soft: #dbdbd6;
+    --ink-alert: #dbdbc9;
+    --ink-link: #c1c1b9;
+    --ink-2: #a2a29a;
+    --ink-muted: #999996;
+    --ink-note: #8f8f83;
+    --ink-faint: #81817e;
+    --ink-subtle: #747471;
+    --ink-absent: #6e6e66;
+
+    /* Status */
+    --warning: #d6b868;
+    --danger: #d97878;
+    --problem: #d98c7a;
+    --caution-text: #e0b5a6;
+    --caution-surface: #241c19;
+    --caution-border: #4a3a33;
+
+    /* Charts */
+    --chart-field: #1c1c1c;
+    --chart-grid: #292929;
+    --chart-context: #747471;
+    --heat-1: #2c5538;
+    --heat-2: #307446;
+    --heat-3: #2f9555;
+    --heat-4: #26b763;
+    --heat-5: #00da71;
+    --cat-1: #00ab58;
+    --cat-2: #9085e9;
+    --cat-3: #bb4000;
+    --cat-4: #3987e5;
+    --cat-5: #b83669;
+
+    /* shadcn roles mapped onto the tokens */
+    --background: var(--page);
+    --foreground: var(--ink);
+    --card: var(--page);
+    --card-foreground: var(--ink);
+    --popover: var(--surface);
+    --popover-foreground: var(--ink);
+    --primary: var(--signal);
+    --primary-foreground: var(--on-signal);
+    --secondary: var(--mint);
+    --secondary-foreground: var(--on-signal);
+    --muted: var(--hover);
+    --muted-foreground: var(--ink-muted);
+    --accent: var(--hover);
+    --accent-foreground: var(--ink);
+    --destructive: var(--danger);
+    --border: var(--line);
+    --input: var(--line-strong);
+    --ring: var(--signal);
+    --chart-1: var(--cat-1);
+    --chart-2: var(--cat-2);
+    --chart-3: var(--cat-3);
+    --chart-4: var(--cat-4);
+    --chart-5: var(--cat-5);
+    --sidebar: var(--rail);
+    --sidebar-foreground: var(--ink-2);
+    --sidebar-primary: var(--signal);
+    --sidebar-primary-foreground: var(--on-signal);
+    --sidebar-accent: var(--nav-hover);
+    --sidebar-accent-foreground: var(--ink-bright);
+    --sidebar-border: var(--line);
+    --sidebar-ring: var(--signal);
+    --radius: 6px;
+}
+
+@theme inline {
+    --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+    --font-heading: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-ubuntu-mono), ui-monospace, monospace;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+
+    --color-signal: var(--signal);
+    --color-mint: var(--mint);
+    --color-on-signal: var(--on-signal);
+    --color-mint-wash: var(--mint-wash);
+    --color-page: var(--page);
+    --color-rail: var(--rail);
+    --color-panel: var(--panel);
+    --color-recess: var(--recess);
+    --color-surface: var(--surface);
+    --color-nav-hover: var(--nav-hover);
+    --color-control: var(--control);
+    --color-hover: var(--hover);
+    --color-tile: var(--tile);
+    --color-selected: var(--selected);
+    --color-control-hover: var(--control-hover);
+    --color-highlight: var(--highlight);
+    --color-line: var(--line);
+    --color-line-strong: var(--line-strong);
+    --color-line-hover: var(--line-hover);
+    --color-field-focus: var(--field-focus);
+    --color-segment-off: var(--segment-off);
+    --color-ink-bright: var(--ink-bright);
+    --color-ink: var(--ink);
+    --color-ink-soft: var(--ink-soft);
+    --color-ink-alert: var(--ink-alert);
+    --color-ink-link: var(--ink-link);
+    --color-ink-2: var(--ink-2);
+    --color-ink-muted: var(--ink-muted);
+    --color-ink-note: var(--ink-note);
+    --color-ink-faint: var(--ink-faint);
+    --color-ink-subtle: var(--ink-subtle);
+    --color-ink-absent: var(--ink-absent);
+    --color-warning: var(--warning);
+    --color-danger: var(--danger);
+    --color-problem: var(--problem);
+    --color-caution-text: var(--caution-text);
+    --color-caution-surface: var(--caution-surface);
+    --color-caution-border: var(--caution-border);
+    --color-chart-field: var(--chart-field);
+    --color-chart-grid: var(--chart-grid);
+    --color-chart-context: var(--chart-context);
+
+    /* Nothing grows past 6px except the hero's stepped corners and circles */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 6px;
+    --radius-xl: 6px;
+    --radius-2xl: 6px;
+    --radius-3xl: 6px;
+    --radius-4xl: 6px;
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    html {
+        color-scheme: dark;
+    }
+    body {
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+        font-size: 14px;
+        line-height: 1.55;
+        font-kerning: normal;
+        text-rendering: optimizeLegibility;
+    }
+    button,
+    a,
+    input,
+    select,
+    textarea {
+        -webkit-tap-highlight-color: transparent;
+        transition:
+            color 160ms,
+            background-color 160ms,
+            border-color 160ms,
+            opacity 160ms;
+    }
+    button:not(:disabled),
+    [role="button"]:not([aria-disabled="true"]) {
+        cursor: pointer;
+    }
+    button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+    }
+    :focus-visible {
+        outline: 2px solid var(--signal);
+        outline-offset: 4px;
+    }
+    ::selection {
+        background: var(--mint);
+        color: var(--on-signal);
+    }
+    ::placeholder {
+        color: var(--ink-faint);
+        opacity: 1;
+    }
+    kbd {
+        font-family: var(--font-ubuntu-mono), monospace;
+    }
+}
+
+@layer components {
+    .mono {
+        font-family: var(--font-ubuntu-mono), ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+    }
+    .table-scroll {
+        overflow-x: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #444444 #1b1b1b;
+    }
+    .skel {
+        display: inline-block;
+        max-width: 100%;
+        border-radius: 4px;
+        background: var(--line);
+        vertical-align: middle;
+    }
+    .spinner {
+        display: inline-block;
+        flex-shrink: 0;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        opacity: 0.5;
+        animation: spinner-turn 700ms linear infinite;
+    }
+    .reveal {
+        animation: reveal 400ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
+    }
+    .cursor-blink {
+        animation: cursor-blink 1.06s steps(1) infinite;
+    }
+    /* Sidebar rows fade in one step after the row above */
+    .reveal-row {
+        animation: reveal 420ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
+    }
+    /* The overview's tiled panes: shared edges are drawn once */
+    .terminal-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-rows: 150px 106px;
+        grid-template-areas: "a b c c" "d d c c";
+    }
+    .terminal-pane {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--page);
+    }
+    .terminal-grid > [data-area="a"] {
+        border-right: 0;
+        border-bottom: 0;
+    }
+    .terminal-grid > [data-area="b"] {
+        border-bottom: 0;
+    }
+    .terminal-grid > [data-area="c"] {
+        border-left: 0;
+    }
+    @media (max-width: 760px) {
+        .terminal-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-rows: 150px 96px 258px;
+            grid-template-areas: "a b" "d d" "c c";
+            gap: 8px;
+        }
+        .terminal-grid > .terminal-pane {
+            border: 1px solid var(--line);
+        }
+    }
+    .liquid-ripple {
+        background: radial-gradient(circle, rgba(0, 218, 113, 0.4) 0%, rgba(0, 218, 113, 0) 70%);
+        animation: liquid-ripple 600ms ease-out forwards;
+    }
+}
+
+@keyframes liquid-ripple {
+    from {
+        transform: scale(0);
+        opacity: 0.6;
+    }
+    to {
+        transform: scale(4);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .skel {
+        background: linear-gradient(90deg, var(--line) 0%, var(--line-hover) 50%, var(--line) 100%);
+        background-size: 200% 100%;
+        animation: skel-sweep 1.4s ease-in-out infinite;
+    }
+}
+
+@keyframes reveal {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes spinner-turn {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes skel-sweep {
+    from {
+        background-position: 200% 0;
+    }
+    to {
+        background-position: -200% 0;
+    }
+}
+
+@keyframes cursor-blink {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+    /* A still ring reads as a control that has given up */
+    .spinner {
+        animation: spinner-turn 2.4s linear infinite !important;
+    }
+}
+
+/* Drawer wipe, loading dots and toast overrides */
+@layer components {
+    .drawer-sheet[data-open] {
+        animation: drawer-wipe-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .drawer-sheet[data-closed] {
+        animation: drawer-wipe-out 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+    }
+    .drawer-scrim[data-open] {
+        animation: reveal 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .drawer-scrim[data-closed] {
+        animation: fade-out 220ms ease-in forwards;
+    }
+    .drawer-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: #444444 #1b1b1b;
+    }
+    .fade-dot {
+        opacity: 0.6;
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .fade-dot {
+        animation: fade-dot 1.5s linear infinite both;
+    }
+}
+
+@keyframes drawer-wipe-in {
+    from {
+        clip-path: inset(0 0 0 100%);
+    }
+    to {
+        clip-path: inset(0 0 0 0%);
+    }
+}
+
+@keyframes drawer-wipe-out {
+    from {
+        clip-path: inset(0 0 0 0%);
+    }
+    to {
+        clip-path: inset(0 0 0 100%);
+    }
+}
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes fade-dot {
+    0%,
+    100% {
+        opacity: 0.2;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Sonner injects unlayered styles after ours, so these need the extra specificity */
+[data-sonner-toaster][data-sonner-theme] {
+    font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+    transform: none !important;
+}
+[data-sonner-toaster] [data-sonner-toast] {
+    box-shadow: none !important;
+    transform: none !important;
+}
+[data-sonner-toaster] [data-sonner-toast]:focus-visible {
+    outline: 2px solid var(--signal) !important;
+    outline-offset: 4px;
+    box-shadow: none !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+    [data-sonner-toaster] [data-sonner-toast] {
+        transition: opacity 160ms ease-out !important;
+    }
+}
