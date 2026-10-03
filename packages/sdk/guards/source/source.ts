@@ -104,7 +104,7 @@ export function checkSource(
 // What a receive guard learns about a message from another agent
 export type Received = {
     origin: string;
-    // The sender the record names, or "unknown"
+    // The sender, or "unknown" when no record vouched for the message
     from: string;
     // A record of the same run and the same content vouched for the message
     verified: boolean;
@@ -120,17 +120,17 @@ export type Received = {
 export function receiveMessage(incoming: Incoming | undefined, output: unknown, overrides: OriginOverrides): Received {
     const carrier = incoming?.carrier;
     const found = incoming?.found;
-    const from = found?.record.sender ?? "unknown";
-    const origin = `agent:${from}`;
+    const origin = `agent:${found?.record.sender ?? "unknown"}`;
     const text = textOf(output);
     if (found === undefined || found.record.runId !== carrier?.runId || found.record.print !== printOf(text)) {
         const { trust, sensitivity } = labelFor(origin);
         const untrusted = { ...overrides, [origin]: { trust, sensitivity } };
-        return { origin, from, verified: false, carrier, overrides: untrusted, values: [] };
+        return { origin, from: "unknown", verified: false, carrier, overrides: untrusted, values: [] };
     }
     // A team's override for this exact origin still wins
     const own = Object.hasOwn(overrides, origin) ? overrides[origin] : undefined;
     const { trust, sensitivity } = found.record.label;
     const vouched = { ...overrides, [origin]: { trust, sensitivity, ...own } };
+    const from = found.record.sender;
     return { origin, from, verified: true, carrier, overrides: vouched, values: recordValues(found, text) };
 }

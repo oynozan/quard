@@ -169,7 +169,7 @@ describe("finishOutput for a message from another agent", () => {
         expect(call.run.index.lookup([`iban:${IBAN}`]).map((o) => o.origin)).toEqual(["agent:orchestrator"]);
         const events = takeEvents();
         expect(contentEvents(events)).toMatchObject([{ origin: "agent:orchestrator", trust: "untrusted" }]);
-        expect(messageEvents(events)).toMatchObject([{ from: "orchestrator", verified: false, trust: "untrusted" }]);
+        expect(messageEvents(events)).toMatchObject([{ from: "unknown", verified: false, trust: "untrusted" }]);
     });
 
     it("uses the carrier quard.resume() came in with", async () => {

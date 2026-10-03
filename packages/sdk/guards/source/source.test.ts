@@ -189,11 +189,10 @@ describe("receiveMessage", () => {
     });
 
     it.each([
-        ["changed content", carrier, true, "the brief, edited", "orchestrator"],
-        ["another run", { ...carrier, runId: OTHER_RUN }, true, "the brief", "orchestrator"],
-        ["an unknown reference", carrier, false, "the brief", "unknown"],
-    ])("counts %s as untrusted, whatever the overrides say", (_name, sent, known, output, from) => {
-        const origin = `agent:${from}`;
+        ["changed content", carrier, true, "the brief, edited", "agent:orchestrator"],
+        ["another run", { ...carrier, runId: OTHER_RUN }, true, "the brief", "agent:orchestrator"],
+        ["an unknown reference", carrier, false, "the brief", "agent:unknown"],
+    ])("counts %s as untrusted, whatever the overrides say", (_name, sent, known, output, origin) => {
         const incoming = {
             carrier: sent,
             found: known ? found({ trust: "trusted", sensitivity: "public" }) : undefined,
@@ -202,7 +201,7 @@ describe("receiveMessage", () => {
 
         expect(receiveMessage(incoming, output, overrides)).toEqual({
             origin,
-            from,
+            from: "unknown",
             verified: false,
             carrier: sent,
             overrides: { [origin]: { trust: "untrusted", sensitivity: "internal" } },
