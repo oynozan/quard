@@ -1,0 +1,31 @@
+{
+    "$schema": "./quard.policy.schema.json",
+    "version": "2026-10-03.1",
+    "strictness": "balanced",
+    "origins": {
+        "mcp:crm.acme.internal": { "trust": "trusted", "sensitivity": "internal" }
+    },
+    "signatures": { "file": "../signatures/signatures.json", "mode": "block" },
+    "detector": { "mode": "observe", "flagAt": 0.5, "stripAt": 0.9 },
+    "guards": {
+        "fetchPage": [
+            { "type": "source", "origin": "web", "blockDomains": ["*.evil-pages.net"] },
+            { "type": "limit", "maxCallsPerRun": 20 }
+        ],
+        "sendEmail": [
+            { "type": "egress", "allow": ["*.acme.com"], "payload": { "secrets": "block", "cards": "mask" } },
+            { "type": "limit", "maxCallsPerRun": 5 }
+        ],
+        "payInvoice": [
+            {
+                "type": "action",
+                "rules": [
+                    { "field": "iban", "from": ["tool:getSupplierRecords"] },
+                    { "field": "amount", "max": 10000, "onFail": "ask" }
+                ]
+            },
+            { "type": "limit", "maxAmountPerRun": { "field": "amount", "max": 50000 } }
+        ],
+        "deleteRecords": [{ "type": "approval" }]
+    }
+}

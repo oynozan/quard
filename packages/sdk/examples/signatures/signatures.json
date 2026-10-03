@@ -1,0 +1,135 @@
+{
+    "$schema": "./signatures.schema.json",
+    "version": "2026-10-03.1",
+    "signatures": [
+        {
+            "id": "QS-DESER-001",
+            "title": "Python pickle deserialization in code to run",
+            "category": "unsafe-deserialization",
+            "where": ["input"],
+            "any": ["pickle.loads", "pickle.load(", "cpickle.load", "dill.loads", "joblib.load(", "__reduce__"],
+            "action": "block",
+            "source": "https://docs.python.org/3/library/pickle.html"
+        },
+        {
+            "id": "QS-DESER-002",
+            "title": "Pickle payload that calls the operating system",
+            "category": "unsafe-deserialization",
+            "where": ["input", "content"],
+            "any": ["cos\nsystem", "cposix\nsystem", "cnt\nsystem", "c__builtin__\neval", "cbuiltins\nexec"],
+            "action": "block",
+            "source": "https://docs.python.org/3/library/pickle.html"
+        },
+        {
+            "id": "QS-DESER-003",
+            "title": "Unsafe YAML loading",
+            "category": "unsafe-deserialization",
+            "where": ["input", "content"],
+            "any": ["yaml.unsafe_load", "!!python/object", "!!python/name", "!!python/apply"],
+            "action": "block",
+            "source": "https://pyyaml.org/wiki/PyYAMLDocumentation"
+        },
+        {
+            "id": "QS-EXEC-004",
+            "title": "Shell command started from Python",
+            "category": "code-execution",
+            "where": ["input"],
+            "any": [
+                "os.system(",
+                "os.popen(",
+                "subprocess.popen(",
+                "subprocess.run(",
+                "subprocess.call(",
+                "pty.spawn("
+            ],
+            "action": "flag",
+            "source": "https://docs.python.org/3/library/subprocess.html#security-considerations"
+        },
+        {
+            "id": "QS-EXEC-005",
+            "title": "Dynamic code evaluation in a code tool",
+            "category": "code-execution",
+            "where": ["input"],
+            "tools": ["runPython", "runCode"],
+            "any": ["eval(", "exec(", "__import__("],
+            "action": "block",
+            "source": "https://docs.python.org/3/library/functions.html#eval"
+        },
+        {
+            "id": "QS-EXEC-006",
+            "title": "Download with curl piped into a shell",
+            "category": "code-execution",
+            "where": ["input", "content"],
+            "all": ["curl"],
+            "any": ["|sh", "|bash", "|zsh"],
+            "none": ["|sha"],
+            "action": "flag",
+            "source": "https://owasp.org/www-community/attacks/Command_Injection"
+        },
+        {
+            "id": "QS-EXEC-007",
+            "title": "Download with wget piped into a shell",
+            "category": "code-execution",
+            "where": ["input", "content"],
+            "all": ["wget"],
+            "any": ["|sh", "|bash", "|zsh"],
+            "none": ["|sha"],
+            "action": "flag",
+            "source": "https://owasp.org/www-community/attacks/Command_Injection"
+        },
+        {
+            "id": "QS-SUPPLY-008",
+            "title": "torch.load without weights_only",
+            "category": "supply-chain",
+            "where": ["input"],
+            "all": ["torch.load("],
+            "none": ["weights_only=true"],
+            "action": "block",
+            "source": "https://pytorch.org/docs/stable/generated/torch.load.html"
+        },
+        {
+            "id": "QS-SUPPLY-009",
+            "title": "Model loading that runs code from the repository",
+            "category": "supply-chain",
+            "where": ["input"],
+            "any": ["trust_remote_code=true"],
+            "action": "flag",
+            "source": "https://huggingface.co/docs/transformers/custom_models"
+        },
+        {
+            "id": "QS-SUPPLY-010",
+            "title": "Known bad model repositories (demo list)",
+            "category": "supply-chain",
+            "where": ["input", "content"],
+            "any": ["huggingface.co/bad-org-demo/", "bad-org-demo/llama-ft"],
+            "action": "block"
+        },
+        {
+            "id": "QS-RCE-011",
+            "title": "Log4Shell JNDI lookup",
+            "category": "code-execution",
+            "where": ["input", "content"],
+            "any": ["${jndi:"],
+            "action": "block",
+            "source": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+        },
+        {
+            "id": "QS-SSRF-012",
+            "title": "Cloud metadata endpoint",
+            "category": "ssrf",
+            "where": ["input"],
+            "any": ["169.254.169.254", "metadata.google.internal", "100.100.100.200"],
+            "action": "block",
+            "source": "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery"
+        },
+        {
+            "id": "QS-PATH-013",
+            "title": "Path traversal or secret files",
+            "category": "path-traversal",
+            "where": ["input"],
+            "any": ["../../", "..\\..\\", "/etc/passwd", "/etc/shadow", ".ssh/id_rsa", ".aws/credentials"],
+            "action": "block",
+            "source": "https://owasp.org/www-community/attacks/Path_Traversal"
+        }
+    ]
+}

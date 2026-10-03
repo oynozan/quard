@@ -16,14 +16,17 @@ export { guard } from "./pipeline/guard.ts";
 export type { RunEvent } from "@quard/shared";
 export type { ApprovalAnswer, ApprovalRequest, QuardConfig } from "./core/config.ts";
 export type { AgentOptions, RunOptions } from "./context/scope.ts";
+export type { Detector, DetectorQuestion, DetectorRules } from "./detectors/detector.ts";
 export type { GuardCall, RuleResult } from "./guards/call.ts";
 export type {
     ActionOptions,
     ActionRule,
     ApprovalOptions,
+    DataAction,
     EgressOptions,
     GuardOptions,
     LimitOptions,
     SourceOptions,
 } from "./guards/options.ts";
 export type { GuardType } from "./guards/types.ts";
+export type { SignaturesConfig } from "./policy/schema.ts";

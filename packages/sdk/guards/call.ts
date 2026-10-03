@@ -19,7 +19,7 @@ export type Decision = "allow" | "block" | "ask";
 export type Mode = "block" | "observe";
 
 type ResultBase = {
-    guard: GuardType | "permission";
+    guard: GuardType | "permission" | "signature";
     rule: string;
     mode: Mode;
 };
