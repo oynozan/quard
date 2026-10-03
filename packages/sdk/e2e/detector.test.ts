@@ -178,6 +178,10 @@ describe("Jev, which acts by default", () => {
         expect(isGuardRefusal(out) && out.reason).toBe("value_not_from_allowed_origin");
         expect(contentFlags()).toContainEqual(["detector:payment_fraud"]);
         expect(JSON.parse(String(fetch.mock.calls[0]?.[1].body)).state).not.toContain("0532 0130");
+        // The chunk is kept for review as Jev saw it, with the IBAN masked
+        const chunks = events.filter((event) => event.type === "chunk_label");
+        expect(chunks).toMatchObject([{ tool: "readEmail", detector: "jev-1.13.0", label: "payment_fraud" }]);
+        expect(JSON.stringify(chunks)).not.toContain("0532 0130");
     });
 
     it("lets the same payment run when the email is an ordinary invoice", async () => {

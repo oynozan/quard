@@ -92,6 +92,7 @@ quard.configure({ detector: jevDetector({ apiKey: process.env.TYPESAFE_API_KEY ?
 - `enforce` (the default) waits up to 5 seconds. A chunk at least `stripAt` (0.9) likely to be a prompt injection is removed. Content whose risky labels together reach `flagAt` (0.5) gets a flag such as `detector:payment_fraud`, so the agent's later actions face stricter rules.
 - `observe` does not wait and changes nothing. Set it with `detectorRules: { mode: "observe" }` to check the labels first.
 - Each result is a decision event: `score` is the chance the content is an attack, and `reason` lists the labels the detector gave.
+- Each chunk is also recorded as a `chunk_label` event: the redacted text the detector saw, its label, the chance of each label and its own `score`. They are kept with the run, so people can check the labels.
 - The detector can only tighten. Errors, timeouts and invalid answers record a `detector_error` warning and leave the content as the rules left it.
 
 The labels, with what each one means, are in [labels.ts](../../detectors/labels.ts):

@@ -48,9 +48,11 @@ export function signContent(call: GuardCall, shown: Shown, enforced: boolean): S
     );
 }
 
-type Labeled = { text: string; chunks: string[]; answers: DetectorAnswer[] };
+// One chunk as the agent would read it, as it was sent, and its label
+type Asked = { raw: string; sent: string; answer: DetectorAnswer };
+type Labeled = { text: string; asked: Asked[] };
 
-const injection = (answer: DetectorAnswer): number => answer.probabilities.prompt_injection ?? 0;
+const injection = ({ answer }: Asked): number => answer.probabilities.prompt_injection ?? 0;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -74,20 +76,22 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
     const rules = effectiveDetectorRules(detectorRules);
     const acts = enforced && rules.mode === "enforce";
     // Text leaves without secrets, and with emails, IBANs and cards masked
-    const ask = async (chunk: string): Promise<DetectorAnswer> => checkAnswer(await detector.label(redactText(chunk)));
+    const ask = async (raw: string): Promise<Asked> => {
+        const sent = redactText(raw);
+        return { raw, sent, answer: checkAnswer(await detector.label(sent)) };
+    };
     const texts = [...new Set(flattenArgs(shown.output).map((item) => item.value))];
     const labeling = Promise.all(
-        texts.map(async (text): Promise<Labeled> => {
-            const chunks = chunkText(text);
-            return { text, chunks, answers: await Promise.all(chunks.map(ask)) };
-        }),
+        texts.map(async (text): Promise<Labeled> => ({ text, asked: await Promise.all(chunkText(text).map(ask)) })),
     );
-    // Records the decision and returns the flags it adds
+    const { runId, stepId, agent, tool } = call;
+    // Records the decision and each chunk's label, and returns the flags it adds
     const report = (labeled: Labeled[]): string[] => {
-        const answers = labeled.flatMap((item) => item.answers);
+        const asked = labeled.flatMap((item) => item.asked);
+        const answers = asked.map((item) => item.answer);
         const risky = answers.filter((answer) => riskOf(answer) >= rules.flagAt);
         const flags = [...new Set(risky.map((answer) => `detector:${topRisk(answer)}`))];
-        const strips = answers.some((answer) => injection(answer) >= rules.stripAt);
+        const strips = asked.some((item) => injection(item) >= rules.stripAt);
         recordDecision(call, {
             guard: "source",
             rule: `detector:${detector.name}`,
@@ -97,10 +101,27 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
             // Every label the detector gave, such as "article,prompt_injection"
             reason: [...new Set(answers.map((answer) => answer.label))].join(",") || undefined,
         });
+        // The redacted text is kept, so people can check the label later
+        asked.forEach(({ sent, answer }, chunk) =>
+            record({
+                type: "chunk_label",
+                runId,
+                stepId,
+                agent,
+                at: now(),
+                tool,
+                detector: detector.name,
+                chunk,
+                text: sent,
+                label: answer.label,
+                // checkAnswer made sure every chance is a number
+                probabilities: answer.probabilities as Record<string, number>,
+                score: riskOf(answer),
+            }),
+        );
         return flags;
     };
     const fail = (): void => {
-        const { runId, stepId, agent, tool } = call;
         record({ type: "warning", runId, stepId, agent, at: now(), code: "detector_error", tool });
     };
     if (!acts) {
@@ -113,11 +134,12 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
         // Each text with a likely injection, without those chunks
         const kept = new Map(
             labeled
-                .filter((item) => item.answers.some((answer) => injection(answer) >= rules.stripAt))
+                .filter((item) => item.asked.some((chunk) => injection(chunk) >= rules.stripAt))
                 .map((item) => [
                     item.text,
-                    item.chunks
-                        .filter((_, index) => injection(item.answers[index] as DetectorAnswer) < rules.stripAt)
+                    item.asked
+                        .filter((chunk) => injection(chunk) < rules.stripAt)
+                        .map((chunk) => chunk.raw)
                         .join("\n\n"),
                 ]),
         );
