@@ -1,6 +1,8 @@
 import type { RunListItem } from "@quard/db";
+import { APPROVAL_STALE_MS } from "@quard/shared";
 import { describe, expect, it } from "vitest";
-import { at, BASE, RUN, storedRun } from "../../../../../test/runs-fixture";
+import { HOUR } from "@/lib/time";
+import { at, BASE, REQUEST, RUN, runWaiter, storedRun, storedWaitingRun } from "../../../../../test/runs-fixture";
 import { runDetailOf, runRowOf } from "./detail";
 import { decisionCounts, IDLE_MS, statusOf } from "./status";
 
@@ -139,9 +141,69 @@ describe("statusOf", () => {
 
     it("takes a recorded outcome over the last step and the clock", () => {
         expect(statusOf(BASE, { kind: "tool_call", status: "blocked" }, BASE, "failed")).toBe("failed");
+        expect(statusOf(BASE, null, BASE, "completed", true)).toBe("completed");
+    });
+
+    it("is waiting while a call waits for a person, however long the run has been quiet", () => {
+        expect(statusOf(BASE, { kind: "tool_call", status: "error" }, LATER, null, true)).toBe("waiting");
+        expect(statusOf(BASE, null, BASE, null, true)).toBe("waiting");
     });
 
     it("counts only guard rows in decision counts", () => {
         expect(decisionCounts(runDetailOf(storedRun(), LATER).steps)).toEqual({ allowed: 3, asked: 1, blocked: 1 });
+    });
+});
+
+describe("runs with a call waiting for a person", () => {
+    // Hours after the last event, only the call's beat counts since approvals never expire
+    const NOW = LATER + 5 * HOUR;
+    const live = runWaiter({ lastBeatAt: new Date(NOW - APPROVAL_STALE_MS) });
+    const stopped = runWaiter({ lastBeatAt: new Date(NOW - APPROVAL_STALE_MS - 1) });
+
+    it("shows the run as waiting and still open, linked to its request, while the call beats", () => {
+        expect(runRowOf(item(), NOW, [live])).toMatchObject({
+            status: "waiting",
+            durationMs: NOW - BASE,
+            steps: 9,
+            approvalId: REQUEST,
+        });
+        const detail = runDetailOf(storedWaitingRun(), NOW, [live]);
+        expect(detail.summary).toMatchObject({
+            status: "waiting",
+            durationMs: NOW - BASE,
+            steps: detail.steps.length,
+            approvalId: REQUEST,
+        });
+        expect(detail.steps.filter((step) => step.approval)).toEqual([
+            expect.objectContaining({
+                kind: "approval",
+                name: "payInvoice",
+                status: "waiting",
+                approval: expect.objectContaining({ requestId: REQUEST, state: "waiting" }),
+            }),
+        ]);
+    });
+
+    it("judges the run as usual once the call stopped beating, still linked to its open request", () => {
+        expect(runRowOf(item(), NOW, [stopped])).toMatchObject({
+            status: "completed",
+            durationMs: 10_000,
+            steps: 8,
+            approvalId: REQUEST,
+        });
+        const detail = runDetailOf(storedWaitingRun(), NOW, [stopped]);
+        expect(detail.summary).toMatchObject({ status: "completed", approvalId: REQUEST });
+        expect(detail.steps.some((step) => step.approval)).toBe(false);
+    });
+
+    it("links the request a call still waits on before one whose call stopped", () => {
+        const quiet = runWaiter({ askId: "b".repeat(16), requestId: "apr_fedcba9876543210", lastBeatAt: at(0) });
+        expect(runRowOf(item(), NOW, [quiet, live]).approvalId).toBe(REQUEST);
+        expect(runDetailOf(storedWaitingRun(), NOW, [quiet, live]).summary.approvalId).toBe(REQUEST);
+    });
+
+    it("keeps a recorded end over a call that still waits", () => {
+        const row = runRowOf(item({ outcome: "failed", endedAt: at(12) }), NOW, [live]);
+        expect(row).toMatchObject({ status: "failed", durationMs: 12_000, approvalId: REQUEST });
     });
 });

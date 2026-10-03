@@ -1,7 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runDetailOf } from "@/lib/data/runs/live/detail";
 import type { ApprovalInfo } from "@/lib/data/runs/types";
 import { makeAgent, makeDetail, makeGuard, makeRow, makeStep } from "../../../../test/runs-detail-list/fixtures";
+import { ASK, at, REQUEST, runWaiter, storedWaitingRun } from "../../../../test/runs-fixture";
 import { RunView } from "./run-view";
 
 // The timeline sizes itself with ResizeObserver, which jsdom lacks.
@@ -20,6 +22,11 @@ const waitingApproval: ApprovalInfo = {
     decidedAt: null,
     argsHash: "h",
 };
+
+// The stored run while payInvoice has waited a minute for a person, as the run page reads it
+function waitingRun() {
+    return runDetailOf(storedWaitingRun(), at(66).getTime(), [runWaiter({ lastBeatAt: at(60) })]);
+}
 
 // The guard decisions tile, read as one line.
 function decisions(): string | null | undefined {
@@ -101,6 +108,24 @@ describe("RunView", () => {
         const summary = makeRow({ decisions: { allowed: 3, asked: 0, blocked: 1 } });
         render(<RunView run={makeDetail({ summary, steps })} />);
         expect(decisions()).toBe("1blocked1would block1would ask1allowed");
+    });
+
+    it("shows a stored run's waiting call in the callout, linked to its request", () => {
+        const { container } = render(<RunView run={waitingRun()} />);
+        expect(container.textContent).toContain("payInvoice by billing is waiting for a human · 1 min 0 s");
+        expect(container.textContent).toContain("Running for 1 min 6 s");
+        const review = screen.getByRole("link", { name: "Review in Approvals" });
+        expect(review.getAttribute("href")).toBe(`/approvals#${REQUEST}`);
+        expect(screen.queryByRole("link", { name: "Open approval" })).toBeNull();
+    });
+
+    it("opens a stored run's waiting call in the drawer, with a link to answer it", () => {
+        render(<RunView run={waitingRun()} step={ASK} />);
+        const drawer = screen.getByRole("dialog");
+        expect(within(drawer).getByRole("heading", { level: 2, name: "payInvoice" })).toBeTruthy();
+        expect(drawer.textContent).toContain("1 min 0 s so far");
+        const answer = within(drawer).getByRole("link", { name: "Answer in Approvals" });
+        expect(answer.getAttribute("href")).toBe(`/approvals#${REQUEST}`);
     });
 
     it("opens the step named in the link in the drawer", () => {

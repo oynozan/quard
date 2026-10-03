@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { createProject, ingestBatch } from "@quard/db";
+import { addWaiter, createProject, ingestBatch, openApprovalRequest } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { ASKED_STEP, askInput, waitingRun } from "../../../../test/approvals-overview/live";
 import { attack, scoredFetch } from "../../../../test/runs/events";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
@@ -13,6 +14,7 @@ const { database } = await import("./live/client");
 
 const RUN = "b".repeat(32);
 const OTHER = "c".repeat(32);
+const WAITING = "e".repeat(32);
 let test: TestDb;
 
 beforeAll(async () => {
@@ -78,5 +80,45 @@ describe("runs from Postgres", () => {
             ["action", false, undefined],
             ["source", true, 0.87],
         ]);
+    });
+});
+
+describe("runs that wait for a person", () => {
+    it("shows a run as waiting while its call waits on an open request, and filters by it", async () => {
+        const projectId = await createProject(test.db, "Waiting");
+        vi.stubEnv("QUARD_PROJECT_ID", projectId);
+        // The run asked hours ago and has sent nothing since
+        await ingestBatch(test.db, projectId, waitingRun(WAITING));
+        const { id } = await openApprovalRequest(test.db, projectId, askInput(WAITING));
+        const ask = { askId: "a".repeat(16), requestId: id, runId: WAITING, stepId: ASKED_STEP, agent: "billing" };
+        await addWaiter(test.db, projectId, ask);
+
+        expect(await listRuns()).toEqual([expect.objectContaining({ id: WAITING, status: "waiting", approvalId: id })]);
+        expect((await listRuns({ status: "waiting" })).map((row) => row.id)).toEqual([WAITING]);
+        expect(await listRuns({ status: "completed" })).toEqual([]);
+        const run = await getRun(WAITING);
+        expect(run?.summary).toMatchObject({ status: "waiting", approvalId: id });
+        expect(run?.steps.at(-1)).toMatchObject({
+            kind: "approval",
+            name: "payInvoice",
+            status: "waiting",
+            approval: { requestId: id, state: "waiting" },
+        });
+    });
+
+    it("judges the run as usual once its waiting process stops beating", async () => {
+        await test.db
+            .updateTable("approval_waiters")
+            .set({ last_beat_at: new Date(Date.now() - 60_000) })
+            .where("run_id", "=", WAITING)
+            .execute();
+
+        const [row] = await listRuns();
+        expect(row).toMatchObject({ id: WAITING, status: "completed", approvalId: expect.stringMatching(/^apr_/) });
+        expect(await listRuns({ status: "waiting" })).toEqual([]);
+        const run = await getRun(WAITING);
+        vi.stubEnv("QUARD_PROJECT_ID", "");
+        expect(run?.summary).toMatchObject({ status: "completed", approvalId: row?.approvalId });
+        expect(run?.steps.some((step) => step.approval)).toBe(false);
     });
 });

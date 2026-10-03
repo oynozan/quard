@@ -1,5 +1,5 @@
 import { findName, findValue, hasRuns, listRuns, searchKeys, type Db } from "@quard/db";
-import { runRowOf } from "../runs/live/detail";
+import { runRowsOf } from "../runs/live/rows";
 import { projectScope } from "../scope";
 import { KIND_OF, nameMatches, valueMatches } from "./matches";
 import type { SearchResult, SearchState } from "./types";
@@ -48,8 +48,8 @@ export async function searchRuns(query: string): Promise<SearchState> {
         };
     }
     const runIds = [...new Set(found.matches.map((match) => match.runId))];
-    const now = Date.now();
-    const runRows = (await listRuns(db, project.id, { runIds })).map((run) => runRowOf(run, now));
+    const runs = await listRuns(db, project.id, { runIds });
+    const runRows = await runRowsOf(db, project.id, runs, Date.now());
     return {
         state: "searched",
         result: { query: text, ...found, runRows, truncated: found.total > found.matches.length },

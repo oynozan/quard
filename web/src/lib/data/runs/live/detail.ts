@@ -1,9 +1,16 @@
-import type { RunDetail as StoredRun, RunListItem } from "@quard/db";
+import type { RunDetail as StoredRun, RunListItem, RunWaiter } from "@quard/db";
+import { stillWaits } from "../../approvals/live/heartbeat";
 import type { ModelUsage, RunAgent, RunDetail, RunRow, Step } from "../types";
 import { decisionCounts, statusOf } from "./status";
 import { buildSteps } from "./steps";
 
 const ms = (date: Date) => date.getTime();
+
+// Calls that still beat, and the open request to link, preferring one a call still waits on
+function waitingOf(waiters: RunWaiter[], now: number): { live: RunWaiter[]; approvalId: string | null } {
+    const live = waiters.filter((waiter) => stillWaits(waiter, now));
+    return { live, approvalId: (live[0] ?? waiters[0])?.requestId ?? null };
+}
 
 // The agent whose step started this agent's first model call is its parent
 function agentsOf(rootAgent: string, steps: Step[]): RunAgent[] {
@@ -43,17 +50,20 @@ function agentsOf(rootAgent: string, steps: Step[]): RunAgent[] {
     });
 }
 
-// When a run ended: its recorded end, now while it runs, or else its last event
-function endOf(run: { endedAt: Date | null; lastEventAt: Date }, running: boolean, now: number): number {
+// The recorded end, now while the run is open, else its last event
+function endOf(run: { endedAt: Date | null; lastEventAt: Date }, open: boolean, now: number): number {
     if (run.endedAt) return ms(run.endedAt);
-    return running ? now : ms(run.lastEventAt);
+    return open ? now : ms(run.lastEventAt);
 }
 
-// A row of the runs list
-export function runRowOf(run: RunListItem, now: number): RunRow {
-    const status = statusOf(ms(run.lastEventAt), run.lastStep, now, run.outcome);
+const isOpen = (status: RunRow["status"]) => status === "running" || status === "waiting";
+
+// A row of the runs list, given the run's calls on open approval requests
+export function runRowOf(run: RunListItem, now: number, waiters: RunWaiter[] = []): RunRow {
+    const { live, approvalId } = waitingOf(waiters, now);
+    const status = statusOf(ms(run.lastEventAt), run.lastStep, now, run.outcome, live.length > 0);
     const startedAt = ms(run.startedAt);
-    const end = endOf(run, status === "running", now);
+    const end = endOf(run, isOpen(status), now);
     const { allowed, asked, blocked } = run.decisions;
     return {
         id: run.runId,
@@ -62,19 +72,21 @@ export function runRowOf(run: RunListItem, now: number): RunRow {
         status,
         startedAt,
         durationMs: Math.max(0, end - startedAt),
-        steps: run.modelCalls + run.toolCalls + allowed + asked + blocked,
+        // The run view shows each waiting call as a step too
+        steps: run.modelCalls + run.toolCalls + allowed + asked + blocked + live.length,
         costUsd: run.costUsd,
         costKnown: run.costKnown,
         decisions: run.decisions,
         untrusted: run.influenced,
         tools: run.tools,
         incidentId: null,
-        approvalId: null,
+        approvalId,
     };
 }
 
-export function runDetailOf(run: StoredRun, now: number): RunDetail {
-    const steps = buildSteps(run);
+export function runDetailOf(run: StoredRun, now: number, waiters: RunWaiter[] = []): RunDetail {
+    const { live, approvalId } = waitingOf(waiters, now);
+    const steps = buildSteps(run, live, now);
     const agents = agentsOf(run.agent, steps);
     const last = run.steps.at(-1);
     const status = statusOf(
@@ -82,9 +94,10 @@ export function runDetailOf(run: StoredRun, now: number): RunDetail {
         last ? { kind: last.kind, status: last.status } : null,
         now,
         run.outcome,
+        live.length > 0,
     );
     const startedAt = ms(run.startedAt);
-    const end = endOf(run, status === "running", now);
+    const end = endOf(run, isOpen(status), now);
     const summary: RunRow = {
         id: run.runId,
         rootAgent: run.agent,
@@ -99,7 +112,7 @@ export function runDetailOf(run: StoredRun, now: number): RunDetail {
         untrusted: steps.some((step) => step.context.trust === "untrusted"),
         tools: [...new Set(run.steps.filter((step) => step.kind === "tool_call").map((step) => step.name))],
         incidentId: null,
-        approvalId: null,
+        approvalId,
     };
     return { summary, agents, graph: { nodes: agents, edges: [] }, steps, limits: [] };
 }

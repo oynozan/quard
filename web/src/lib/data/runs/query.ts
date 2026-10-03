@@ -1,6 +1,7 @@
-import { getRun as storedRun, listRuns as storedRuns } from "@quard/db";
+import { getRun as storedRun, listRuns as storedRuns, runWaiters } from "@quard/db";
 import { projectScope } from "../scope";
-import { runDetailOf, runRowOf } from "./live/detail";
+import { runDetailOf } from "./live/detail";
+import { runRowsOf } from "./live/rows";
 import type { RunDetail, RunQuery, RunRow } from "./types";
 
 // The newest runs the list filters over
@@ -18,15 +19,13 @@ function matches(row: RunRow, query: string): boolean {
 export async function listRuns(filter: RunQuery = {}): Promise<RunRow[]> {
     const scope = await projectScope();
     if (!scope) return [];
-    const now = Date.now();
-    const rows = (await storedRuns(scope.db, scope.project.id, { limit: WINDOW }))
-        .map((run) => runRowOf(run, now))
-        .filter(
-            (row) =>
-                (!filter.agent || row.agents.includes(filter.agent)) &&
-                (!filter.status || row.status === filter.status) &&
-                (!filter.query || matches(row, filter.query)),
-        );
+    const runs = await storedRuns(scope.db, scope.project.id, { limit: WINDOW });
+    const rows = (await runRowsOf(scope.db, scope.project.id, runs, Date.now())).filter(
+        (row) =>
+            (!filter.agent || row.agents.includes(filter.agent)) &&
+            (!filter.status || row.status === filter.status) &&
+            (!filter.query || matches(row, filter.query)),
+    );
     return filter.limit ? rows.slice(0, filter.limit) : rows;
 }
 
@@ -35,5 +34,6 @@ export async function getRun(runId: string): Promise<RunDetail | null> {
     const scope = await projectScope();
     if (!scope) return null;
     const run = await storedRun(scope.db, scope.project.id, runId);
-    return run ? runDetailOf(run, Date.now()) : null;
+    if (!run) return null;
+    return runDetailOf(run, Date.now(), await runWaiters(scope.db, scope.project.id, [runId]));
 }

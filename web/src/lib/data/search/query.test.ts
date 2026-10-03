@@ -1,5 +1,7 @@
 // @vitest-environment node
+import { addWaiter, openApprovalRequest } from "@quard/db";
 import { describe, expect, it, vi } from "vitest";
+import { ASKED_STEP, askInput } from "../../../../test/approvals-overview/live";
 import { found, setUpSearchDb } from "../../../../test/search/db";
 import {
     agentRun,
@@ -15,6 +17,7 @@ import {
     READ,
     T0,
 } from "../../../../test/search/events";
+import { database } from "@/lib/data/runs/live/client";
 import { searchRuns } from "@/lib/data/search";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
@@ -116,6 +119,21 @@ describe("searchRuns by name", () => {
         expect(result).toMatchObject({ kind: "agent", total: 51, runs: 51, truncated: true });
         expect(result.matches).toHaveLength(50);
         expect(result.runRows).toHaveLength(50);
+    });
+});
+
+describe("searchRuns on a run that waits for a person", () => {
+    it("shows the run as waiting while its call waits on an open request", async () => {
+        const runId = "f".repeat(32);
+        const asking = agentRun(runId, "billing").filter((event) => event.type !== "run_finished");
+        const projectId = await project(...asking);
+        const { id } = await openApprovalRequest(database(), projectId, askInput(runId));
+        const ask = { askId: "a".repeat(16), requestId: id, runId, stepId: ASKED_STEP, agent: "billing" };
+        await addWaiter(database(), projectId, ask);
+
+        expect((await found("billing")).runRows).toEqual([
+            expect.objectContaining({ id: runId, status: "waiting", approvalId: id }),
+        ]);
     });
 });
 

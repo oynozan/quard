@@ -8,9 +8,16 @@ export const IDLE_MS = 2 * MINUTE;
 export type LastStep = { kind: string; status: string } | null;
 export type Outcome = "completed" | "failed" | "blocked" | null;
 
-// The recorded outcome wins. Without one, the status is read from the last step.
-export function statusOf(lastEventAt: number, last: LastStep, now: number, outcome: Outcome = null): RunStatus {
+// A recorded outcome wins, then a waiting call however old, then the clock and the last step
+export function statusOf(
+    lastEventAt: number,
+    last: LastStep,
+    now: number,
+    outcome: Outcome = null,
+    waiting = false,
+): RunStatus {
     if (outcome) return outcome;
+    if (waiting) return "waiting";
     if (now - lastEventAt < IDLE_MS) return "running";
     if (last?.status === "error") return "failed";
     if (last?.kind === "tool_call" && last.status === "blocked") return "blocked";
