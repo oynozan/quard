@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import type { QuarantinedValue } from "@/lib/data/fleet";
 import { describe, expect, it } from "vitest";
-import { QUARANTINE } from "../../../../test/summary/fleet";
+import { quarantined } from "../../../../test/fleet-shell/quarantine";
 import { KIND_NAMES, ValueCell } from "./value-cell";
 
-const [IBAN] = QUARANTINE;
+const [IBAN] = quarantined();
 
 describe("ValueCell", () => {
     it("shows the masked value over its field, titled with the kind", () => {

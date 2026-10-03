@@ -22,18 +22,3 @@ export function hasAgentLinks(fleet: Pick<FleetData, "agentPoints" | "untrustedL
 export function hasLimitHits(limits: RunLimitCount[]): boolean {
     return sum(limits.map(limitCount)) > 0;
 }
-
-export function hasQuarantine(fleet: Pick<FleetData, "quarantine" | "watching">): boolean {
-    return fleet.quarantine.length > 0 || fleet.watching.length > 0;
-}
-
-// True when no section of the summary has anything to show
-export function isEmptyFleet(fleet: FleetData): boolean {
-    return !(
-        hasIncidents(fleet) ||
-        hasBlocks(fleet.blocksByGuard) ||
-        hasAgentLinks(fleet) ||
-        hasLimitHits(fleet.runLimits) ||
-        hasQuarantine(fleet)
-    );
-}

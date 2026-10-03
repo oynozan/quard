@@ -1,25 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import {
-    BY_GUARD,
-    LIMITS,
-    LINKS,
-    QUARANTINE,
-    SOURCES,
-    TOOLS,
-    WATCHING,
-    emptyFleet,
-    fullFleet,
-} from "../../../../test/summary/fleet";
-import {
-    hasAgentLinks,
-    hasBlocks,
-    hasIncidents,
-    hasLimitHits,
-    hasQuarantine,
-    isEmptyFleet,
-    limitCount,
-} from "./sections";
+import { BY_GUARD, LIMITS, LINKS, SOURCES, TOOLS, emptyFleet } from "../../../../test/summary/fleet";
+import { hasAgentLinks, hasBlocks, hasIncidents, hasLimitHits, limitCount } from "./sections";
 
 describe("limitCount", () => {
     it("counts runs an observe-mode limit would stop and runs a block-mode limit stopped", () => {
@@ -38,8 +20,6 @@ describe("section checks", () => {
         expect(hasBlocks(fleet.blocksByGuard)).toBe(false);
         expect(hasAgentLinks(fleet)).toBe(false);
         expect(hasLimitHits(fleet.runLimits)).toBe(false);
-        expect(hasQuarantine(fleet)).toBe(false);
-        expect(isEmptyFleet(fleet)).toBe(true);
     });
 
     it("count incidents from either list, but not a count of 0", () => {
@@ -65,16 +45,5 @@ describe("section checks", () => {
     it("need a run over some limit", () => {
         expect(hasLimitHits(LIMITS)).toBe(true);
         expect(hasLimitHits(LIMITS.map((limit) => ({ ...limit, wouldStop: 0, stopped: 0 })))).toBe(false);
-    });
-
-    it("count quarantined or watched values", () => {
-        expect(hasQuarantine({ quarantine: QUARANTINE, watching: [] })).toBe(true);
-        expect(hasQuarantine({ quarantine: [], watching: WATCHING })).toBe(true);
-    });
-
-    it("call the summary empty only when every section is", () => {
-        expect(isEmptyFleet(fullFleet())).toBe(false);
-        expect(isEmptyFleet(emptyFleet({ untrustedLinks: LINKS }))).toBe(false);
-        expect(isEmptyFleet(emptyFleet({ watching: WATCHING }))).toBe(false);
     });
 });

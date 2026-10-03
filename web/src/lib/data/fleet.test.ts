@@ -1,14 +1,12 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
-
-// The Postgres read is a boundary, and this file only passes it through
-const query = vi.hoisted(() => ({ getFleet: vi.fn() }));
-vi.mock("./fleet/query", () => query);
-
-const fleet = await import("./fleet");
+import { describe, expect, it } from "vitest";
+import * as fleet from "./fleet";
+import { getQuarantine } from "./fleet/quarantine";
+import { getFleet } from "./fleet/query";
 
 describe("fleet data", () => {
-    it("exposes the summary page's query", () => {
-        expect(fleet.getFleet).toBe(query.getFleet);
+    it("exposes the fleet view's queries", () => {
+        expect(fleet.getFleet).toBe(getFleet);
+        expect(fleet.getQuarantine).toBe(getQuarantine);
     });
 });

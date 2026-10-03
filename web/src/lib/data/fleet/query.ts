@@ -20,7 +20,7 @@ export async function getFleet(): Promise<FleetData> {
     return {
         startAt,
         endAt,
-        // Incidents, run limits and the fleet check have no source yet
+        // Incidents and run limits have no source yet; the quarantine is read on its own
         incidentsBySource: [],
         incidentsByTool: [],
         blocksByGuard: byGuard,
@@ -28,7 +28,5 @@ export async function getFleet(): Promise<FleetData> {
         agentPoints: [],
         untrustedLinks: untrustedLinksOf(links),
         runLimits: [],
-        quarantine: [],
-        watching: [],
     };
 }

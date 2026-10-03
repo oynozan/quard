@@ -27,7 +27,7 @@ describe("SummaryLoading", () => {
     it("shows sections without a source as their title and a small bar", () => {
         render(<SummaryLoading />);
 
-        for (const name of ["Where incidents start", "Run limits", "Quarantine"]) {
+        for (const name of ["Where incidents start", "Run limits"]) {
             expect(section(name).getAttribute("aria-busy")).toBe("true");
             expect(within(section(name)).getByRole("heading", { level: 2 }).textContent).toBe(name);
             expect(within(section(name)).queryByRole("img")).toBeNull();
@@ -36,8 +36,11 @@ describe("SummaryLoading", () => {
         }
     });
 
-    it("keeps the skeletons of the blocks charts and the links table, which have a source", () => {
+    it("keeps the skeletons of the blocks charts and the links and quarantine tables, which have a source", () => {
         render(<SummaryLoading />);
+
+        expect(section("Quarantine").getAttribute("aria-busy")).toBe("true");
+        expect(within(section("Quarantine")).getByRole("status").textContent).toBe("Loading quarantine…");
 
         expect(section("Blocks per day").getAttribute("aria-busy")).toBe("true");
         expect(section("Blocks by hour, all guards").getAttribute("aria-busy")).toBe("true");

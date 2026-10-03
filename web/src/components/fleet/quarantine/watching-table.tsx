@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FitMeter } from "@/components/charts/fit";
-import { DataTable, Td, Th, Tr } from "@/components/kit/data-table";
+import { DataTable, QuietEmpty, Td, Th, Tr } from "@/components/kit/data-table";
 import { SubHeading } from "@/components/kit/headings";
 import type { WatchedValue } from "@/lib/data/fleet";
 import { formatAge, formatLongDate } from "@/lib/format";
@@ -10,15 +10,21 @@ import { ValueCell } from "./value-cell";
 
 type WatchingTableProps = { rows: WatchedValue[]; runsToBlock: number; now: number };
 
-// New values the fleet check is still counting toward a block, drawn only when there are some
+// "3 more at 1 run". Folded values have at most 1 recent run, and some may have none.
+function foldWords(rows: WatchedValue[]): string {
+    const runs = new Set(rows.map((row) => row.runs));
+    const words = runs.size > 1 ? "0 or 1 run" : runs.has(1) ? "1 run" : "0 runs";
+    return `${rows.length} more at ${words}`;
+}
+
+// New values the fleet check is still counting toward a block
 export function WatchingTable({ rows, runsToBlock, now }: WatchingTableProps) {
     const [expanded, setExpanded] = useState(false);
-    if (rows.length === 0) return null;
     const sorted = [...rows].sort((a, b) => b.runs - a.runs || b.firstSeenAt - a.firstSeenAt);
-    // Values seen in more than one run lead, and single-run values fold into one count behind them
+    // Values seen in more than one run lead; the rest fold into one count
     const lead = sorted.filter((row) => row.runs > 1);
-    const folded = lead.length > 0 ? sorted.length - lead.length : 0;
-    const shown = expanded || folded === 0 ? sorted : lead;
+    const rest = sorted.slice(lead.length);
+    const shown = expanded ? sorted : lead;
     return (
         <div className="mt-[22px]">
             <SubHeading>Watching</SubHeading>
@@ -39,7 +45,7 @@ export function WatchingTable({ rows, runsToBlock, now }: WatchingTableProps) {
                 </thead>
                 <tbody>
                     {shown.map((row) => (
-                        <Tr key={row.hash}>
+                        <Tr key={row.key}>
                             <Td>
                                 <ValueCell value={row} />
                             </Td>
@@ -69,14 +75,15 @@ export function WatchingTable({ rows, runsToBlock, now }: WatchingTableProps) {
                     ))}
                 </tbody>
             </DataTable>
-            {folded > 0 ? (
+            {sorted.length === 0 ? <QuietEmpty>No new values are being counted</QuietEmpty> : null}
+            {rest.length > 0 ? (
                 <button
                     type="button"
                     aria-expanded={expanded}
                     onClick={() => setExpanded(!expanded)}
                     className="mt-3 rounded-[2px] text-[12px] font-light text-ink-muted underline decoration-line-hover underline-offset-[3px] transition-colors hover:text-ink-bright hover:decoration-ink-2"
                 >
-                    {expanded ? "Show fewer" : `${folded} more at 1 run`}
+                    {expanded ? "Show fewer" : foldWords(rest)}
                 </button>
             ) : null}
         </div>

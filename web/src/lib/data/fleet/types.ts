@@ -22,23 +22,29 @@ export type BlocksHeatmap = {
 export type QuarantinedValue = {
     kind: "iban" | "email" | "domain";
     field: string;
-    // Masked like the rest of the dashboard, with domains in clear
+    // The fleet key, such as "iban:DE89…3000#<hash>" or "domain:acme.com"
+    key: string;
+    // Masked like the rest of the dashboard. Domains stay in clear.
     value: string;
-    hash: string;
+    // Null for domains, which have no hash
+    hash: string | null;
     firstSeenAt: number;
     quarantinedAt: number;
+    // Quarantined while the check only observed: it would block, but does not
+    observe: boolean;
     runs: number;
     blockedAttempts: number;
     agents: string[];
-    lastAttemptAt: number;
+    lastAttemptAt: number | null;
 };
 
-// New values the fleet check is counting, not yet at 5 runs
+// New values the fleet check is counting, not yet at the runs that block.
 export type WatchedValue = {
     kind: "iban" | "email" | "domain";
     field: string;
+    key: string;
     value: string;
-    hash: string;
+    hash: string | null;
     firstSeenAt: number;
     runs: number;
     agents: string[];
@@ -66,6 +72,22 @@ export type FleetData = {
     // Delegations from one agent to another, and how many of them read untrusted content
     untrustedLinks: { from: string; to: string; delegations: number; untrusted: number; untrustedShare: number }[];
     runLimits: RunLimitCount[];
+};
+
+// How the fleet check decides, and until when it only observes
+export type FleetCheckFacts = {
+    // The fields it has seen values in
+    fields: string[];
+    newForDays: number;
+    runsToBlock: number;
+    withinHours: number;
+    observeUntil: number | null;
+};
+
+// The quarantine section, read from Postgres at `now`
+export type QuarantineData = {
+    now: number;
     quarantine: QuarantinedValue[];
     watching: WatchedValue[];
+    check: FleetCheckFacts;
 };

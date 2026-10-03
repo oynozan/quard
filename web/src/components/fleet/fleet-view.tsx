@@ -1,34 +1,23 @@
 import type { ReactNode } from "react";
-import { EmptyLine } from "@/components/kit/empty";
 import { PageHeading } from "@/components/kit/headings";
 import { PAGE_WIDE } from "@/components/kit/page";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { FleetData } from "@/lib/data/fleet";
+import type { FleetData, QuarantineData } from "@/lib/data/fleet";
 import { formatShortDate } from "@/lib/format";
 import { AgentPanes } from "./agent-panes";
 import { BlocksPanes } from "./blocks-panes";
 import { IncidentPanes } from "./incident-panes";
-import { isEmptyFleet } from "./lib/sections";
 import { QuarantineSection } from "./quarantine/quarantine-section";
+import { QuarantineSkeleton } from "./quarantine/quarantine-skeleton";
 import { RunLimits } from "./run-limits";
-import { LoadingSection } from "./section-states";
 
 // The overview's container, so every page shares one gutter
 export function FleetContainer({ children }: { children: ReactNode }) {
     return <div className={PAGE_WIDE}>{children}</div>;
 }
 
-// The summary page, loading while the fleet data is null
-export function FleetView({ fleet }: { fleet: FleetData | null }) {
-    if (fleet && isEmptyFleet(fleet)) {
-        return (
-            <FleetContainer>
-                <PageHeading title="Summary" />
-                <EmptyLine>Nothing to summarize yet</EmptyLine>
-            </FleetContainer>
-        );
-    }
-
+// The summary page, loading while its data is null
+export function FleetView({ fleet, quarantine }: { fleet: FleetData | null; quarantine: QuarantineData | null }) {
     return (
         <FleetContainer>
             <PageHeading
@@ -60,10 +49,15 @@ export function FleetView({ fleet }: { fleet: FleetData | null }) {
                     <RunLimits limits={fleet?.runLimits ?? null} />
                 </Reveal>
                 <Reveal delay={160}>
-                    {fleet ? (
-                        <QuarantineSection quarantine={fleet.quarantine} watching={fleet.watching} now={fleet.endAt} />
+                    {quarantine ? (
+                        <QuarantineSection
+                            quarantine={quarantine.quarantine}
+                            watching={quarantine.watching}
+                            check={quarantine.check}
+                            now={quarantine.now}
+                        />
                     ) : (
-                        <LoadingSection title="Quarantine" />
+                        <QuarantineSkeleton />
                     )}
                 </Reveal>
             </div>

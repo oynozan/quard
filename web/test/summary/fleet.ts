@@ -1,13 +1,6 @@
-import type {
-    BlocksByGuard,
-    BlocksHeatmap,
-    FleetData,
-    QuarantinedValue,
-    RunLimitCount,
-    WatchedValue,
-} from "@/lib/data/fleet";
+import type { BlocksByGuard, BlocksHeatmap, FleetData, RunLimitCount } from "@/lib/data/fleet";
 import type { GuardType } from "@/lib/data/types";
-import { DAY, HOUR, MINUTE, NOW } from "../time";
+import { DAY, NOW } from "../time";
 
 // UTC midnight 29 days before NOW, where a summary read at NOW starts
 export const START_AT = Date.UTC(2026, 8, 4);
@@ -40,8 +33,6 @@ export function emptyFleet(changes: Partial<FleetData> = {}): FleetData {
         agentPoints: [],
         untrustedLinks: [],
         runLimits: [],
-        quarantine: [],
-        watching: [],
         ...changes,
     };
 }
@@ -95,94 +86,6 @@ export const LIMITS: RunLimitCount[] = [
     { name: "cost", limit: 5, unit: "USD", mode: "observe", wouldStop: 0, stopped: 0 },
 ];
 
-export const QUARANTINE: QuarantinedValue[] = [
-    {
-        kind: "iban",
-        field: "iban",
-        value: "LT12…1000",
-        hash: "3f9a07c2d1e4",
-        firstSeenAt: NOW - 4 * DAY - 4 * HOUR,
-        quarantinedAt: NOW - 4 * DAY - 3 * HOUR,
-        runs: 5,
-        blockedAttempts: 9,
-        agents: ["billing"],
-        lastAttemptAt: NOW - 2 * HOUR - 41 * MINUTE,
-    },
-    {
-        kind: "domain",
-        field: "url",
-        value: "acme-billing.net",
-        hash: "8b10e45f7a3e",
-        firstSeenAt: NOW - 4 * DAY - 5 * HOUR,
-        quarantinedAt: NOW - 4 * DAY - 2 * HOUR,
-        runs: 5,
-        blockedAttempts: 3,
-        agents: ["researcher"],
-        lastAttemptAt: NOW - 3 * DAY - 9 * HOUR,
-    },
-    {
-        kind: "email",
-        field: "to",
-        value: "r…@claims-desk.io",
-        hash: "c47d2b9e6001",
-        firstSeenAt: NOW - 13 * DAY - 7 * HOUR,
-        quarantinedAt: NOW - 13 * DAY - HOUR,
-        runs: 5,
-        blockedAttempts: 2,
-        agents: ["billing", "support"],
-        lastAttemptAt: NOW - 12 * DAY,
-    },
-];
-
-// Two values seen in more than one run and three seen once
-export const WATCHING: WatchedValue[] = [
-    {
-        kind: "iban",
-        field: "iban",
-        value: "DE44…0613",
-        hash: "1a2b3c4d5e6f",
-        firstSeenAt: NOW - 4 * MINUTE,
-        runs: 1,
-        agents: ["billing"],
-    },
-    {
-        kind: "email",
-        field: "to",
-        value: "r…@claims-desk.io",
-        hash: "2b3c4d5e6f70",
-        firstSeenAt: NOW - 17 * MINUTE,
-        runs: 2,
-        agents: ["support"],
-    },
-    {
-        kind: "email",
-        field: "to",
-        value: "c…@claims-desk.io",
-        hash: "3c4d5e6f7081",
-        firstSeenAt: NOW - 3 * MINUTE,
-        runs: 1,
-        agents: ["support"],
-    },
-    {
-        kind: "email",
-        field: "to",
-        value: "a…@claims-desk.io",
-        hash: "4d5e6f708192",
-        firstSeenAt: NOW - 9 * HOUR,
-        runs: 1,
-        agents: ["support"],
-    },
-    {
-        kind: "iban",
-        field: "iban",
-        value: "NL91…4300",
-        hash: "5e6f708192a3",
-        firstSeenAt: NOW - 2 * DAY - 6 * HOUR,
-        runs: 3,
-        agents: ["billing"],
-    },
-];
-
 // Every section with something in it
 export function fullFleet(changes: Partial<FleetData> = {}): FleetData {
     return emptyFleet({
@@ -193,8 +96,6 @@ export function fullFleet(changes: Partial<FleetData> = {}): FleetData {
         agentPoints: POINTS,
         untrustedLinks: LINKS,
         runLimits: LIMITS,
-        quarantine: QUARANTINE,
-        watching: WATCHING,
         ...changes,
     });
 }
