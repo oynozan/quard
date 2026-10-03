@@ -39,5 +39,19 @@ function describe(event: RunEvent): string | undefined {
         }
         case "warning":
             return `warning: ${event.code}${event.tool === undefined ? "" : ` (${event.tool})`}`;
+        case "message": {
+            const checked = event.verified ? "its labels found" : "no labels found";
+            return `message from ${event.from}, ${checked}: ${event.trust}, ${event.sensitivity}`;
+        }
+        case "handoff":
+            return `${event.agent} ${event.via === "tool" ? "called" : "handed off to"} ${event.to}, context ${event.trust}`;
+        case "memory": {
+            const label = `${event.trust}, ${event.sensitivity}`;
+            if (event.op === "write") {
+                const kept = event.verified > 0 ? "in the backend" : "in this process only";
+                return `wrote to ${event.store} as ${label}, labels kept ${kept}`;
+            }
+            return `read ${event.items} item(s) from ${event.store}, ${event.verified} with labels: ${label}`;
+        }
     }
 }
