@@ -20,6 +20,7 @@ export { decideApproval, revokeGrant } from "./queries/approvals/decide.ts";
 export type { DecideResult } from "./queries/approvals/decide.ts";
 export { countOpenRequests, listDecidedRequests, listGrants, listOpenRequests } from "./queries/approvals/list.ts";
 export { decidedRequests, getApprovalRequest, openApprovalRequest } from "./queries/approvals/requests.ts";
+export { runWaiters } from "./queries/approvals/run-waiters.ts";
 export type {
     ApprovalContext,
     ApprovalGrantItem,
@@ -32,6 +33,7 @@ export type {
     OnceClaim,
     OpenApprovalItem,
     RequestDecision,
+    RunWaiter,
 } from "./queries/approvals/types.ts";
 export { addWaiter, beatWaiters, finishWaiters } from "./queries/approvals/waiters.ts";
 export { closeConnection, openConnection, saveAgentVersion, saveRules } from "./queries/control/connections.ts";

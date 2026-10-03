@@ -60,6 +60,9 @@ export type ApprovalWaiter = {
     doneAt: Date | null;
 };
 
+// A run's call waiting on an open request, with what the run view shows of it
+export type RunWaiter = ApprovalWaiter & { requestId: string; tool: string; argsHash: string };
+
 // An open request as the approvals page lists it, with every call waiting on it
 export type OpenApprovalItem = ApprovalRequestFields & { args: unknown; waiters: ApprovalWaiter[] };
 
