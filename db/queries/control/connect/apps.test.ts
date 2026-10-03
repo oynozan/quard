@@ -113,6 +113,36 @@ describe("connectedApps", () => {
         ]);
     });
 
+    it("ignores connections that closed before then, even one that connected later", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const key = await createAgentKey(test.db, projectId, "nightly-batch");
+        await session(projectId, key.id, {
+            host: "batch-1",
+            rules: A,
+            connectedAt: "2026-08-01T00:00:00.000Z",
+            closedAt: "2026-09-10T00:00:00.000Z",
+        });
+        await session(projectId, key.id, {
+            host: "batch-2",
+            rules: B,
+            connectedAt: "2026-08-20T00:00:00.000Z",
+            closedAt: "2026-08-21T00:00:00.000Z",
+        });
+
+        expect(await connectedApps(test.db, projectId, { since })).toEqual([
+            {
+                keyId: key.id,
+                name: "nightly-batch",
+                prefix: key.prefix,
+                sdk: "0.4.2",
+                host: "batch-1",
+                rulesHash: A,
+                disconnectedAt: new Date("2026-09-10T00:00:00.000Z"),
+                rulesHashes: [A],
+            },
+        ]);
+    });
+
     it("keeps open apps however old, and offline ones that closed since then, by name", async () => {
         const projectId = await createProject(test.db, "Acme");
         const gone = await createAgentKey(test.db, projectId, "archive");

@@ -22,9 +22,19 @@ export async function connectedApps(db: Db, projectId: string, options: { since:
         WITH linked AS (
             SELECT key_id, id, sdk, host, rules_hash, connected_at, disconnected_at
             FROM sdk_connections
-            WHERE project_id = ${projectId} AND rules_hash IS NOT NULL
+            WHERE project_id = ${projectId}
+                AND rules_hash IS NOT NULL
+                AND (disconnected_at IS NULL OR disconnected_at >= ${options.since})
+        ), newest AS (
+            SELECT DISTINCT ON (key_id) key_id, sdk, host, rules_hash
+            FROM linked
+            ORDER BY key_id, disconnected_at IS NULL DESC, connected_at DESC, id DESC
         ), apps AS (
-            SELECT key_id, bool_and(disconnected_at IS NOT NULL) AS offline, max(disconnected_at) AS closed_at
+            SELECT
+                key_id,
+                bool_and(disconnected_at IS NOT NULL) AS offline,
+                max(disconnected_at) AS closed_at,
+                array_agg(DISTINCT rules_hash ORDER BY rules_hash) FILTER (WHERE disconnected_at IS NULL) AS running
             FROM linked
             GROUP BY key_id
         )
@@ -32,26 +42,14 @@ export async function connectedApps(db: Db, projectId: string, options: { since:
             k.id AS "keyId",
             k.name,
             k.prefix,
-            newest.sdk,
-            newest.host,
-            newest.rules_hash AS "rulesHash",
+            n.sdk,
+            n.host,
+            n.rules_hash AS "rulesHash",
             CASE WHEN a.offline THEN a.closed_at END AS "disconnectedAt",
-            array(
-                SELECT DISTINCT l.rules_hash
-                FROM linked l
-                WHERE l.key_id = a.key_id AND (l.disconnected_at IS NULL OR l.id = newest.id)
-                ORDER BY l.rules_hash
-            ) AS "rulesHashes"
+            CASE WHEN a.offline THEN ARRAY[n.rules_hash] ELSE a.running END AS "rulesHashes"
         FROM apps a
+        JOIN newest n ON n.key_id = a.key_id
         JOIN agent_keys k ON k.project_id = ${projectId} AND k.id = a.key_id
-        CROSS JOIN LATERAL (
-            SELECT l.id, l.sdk, l.host, l.rules_hash
-            FROM linked l
-            WHERE l.key_id = a.key_id
-            ORDER BY l.disconnected_at IS NULL DESC, l.connected_at DESC, l.id DESC
-            LIMIT 1
-        ) newest
-        WHERE NOT a.offline OR a.closed_at >= ${options.since}
         ORDER BY k.name, k.id
     `.execute(db);
     return rows;
