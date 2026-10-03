@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { RUN, T2, at } from "../../../../../test/runs-fixture";
 import { openItem, waiter } from "../../../../../test/approvals-overview/items";
-import { heartbeatOf, joinedOf } from "./heartbeat";
+import { heartbeatOf, joinedOf, stillWaits } from "./heartbeat";
 
 const OTHER_RUN = "e".repeat(32);
 const now = at(30).getTime();
@@ -32,6 +32,14 @@ describe("heartbeatOf", () => {
 
     it("counts from the time the request opened when no call waits on it", () => {
         expect(heartbeatOf(openItem({ waiters: [] }), now)).toEqual({ state: "stopped", lastAt: at(6).getTime() });
+    });
+});
+
+describe("stillWaits", () => {
+    it("holds for a call that is not done and beat within the last 45 seconds", () => {
+        expect(stillWaits(waiter({ lastBeatAt: at(-15) }), now)).toBe(true);
+        expect(stillWaits(waiter({ lastBeatAt: at(-16) }), now)).toBe(false);
+        expect(stillWaits(waiter({ doneAt: at(22) }), now)).toBe(false);
     });
 });
 

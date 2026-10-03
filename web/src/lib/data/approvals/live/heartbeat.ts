@@ -1,4 +1,4 @@
-import type { OpenApprovalItem } from "@quard/db";
+import type { ApprovalWaiter, OpenApprovalItem } from "@quard/db";
 import { APPROVAL_STALE_MS } from "@quard/shared";
 import type { Heartbeat, JoinedCall } from "../types";
 
@@ -6,9 +6,13 @@ type Waiting = Pick<OpenApprovalItem, "runId" | "stepId" | "openedAt" | "waiters
 
 const ms = (date: Date) => date.getTime();
 
-// Calls that still wait: not done, with a beat inside the stale limit
+// A call still waits while it is not done and beat inside the stale limit
+export function stillWaits(waiter: Pick<ApprovalWaiter, "doneAt" | "lastBeatAt">, now: number): boolean {
+    return waiter.doneAt === null && now - ms(waiter.lastBeatAt) <= APPROVAL_STALE_MS;
+}
+
 function liveWaiters(item: Waiting, now: number) {
-    return item.waiters.filter((waiter) => waiter.doneAt === null && now - ms(waiter.lastBeatAt) <= APPROVAL_STALE_MS);
+    return item.waiters.filter((waiter) => stillWaits(waiter, now));
 }
 
 // Live while any call still beats. Otherwise the time the last call stopped waiting.
