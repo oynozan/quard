@@ -98,6 +98,7 @@ These run with or without it:
 | `16-your-own-rules.ts`            | Custom check rules, neverSeen that blocks, a per-run amount cap, block beats ask                       |
 | `17-sensitive-data-going-out.ts`  | Egress payload rules (mask, block, allow), strictness presets, `destinations`, `onFail: "ask"`         |
 | `18-origins-and-trust.ts`         | Full origins, `from` versus trust, origin overrides, `originOf` and `allowDomains`                     |
+| `19-ai-detector.ts`               | An AI detector catches a reworded attack the built-in checks miss: observe, enforce, tuning            |
 
 ## How it fits together
 
