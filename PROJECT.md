@@ -150,9 +150,9 @@ quard.configure({
 
 const client = quard.wrap(new OpenAI());
 
-const fetchPage = guard(rawFetchPage, { type: "source", origin: "web" });
-const sendEmail = guard(rawSendEmail, [{ type: "egress" }, { type: "limit" }]);
-const payInvoice = guard(rawPayInvoice, { type: "approval" });
+const fetchPage = guard(rawFetchPage, { type: "source", origin: "web", name: "fetchPage" });
+const sendEmail = guard(rawSendEmail, [{ type: "egress", name: "sendEmail" }, { type: "limit" }]);
+const payInvoice = guard(rawPayInvoice, { type: "approval", name: "payInvoice" });
 
 await quard.run({ agent: "billing" }, async () => {
     const res = await client.responses.create({ model, input, tools });
@@ -317,7 +317,7 @@ monitor applies the same checks to what never passes through `guard()`, from Gua
 Decided by Q6 and Q7.
 
 - Rules live only in code, in `guard()` options. They change through pull requests and roll back with a redeploy.
-- Each guard has a stable name: the tool name the model sees, or an explicit `name`. The dashboard uses it to keep a rule's history across deploys and to link the model's tool call to the matching guarded call.
+- Each guard needs `name`: the tool name the model sees. `guard()` throws without it, because a function's own name can differ (`rawFetchPage`) or be lost to minifiers. The dashboard uses it to keep a rule's history across deploys and to link the model's tool call to the matching guarded call.
 - On connect, the SDK sends its active rules, as names and a hash, to `control`. Every decision records that hash. The dashboard shows which rules ran but does not edit them.
 - Rules a team writes **block by default**. `mode: "observe"` records "would block" or "would ask" and lets the call run. Observe rules never change the final decision.
 - Approval guards have no mode. They always ask.
@@ -326,11 +326,12 @@ Decided by Q6 and Q7.
 
 ```ts
 // Enforces at once (default mode: "block")
-const sendEmail = guard(rawSendEmail, { type: "egress", allow: ["*.acme.com"] });
+const sendEmail = guard(rawSendEmail, { type: "egress", name: "sendEmail", allow: ["*.acme.com"] });
 
 // Try a new rule on live traffic first
 const payInvoice = guard(rawPayInvoice, {
     type: "limit",
+    name: "payInvoice",
     maxAmountPerDay: 50000,
     mode: "observe",
 });
@@ -389,7 +390,7 @@ Decided by Q8, Q21 and Q24.
 - The approver must see real values, so an open request keeps the full arguments. After the decision only the hash is kept. See [Redaction](#redaction).
 
 ```ts
-const payInvoice = guard(rawPayInvoice, { type: "approval" });
+const payInvoice = guard(rawPayInvoice, { type: "approval", name: "payInvoice" });
 
 // waits here until someone answers
 const out = await payInvoice({ iban, amount: 4950 });
@@ -421,11 +422,11 @@ Decided by the spec and Q11 to Q15.
 
 ```ts
 // Sending: a guarded tool like any other
-const delegate = guard(rawDelegate, { type: "limit" });
+const delegate = guard(rawDelegate, { type: "limit", name: "delegate" });
 await delegate({ to: "billing", brief });
 
 // Receiving
-const receive = guard(rawReceive, { type: "source", origin: "agent" });
+const receive = guard(rawReceive, { type: "source", origin: "agent", name: "receive" });
 ```
 
 **Run limits** (Q15, **Claude's pick**: Balanced)
