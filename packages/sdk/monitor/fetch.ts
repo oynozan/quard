@@ -1,6 +1,7 @@
 import { labelFor, newStepId, type TokenUsage } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
+import { BLOCKED_ERROR_TYPE, type GuardRefusal } from "../core/refusal.ts";
 import {
     findCall,
     findConversation,
@@ -9,6 +10,7 @@ import {
     registerResponse,
 } from "../context/registry.ts";
 import { currentScope, newScope, type Scope } from "../context/scope.ts";
+import { addModelCost, checkModelCall, countModelCall } from "../guards/limit/model-limits.ts";
 import { activeControl } from "../transport/link/active.ts";
 import { checkRequestedCalls } from "./check.ts";
 import { asRecord, parseJson } from "./json.ts";
@@ -22,6 +24,15 @@ export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promi
 type Step = { scope: Scope; stepId: string; request: ResponsesRequest; started: number; version: string };
 
 const UNSEEN_HISTORY = "Earlier conversation history that Quard did not see.";
+
+// A 403 the OpenAI client won't retry, carrying the refusal as its API error
+function refusedResponse(refusal: GuardRefusal): Response {
+    const error = { message: refusal.text, type: BLOCKED_ERROR_TYPE, code: refusal.reason, param: null };
+    return new Response(JSON.stringify({ error }), {
+        status: 403,
+        headers: { "content-type": "application/json", "x-should-retry": "false" },
+    });
+}
 
 // The current scope, or the run of the response, conversation or tool
 // call this request continues. Inside a new scope, a chained request
@@ -140,7 +151,9 @@ function finishResponse(
     if (responseId !== undefined) {
         registerResponse(responseId, step.scope);
     }
-    recordModelCall(step, status, responseId, calls, usageOf(response));
+    const usage = usageOf(response);
+    addModelCost(step.scope.run, step.request.model, usage);
+    recordModelCall(step, status, responseId, calls, usage);
 }
 
 // Each tool call is checked once, when its last event arrives
@@ -196,10 +209,21 @@ export function createMonitorFetch(inner: Fetch): Fetch {
         const scope = resolveScope(request);
         const version = versionOf(request.model, request.instructions, request.tools);
         const step: Step = { scope, stepId: newStepId(), request, started: Date.now(), version };
+        // A call over an enforced run limit never leaves the process
+        const refused = checkModelCall({
+            run: scope.run,
+            agent: scope.agent,
+            stepId: step.stepId,
+            model: request.model,
+        });
+        if (refused !== undefined) {
+            return refusedResponse(refused);
+        }
         scope.lastStepId = step.stepId;
         noteVersion(step);
         labelInput(step);
 
+        countModelCall(scope.run);
         let response: Response;
         try {
             response = await inner(input, init);
