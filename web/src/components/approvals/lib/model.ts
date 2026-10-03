@@ -1,4 +1,10 @@
-import type { AlwaysGrant, ApprovalAnswer, ApprovalDecision, ApprovalDetail } from "@/lib/data/approvals/types";
+import type {
+    AlwaysGrant,
+    ApprovalAnswer,
+    ApprovalCode,
+    ApprovalDecision,
+    ApprovalDetail,
+} from "@/lib/data/approvals/types";
 import type { GuardDecision } from "@/lib/data/runs/types";
 import { formatOutcome } from "@/lib/format";
 
@@ -8,6 +14,13 @@ export function orderOpen(open: ApprovalDetail[]): ApprovalDetail[] {
     const live = (item: ApprovalDetail) => (item.heartbeat.state === "live" ? 0 : 1);
     return [...open].sort((a, b) => live(a) - live(b) || a.request.openedAt - b.request.openedAt);
 }
+
+// The answer as the server stores it
+export const ANSWER_CODE: Record<ApprovalAnswer, ApprovalCode> = {
+    "approve once": "once",
+    "always approve": "always",
+    deny: "deny",
+};
 
 // After a decision only the hash and the masked values stay.
 export function decisionOf(item: ApprovalDetail, answer: ApprovalAnswer, at: number, by: string): ApprovalDecision {
@@ -26,9 +39,10 @@ export function decisionOf(item: ApprovalDetail, answer: ApprovalAnswer, at: num
     };
 }
 
+// A grant shown before the server confirms it. Its id is a stand-in until then.
 export function grantOf(item: ApprovalDetail, at: number, by: string): AlwaysGrant {
     return {
-        id: `grant_${item.argsHash.slice(0, 4)}`,
+        id: `pending-${item.request.id}`,
         agent: item.request.agent,
         tool: item.request.tool,
         argsHash: item.argsHash,
@@ -74,9 +88,4 @@ export function passedCheck(decision: GuardDecision): boolean {
 
 export function argsLine(args: { name: string; value: string }[]): string {
     return args.map((arg) => `${arg.name}=${arg.value}`).join("  ");
-}
-
-// Count chips only show a count above 0
-export function chipCount(value: number): number | undefined {
-    return value > 0 ? value : undefined;
 }

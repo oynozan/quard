@@ -1,14 +1,21 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { guardDecision } from "../../../../test/approvals-overview/fixtures";
-import { OPEN, openRequest } from "../../../../test/approvals/requests";
 import { NOW } from "../../../../test/time";
 import {
+    CONTOSO,
+    DEPLOY,
+    EMAIL,
+    PAY,
+    guardDecision,
+    openRequest,
+    openRequests,
+} from "../../../../test/approvals-overview/fixtures";
+import {
+    ANSWER_CODE,
     ANSWER_WORD,
     answerMessage,
     argsLine,
     checkWord,
-    chipCount,
     decisionOf,
     grantOf,
     orderOpen,
@@ -17,31 +24,36 @@ import {
 
 describe("orderOpen", () => {
     it("puts live requests first, longest wait on top, without changing the input", () => {
-        const items = [...OPEN];
+        const items = openRequests();
         const ordered = orderOpen(items);
-        expect(ordered.map((item) => item.request.id)).toEqual(["apr_7f2c", "apr_7f31", "apr_7f0a", "apr_7f1e"]);
-        expect(items.map((item) => item.request.id)).toEqual(["apr_7f31", "apr_7f2c", "apr_7f1e", "apr_7f0a"]);
+        expect(ordered.map((item) => item.request.id)).toEqual([EMAIL, PAY, CONTOSO, DEPLOY]);
+        expect(items[0].request.id).toBe(PAY);
+    });
+});
+
+describe("ANSWER_CODE", () => {
+    it("names each answer the way the server stores it", () => {
+        expect(ANSWER_CODE).toEqual({ "approve once": "once", "always approve": "always", deny: "deny" });
     });
 });
 
 describe("decisionOf", () => {
     it("keeps only the hash and the masked values, answered by the given person", () => {
-        const item = openRequest("apr_7f31");
-        const decision = decisionOf(item, "deny", NOW, "jo@example.com");
-        expect(decision).toEqual({
-            requestId: "apr_7f31",
+        const item = openRequest(PAY);
+        expect(decisionOf(item, "deny", NOW, "dana@acme.com")).toEqual({
+            requestId: PAY,
             runId: item.request.runId,
             stepId: item.request.stepId,
             agent: "billing",
             tool: "pay_invoice",
             answer: "deny",
-            by: "jo@example.com",
+            by: "dana@acme.com",
             openedAt: item.request.openedAt,
             decidedAt: NOW,
             argsHash: item.argsHash,
             args: [
                 { name: "iban", value: "DE89…3000" },
-                { name: "amount", value: "4,950.00 EUR" },
+                { name: "amount", value: "4950" },
                 { name: "reference", value: "INV-20931" },
             ],
         });
@@ -49,23 +61,18 @@ describe("decisionOf", () => {
 });
 
 describe("grantOf", () => {
-    it("binds a new unused grant to the agent, tool and argument hash", () => {
-        const item = openRequest("apr_7f2c");
-        const grant = grantOf(item, NOW, "@jo-k");
-        expect(grant).toEqual({
-            id: "grant_5b81",
+    it("binds a new unused grant to the agent, tool and argument hash, under a stand-in id", () => {
+        const item = openRequest(EMAIL);
+        expect(grantOf(item, NOW, "@dana-k")).toEqual({
+            id: `pending-${EMAIL}`,
             agent: "support",
             tool: "send_email",
             argsHash: "5b81e84b68786266fd976df1eee2d3aa",
             args: [
                 { name: "to", value: "r…@claims-desk.io" },
                 { name: "subject", value: "Your refund for order 118-4402" },
-                {
-                    name: "body",
-                    value: "Refund approved for 312.00 EUR. It reaches the original card in 5 to 7 days.",
-                },
             ],
-            approvedBy: "@jo-k",
+            approvedBy: "@dana-k",
             approvedAt: NOW,
             timesUsed: 0,
             lastUsedAt: null,
@@ -160,12 +167,5 @@ describe("argsLine", () => {
             ]),
         ).toBe("service=docs-site  ref=main");
         expect(argsLine([])).toBe("");
-    });
-});
-
-describe("chipCount", () => {
-    it("keeps a count above 0 and drops a 0", () => {
-        expect(chipCount(3)).toBe(3);
-        expect(chipCount(0)).toBeUndefined();
     });
 });

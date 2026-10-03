@@ -1,22 +1,18 @@
-import type { GuardDecision, RunRow } from "../runs/types";
-import type { ApprovalArg, ApprovalRequest, Label, PathNode, ValueAppearance, ValueKind } from "../types";
+import type { DecidedApprovalItem } from "@quard/db";
+import type { GuardDecision } from "../runs/types";
+import type { ApprovalArg, ApprovalRequest, PathNode } from "../types";
 
 // Waiting calls send heartbeats. When they stop, the request shows as "no longer waiting".
 export type Heartbeat = {
     state: "live" | "stopped";
+    // The last beat, or when the last call stopped waiting
     lastAt: number;
-    intervalMs: number;
-    // Why the waiting process stopped, in plain words.
-    stoppedReason: string | null;
 };
 
 // An argument as the approver sees it: the full value plus where it came from.
 export type ApprovalArgDetail = ApprovalArg & {
-    kind: ValueKind;
-    traced: boolean;
-    // The value as the rest of the dashboard shows it.
+    // The value as the rest of the dashboard shows it
     masked: string;
-    appearances: ValueAppearance[];
 };
 
 // Another call with the same agent, tool and arguments. It waits on this request.
@@ -25,18 +21,18 @@ export type JoinedCall = { runId: string; stepId: string; agent: string; since: 
 export type ApprovalDetail = {
     request: ApprovalRequest;
     args: ApprovalArgDetail[];
-    // Origin, the agent that read it, handoffs, then this call.
+    // Origin, the agent that read it, handoffs, then this call. Empty until the run arrives.
     path: PathNode[];
-    context: Label;
     decisions: GuardDecision[];
     heartbeat: Heartbeat;
-    identicalWaiting: boolean;
     joined: JoinedCall[];
     argsHash: string;
-    run: RunRow;
 };
 
 export type ApprovalAnswer = "approve once" | "always approve" | "deny";
+
+// The answer as stored and sent to control
+export type ApprovalCode = DecidedApprovalItem["answer"];
 
 // A past answer. After the decision only the hash and masks are kept.
 export type ApprovalDecision = {

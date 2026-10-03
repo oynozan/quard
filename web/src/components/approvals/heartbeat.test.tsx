@@ -4,12 +4,7 @@ import type { Heartbeat } from "@/lib/data/approvals";
 import { MINUTE, NOW, SECOND } from "../../../test/time";
 import { RequestStatus } from "./heartbeat";
 
-const beat = (state: Heartbeat["state"], lastAt: number): Heartbeat => ({
-    state,
-    lastAt,
-    intervalMs: 15 * SECOND,
-    stoppedReason: state === "live" ? null : "The function hit its time limit",
-});
+const beat = (state: Heartbeat["state"], lastAt: number): Heartbeat => ({ state, lastAt });
 
 describe("RequestStatus", () => {
     it("shows how long a live call waits and when its process last checked in", () => {

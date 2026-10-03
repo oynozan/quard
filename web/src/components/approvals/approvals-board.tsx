@@ -1,56 +1,82 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { EmptyLine } from "@/components/kit/empty";
+import { useRouter } from "next/navigation";
+import { startTransition, useOptimistic, useRef, useState } from "react";
 import { SectionHeading } from "@/components/kit/headings";
+import { TableState } from "@/components/kit/data-table";
 import { showToast } from "@/components/ui/toast";
+import { answerApproval, revokeAlwaysGrant } from "@/lib/data/approvals/actions";
 import type { AlwaysGrant, ApprovalAnswer, ApprovalDetail, ApprovalsData } from "@/lib/data/approvals/types";
 import { DecisionsTable } from "./decisions-table";
 import { GrantsTable } from "./grants-table";
-import { answerMessage, chipCount, decisionOf, grantOf, orderOpen } from "./lib/model";
+import { applyChange, boardOf } from "./lib/board";
+import { ANSWER_CODE, answerMessage } from "./lib/model";
 import { RequestCard } from "./request-card";
 
-// by is the signed-in person's name, recorded on answers and revokes
-type Props = { data: ApprovalsData; now: number; by: string };
+type Props = { data: ApprovalsData; now: number; approver: string };
 
-// Open requests, standing grants and past answers
-export function ApprovalsBoard({ data, now, by }: Props) {
-    const [open, setOpen] = useState(() => orderOpen(data.open));
-    const [grants, setGrants] = useState(data.grants);
-    const [decisions, setDecisions] = useState(data.decisions);
-    const [fresh, setFresh] = useState<Set<string>>(() => new Set());
+// Open requests, standing grants and past answers. An answer shows at once and
+// is saved in the background; if saving fails, the request comes back.
+export function ApprovalsBoard({ data, now, approver }: Props) {
+    const router = useRouter();
+    const [view, change] = useOptimistic(boardOf(data), applyChange);
     const [announce, setAnnounce] = useState("");
     const cards = useRef(new Map<string, HTMLElement>());
     const heading = useRef<HTMLDivElement>(null);
 
+    function tell(message: string, id: string) {
+        showToast(message, id);
+        setAnnounce(message);
+    }
+
     function decide(item: ApprovalDetail, answer: ApprovalAnswer) {
-        const index = open.findIndex((entry) => entry.request.id === item.request.id);
-        const rest = open.filter((entry) => entry.request.id !== item.request.id);
-        setOpen(rest);
-        setDecisions((list) => [decisionOf(item, answer, now, by), ...list]);
-        setFresh((set) => new Set(set).add(item.request.id));
-        if (answer === "always approve") setGrants((list) => [grantOf(item, now, by), ...list]);
-        const message = answerMessage(answer, item.request.tool);
-        showToast(message, "approval-answer");
-        setAnnounce(`${message}. ${rest.length} still open.`);
-        if (window.location.hash === `#${item.request.id}`) {
+        const { id, tool } = item.request;
+        const index = view.open.findIndex((entry) => entry.request.id === id);
+        const rest = view.open.filter((entry) => entry.request.id !== id);
+        if (window.location.hash === `#${id}`) {
             history.replaceState(null, "", window.location.pathname);
         }
-        // Keep focus in the list, on the next card or on the heading when none is left
-        const next = rest[Math.min(index, rest.length - 1)];
-        window.requestAnimationFrame(() => {
-            const target = next ? cards.current.get(next.request.id) : heading.current;
-            target?.focus();
+        startTransition(async () => {
+            change({ kind: "answer", item, answer, at: Date.now(), by: approver });
+            // Keep focus in the list: the next card, or the heading when none is left.
+            const next = rest[Math.min(index, rest.length - 1)];
+            window.requestAnimationFrame(() => {
+                const target = next ? cards.current.get(next.request.id) : heading.current;
+                target?.focus();
+            });
+            try {
+                const result = await answerApproval(id, ANSWER_CODE[answer]);
+                if (result === "decided") {
+                    const message = answerMessage(answer, tool);
+                    showToast(message, "approval-answer");
+                    setAnnounce(`${message}. ${rest.length} still open.`);
+                    return;
+                }
+                tell(
+                    result === "already_decided" ? `Someone already answered ${tool}` : `${tool} is no longer open`,
+                    "approval-answer",
+                );
+                router.refresh();
+            } catch {
+                tell(`Could not save the answer for ${tool}. It is still open`, "approval-answer");
+            }
         });
     }
 
     function revoke(grant: AlwaysGrant) {
-        setGrants((list) =>
-            list.map((entry) => (entry.id === grant.id ? { ...entry, revokedAt: now, revokedBy: by } : entry)),
-        );
-        const message = `Revoked always approve for ${grant.tool}. Later calls ask again`;
-        showToast(message, "grant-revoke");
-        setAnnounce(message);
+        startTransition(async () => {
+            change({ kind: "revoke", grant, at: Date.now(), by: approver });
+            try {
+                if (await revokeAlwaysGrant(grant.id)) {
+                    tell(`Revoked always approve for ${grant.tool}. Later calls ask again`, "grant-revoke");
+                    return;
+                }
+                tell(`Always approve for ${grant.tool} was already revoked`, "grant-revoke");
+                router.refresh();
+            } catch {
+                tell(`Could not revoke always approve for ${grant.tool}`, "grant-revoke");
+            }
+        });
     }
 
     return (
@@ -61,11 +87,11 @@ export function ApprovalsBoard({ data, now, by }: Props) {
 
             <section aria-label="Waiting for an answer" className="min-w-0">
                 <div ref={heading} tabIndex={-1} className="outline-none">
-                    <SectionHeading title="Waiting for an answer" count={chipCount(open.length)} />
+                    <SectionHeading title="Waiting for an answer" count={view.open.length} />
                 </div>
-                {open.length > 0 ? (
+                {view.open.length > 0 ? (
                     <div className="grid gap-6">
-                        {open.map((item) => (
+                        {view.open.map((item) => (
                             <RequestCard
                                 key={item.request.id}
                                 ref={(node) => {
@@ -79,12 +105,17 @@ export function ApprovalsBoard({ data, now, by }: Props) {
                         ))}
                     </div>
                 ) : (
-                    <EmptyLine>Nothing waits for an answer</EmptyLine>
+                    <div className="border-y border-line">
+                        <TableState
+                            title="Nothing waits for an answer"
+                            body="Calls a guard sends to a human pause here."
+                        />
+                    </div>
                 )}
             </section>
 
-            <GrantsTable grants={grants} now={now} onRevoke={revoke} />
-            <DecisionsTable decisions={decisions} now={now} fresh={fresh} />
+            <GrantsTable grants={view.grants} now={now} onRevoke={revoke} />
+            <DecisionsTable decisions={view.decisions} now={now} fresh={new Set(view.fresh)} />
         </>
     );
 }

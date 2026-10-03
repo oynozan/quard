@@ -28,17 +28,33 @@ async function hover(target: HTMLElement) {
 }
 
 describe("RequestActions", () => {
-    it("approves once as soon as it is clicked", () => {
+    it("approves once as soon as it is clicked, then looks busy and locks the other answers", () => {
         const { onAnswer } = renderActions();
         fireEvent.click(button("Approve once"));
         expect(onAnswer).toHaveBeenCalledExactlyOnceWith("approve once");
         expect(vi.getTimerCount()).toBe(0);
+        expect(button("Approving…").getAttribute("aria-busy")).toBe("true");
+        expect(button("Always approve").hasAttribute("disabled")).toBe(true);
+        expect(button("Deny").hasAttribute("disabled")).toBe(true);
+
+        fireEvent.click(button("Approving…"));
+        expect(onAnswer).toHaveBeenCalledOnce();
+    });
+
+    it("keeps the answer when the card goes away right after the click", () => {
+        const { onAnswer, unmount } = renderActions();
+        fireEvent.click(button("Always approve"));
+        unmount();
+        act(() => vi.runAllTimers());
+        expect(onAnswer).toHaveBeenCalledExactlyOnceWith("always approve");
     });
 
     it("saves an always-approve grant", () => {
         const { onAnswer } = renderActions();
         fireEvent.click(button("Always approve"));
         expect(onAnswer).toHaveBeenCalledExactlyOnceWith("always approve");
+        expect(button("Saving grant…").getAttribute("aria-busy")).toBe("true");
+        expect(button("Approve once").hasAttribute("disabled")).toBe(true);
     });
 
     it("asks to confirm a deny and moves focus to the confirm button", () => {
@@ -55,6 +71,8 @@ describe("RequestActions", () => {
         fireEvent.click(button("Deny"));
         fireEvent.click(button("Deny call"));
         expect(onAnswer).toHaveBeenCalledExactlyOnceWith("deny");
+        expect(button("Denying…").getAttribute("aria-busy")).toBe("true");
+        expect(button("Cancel").hasAttribute("disabled")).toBe(true);
     });
 
     it("cancels the deny and puts focus back on Deny", () => {

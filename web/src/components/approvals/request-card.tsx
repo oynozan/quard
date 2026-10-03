@@ -65,7 +65,7 @@ export const RequestCard = forwardRef<HTMLElement, Props>(function RequestCard({
                             </span>
                             {item.joined.map((call) => (
                                 <TextLink
-                                    key={call.runId}
+                                    key={`${call.runId}-${call.stepId}`}
                                     mono
                                     href={`/runs/${call.runId}`}
                                     aria-label={`Open run ${call.runId}`}
@@ -79,7 +79,11 @@ export const RequestCard = forwardRef<HTMLElement, Props>(function RequestCard({
 
                 <div className="min-w-0 max-[1180px]:mt-6">
                     <SubHeading>Influence path</SubHeading>
-                    <InfluencePath nodes={item.path} waiting={live} pathId={`${request.id}-path`} />
+                    {item.path.length > 0 ? (
+                        <InfluencePath nodes={item.path} waiting={live} pathId={`${request.id}-path`} />
+                    ) : (
+                        <p className="text-[12px] leading-[1.7] text-ink-muted">The run has not arrived yet.</p>
+                    )}
                 </div>
             </div>
 
