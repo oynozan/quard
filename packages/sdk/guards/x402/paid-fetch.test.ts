@@ -3,6 +3,7 @@ import { wrapFetchWithPayment } from "@x402/fetch";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { configure } from "../../core/config.ts";
 import { quard } from "../../index.ts";
+import { decisionsOf } from "../../test/events.ts";
 import { resetAll } from "../../test/reset.ts";
 import { fakeClient, startPaidServer } from "../../test/x402.ts";
 import type { X402Options } from "../options.ts";
@@ -45,5 +46,26 @@ describe("quard.x402 with quard.x402Fetch", () => {
             ["challenged", undefined],
             ["refused", "host_mismatch"],
         ]);
+    });
+
+    it("joins payments made outside a run to one run, so run caps hold in a retry loop", async () => {
+        const { server, signed, pay } = await paidSetup({ type: "x402", maxPaymentsPerRun: 2 });
+
+        const outcomes: Array<number | string> = [];
+        for (let call = 0; call < 4; call++) {
+            outcomes.push(
+                await pay(server.url).then(
+                    (response) => response.status,
+                    (error: Error) => error.message,
+                ),
+            );
+        }
+
+        expect(outcomes.slice(0, 2)).toEqual([200, 200]);
+        expect(outcomes[2]).toContain("this run made too many payments");
+        expect(server.settled).toHaveLength(2);
+        expect(signed).toHaveLength(2);
+        const runs = new Set([...payments(), ...decisionsOf(events)].map((event) => event.runId));
+        expect(runs.size).toBe(1);
     });
 });

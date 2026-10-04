@@ -17,7 +17,7 @@ import { currentScope, newScope, type Scope } from "../../context/scope.ts";
 
 export type Place = { key: string; host: string; resource: string };
 
-type Seen = { price: PaymentRequired; scope: Scope };
+type Seen = { price: PaymentRequired; scope: Scope; resource: string };
 
 const MAX_PRICES = 1_000;
 const prices = new Map<string, Seen>();
@@ -25,6 +25,29 @@ let warned = false;
 
 export function scopeFor(place: Place): Scope {
     return currentScope() ?? prices.get(place.key)?.scope ?? newScope();
+}
+
+// A payment as the x402 guard reads it, before it is signed
+export type PricedPayment = Pick<PaymentOption, "scheme" | "network" | "asset" | "payTo" | "amount"> & {
+    resource: string;
+};
+
+function lists(seen: Seen, paid: PricedPayment): boolean {
+    return seen.price.accepts.some(
+        (option) =>
+            option.scheme === paid.scheme &&
+            option.network === paid.network &&
+            option.asset === paid.asset &&
+            option.payTo === paid.payTo &&
+            option.amount === paid.amount,
+    );
+}
+
+// The scope kept with the newest price that lists the payment's option,
+// best one for its resource, so the guard's checks join that run
+export function keptScope(paid: PricedPayment): Scope | undefined {
+    const kept = [...prices.values()].reverse().filter((seen) => lists(seen, paid));
+    return (kept.find((seen) => seen.resource === paid.resource) ?? kept[0])?.scope;
 }
 
 function keep(key: string, seen: Seen): void {
@@ -72,7 +95,7 @@ function recordStage(
 // A price request: the option the server lists first stands for it
 export function recordPrice(place: Place, price: PaymentRequired): void {
     const scope = scopeFor(place);
-    keep(place.key, { price, scope });
+    keep(place.key, { price, scope, resource: place.resource });
     recordStage(scope, newStepId(), place, "challenged", price.x402Version, price.accepts[0] as PaymentOption);
 }
 

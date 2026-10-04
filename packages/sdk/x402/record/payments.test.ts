@@ -3,7 +3,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { quard } from "../../index.ts";
 import { resetAll } from "../../test/reset.ts";
 import { v2Options } from "../../test/x402/facilitator.ts";
-import { paidStep, recordPrice, recordRejected, recordSettlement, recordSigned, scopeFor } from "./payments.ts";
+import {
+    keptScope,
+    paidStep,
+    recordPrice,
+    recordRejected,
+    recordSettlement,
+    recordSigned,
+    scopeFor,
+} from "./payments.ts";
 
 let events: RunEvent[] = [];
 const payments = () => events.filter((event): event is PaymentEvent => event.type === "payment");
@@ -46,6 +54,18 @@ describe("payment records", () => {
     it("records nothing for a payment whose option is unknown", () => {
         recordSigned(paidStep(place("b"), v1Payment));
         expect(payments()).toEqual([]);
+    });
+
+    it("finds the scope kept for a payment's price, best for its resource", () => {
+        const option = price.accepts[0]!;
+        const paid = { ...option, resource: "https://a.dev/x" };
+        recordPrice({ key: "a", host: "a.dev", resource: "https://a.dev/x" }, price);
+        recordPrice({ key: "b", host: "b.dev", resource: "https://b.dev/y" }, price);
+        const [atA, atB] = payments();
+
+        expect(keptScope(paid)?.run.runId).toBe(atA?.runId);
+        expect(keptScope({ ...paid, resource: "" })?.run.runId).toBe(atB?.runId);
+        expect(keptScope({ ...paid, amount: "1" })).toBeUndefined();
     });
 
     it("keeps the newest 1,000 prices", () => {

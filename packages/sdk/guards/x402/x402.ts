@@ -9,6 +9,7 @@ import { asksOf, decide, recordDecision } from "../../pipeline/checks.ts";
 import { policyOptions, refreshSources, sourcesReady } from "../../policy/state.ts";
 import { syncRules } from "../../transport/link/active.ts";
 import { markChecked } from "../../x402/checked.ts";
+import { keptScope } from "../../x402/record/payments.ts";
 import type { FailResult, GuardCall, RuleResult } from "../call.ts";
 import type { X402Options } from "../options.ts";
 import { checkPayment } from "./checks.ts";
@@ -20,9 +21,10 @@ import { checkX402Options, x402Settings, type X402Settings } from "./settings.ts
 
 type Abort = { abort: true; reason: string };
 
-// The payment as a call, so decisions and approvals work as for tools
+// The payment as a call, so decisions and approvals work as for tools.
+// Outside a run it joins the run x402Fetch or x402Mcp saw its price in.
 function paymentCall(name: string, payment: Payment): GuardCall {
-    const scope = currentScope() ?? newScope();
+    const scope = currentScope() ?? keptScope(payment) ?? newScope();
     const input = paymentInput(payment);
     return {
         tool: name,
