@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { connect, type Db } from "../../connect/connect.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
-import { addRunCount } from "./run-counters.ts";
+import { addRunCounts, type RunCountInput } from "./run-counters.ts";
 
 let test: TestDb;
 // A pool with several connections, for calls that race
@@ -21,6 +21,12 @@ afterAll(async () => {
 const RUN = "1".repeat(32);
 const OTHER_RUN = "2".repeat(32);
 
+// One count, as the single-counter cases below add
+function addRunCount(db: Db, projectId: string, runId: string, counter: string, add: number, max?: number) {
+    const count: RunCountInput = max === undefined ? { counter, add } : { counter, add, max };
+    return addRunCounts(db, projectId, runId, [count]).then(({ ok, used }) => ({ ok, used: used[0] }));
+}
+
 function counters(projectId: string) {
     return test.db
         .selectFrom("run_counters")
@@ -31,7 +37,7 @@ function counters(projectId: string) {
         .execute();
 }
 
-describe("addRunCount", () => {
+describe("addRunCounts with one count", () => {
     it("always adds without a max", async () => {
         const projectId = await createProject(test.db, "Acme");
 
@@ -111,5 +117,64 @@ describe("addRunCount", () => {
             { run_id: RUN, counter: "calls:refund", used: 1 },
             { run_id: OTHER_RUN, counter: "calls:payInvoice", used: 1 },
         ]);
+    });
+});
+
+describe("addRunCounts with several counts", () => {
+    const calls = (max?: number): RunCountInput => ({ counter: "calls:payInvoice", add: 1, max });
+    const amount = (add: number): RunCountInput => ({ counter: "amount:payInvoice:amount", add, max: 1000 });
+
+    it("adds every count, and gives each total in the order sent", async () => {
+        const projectId = await createProject(test.db, "Acme");
+
+        expect(await addRunCounts(test.db, projectId, RUN, [calls(5), amount(900)])).toEqual({
+            ok: true,
+            used: [1, 900],
+        });
+    });
+
+    it("adds none when one would pass its max, and gives the totals as they stay", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        await addRunCounts(test.db, projectId, RUN, [calls(5), amount(900)]);
+
+        expect(await addRunCounts(test.db, projectId, RUN, [calls(5), amount(200)])).toEqual({
+            ok: false,
+            used: [1, 900],
+        });
+        expect(await addRunCounts(test.db, projectId, RUN, [{ counter: "steps", add: 1 }, amount(200)])).toEqual({
+            ok: false,
+            used: [0, 900],
+        });
+        expect(await counters(projectId)).toEqual([
+            { run_id: RUN, counter: "amount:payInvoice:amount", used: 900 },
+            { run_id: RUN, counter: "calls:payInvoice", used: 1 },
+        ]);
+    });
+
+    it("adds a counter sent twice twice", async () => {
+        const projectId = await createProject(test.db, "Acme");
+
+        expect(await addRunCounts(test.db, projectId, RUN, [calls(), calls()])).toEqual({ ok: true, used: [1, 2] });
+    });
+
+    it("never passes a max when calls race with their counts in either order", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const steps: RunCountInput = { counter: "steps", add: 1, max: 5 };
+
+        const results = await Promise.all(
+            Array.from({ length: 8 }, (_, n) =>
+                addRunCounts(many, projectId, RUN, n % 2 === 0 ? [steps, calls()] : [calls(), steps]),
+            ),
+        );
+
+        expect(results.filter((result) => result.ok)).toHaveLength(5);
+        expect(await counters(projectId)).toEqual([
+            { run_id: RUN, counter: "calls:payInvoice", used: 5 },
+            { run_id: RUN, counter: "steps", used: 5 },
+        ]);
+    });
+
+    it("passes other errors on", async () => {
+        await expect(addRunCounts(test.db, "not-a-project", RUN, [calls()])).rejects.toThrow();
     });
 });

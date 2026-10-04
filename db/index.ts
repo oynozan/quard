@@ -48,8 +48,8 @@ export { closeConnection, openConnection, saveAgentVersion, saveRules } from "./
 export type { AgentVersionInput, ConnectionInput } from "./queries/control/connections.ts";
 export { addDayCount, dayCounts } from "./queries/control/counters.ts";
 export type { DayCount, DayCountInput, DayCountResult } from "./queries/control/counters.ts";
-export { addRunCount } from "./queries/control/run-counters.ts";
-export type { RunCountResult } from "./queries/control/run-counters.ts";
+export { addRunCounts } from "./queries/control/run-counters.ts";
+export type { RunCountInput, RunCountsResult } from "./queries/control/run-counters.ts";
 export { fleetFields, listQuarantined, listWatched } from "./queries/control/fleet/dashboard.ts";
 export type { QuarantinedFleetItem, WatchedFleetItem } from "./queries/control/fleet/dashboard.ts";
 export { splitFleetKey } from "./queries/control/fleet/keys.ts";
