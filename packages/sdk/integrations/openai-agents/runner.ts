@@ -1,5 +1,6 @@
 import { OpenAIProvider, Runner, type OpenAIClient, type RunConfig } from "@openai/agents";
 import { wrap } from "../../monitor/wrap.ts";
+import { followHandoffs } from "./handoffs.ts";
 import { followProvider, followRuns } from "./runs.ts";
 
 export type QuardRunnerOptions = Partial<Omit<RunConfig, "modelProvider">> & {
@@ -12,6 +13,7 @@ export type QuardRunnerOptions = Partial<Omit<RunConfig, "modelProvider">> & {
 export function quardRunner(options: QuardRunnerOptions): Runner {
     const { client, ...config } = options;
     followRuns();
+    followHandoffs();
     // The Responses API over HTTP, which the monitor sees
     const modelProvider = new OpenAIProvider({
         openAIClient: wrap(client),
