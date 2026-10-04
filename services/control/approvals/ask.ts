@@ -1,4 +1,4 @@
-import { addWaiter, beatWaiters, claimRequest, finishWaiters, getApprovalRequest } from "@quard/db";
+import { addWaiter, beatWaiters, claimRequest, finishWaiters, getApprovalRequest, waiterRequest } from "@quard/db";
 import type { AskMessage, ClientMessage } from "@quard/shared";
 import type { Context } from "../server/context.ts";
 import { CONNECTION_LIMITS } from "../socket/limits.ts";
@@ -40,8 +40,9 @@ export async function ask(ctx: Context, connection: Connection, message: AskMess
         sendError(connection, "too_many_waiters", "Too many calls wait on this connection", message.askId);
         return;
     }
-    const resumed =
-        message.requestId === undefined ? undefined : await resume(ctx, projectId, message, message.requestId);
+    // Control's own record comes first: the SDK may have missed "asked" before a reconnect
+    const requestId = (await waiterRequest(ctx.db, projectId, message.askId)) ?? message.requestId;
+    const resumed = requestId === undefined ? undefined : await resume(ctx, projectId, message, requestId);
     await settle(ctx, connection, message, resumed ?? (await place(ctx, projectId, message)));
 }
 
