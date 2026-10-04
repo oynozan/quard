@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const connect = vi.hoisted(() => vi.fn((url: string) => ({ url })));
@@ -25,5 +26,11 @@ describe("database", () => {
         const { database } = await import("./client");
 
         expect(() => database()).toThrow("DATABASE_URL is not set");
+    });
+
+    it("has its DATABASE_URL listed in web/.env.example, which a new setup copies", () => {
+        const example = readFileSync(new URL("../../../../../.env.example", import.meta.url), "utf8");
+
+        expect(example).toMatch(/^DATABASE_URL=$/m);
     });
 });
