@@ -1,10 +1,11 @@
-import { ToolCallError } from "@openai/agents";
+import { StreamedRunResult, ToolCallError } from "@openai/agents";
 import type { RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { GuardBlockedError, quard } from "../../index.ts";
 import { scriptedClient, testAgent, toolResults } from "../../test/openai-agents.ts";
 import { resetAll } from "../../test/reset.ts";
+import { unwrapBlocked } from "./blocked.ts";
 import { quardRunner } from "./runner.ts";
 import { guardedTool } from "./tool.ts";
 
@@ -76,5 +77,15 @@ describe("a streamed run whose guard throws", () => {
         const read = toolResults(bodies.at(-1) as Record<string, unknown>).billing;
         expect(read).toContain("GuardBlockedError");
         expect(read).not.toContain("ToolCallError");
+    });
+});
+
+describe("unwrapBlocked", () => {
+    it("leaves a stream alone when the SDK has no internal error method", async () => {
+        const stream = Object.create(StreamedRunResult.prototype) as StreamedRunResult<never, never>;
+        Object.defineProperty(stream, "_raiseError", { value: undefined, writable: true });
+
+        expect(await unwrapBlocked(Promise.resolve(stream))).toBe(stream);
+        expect((stream as unknown as { _raiseError: unknown })._raiseError).toBeUndefined();
     });
 });

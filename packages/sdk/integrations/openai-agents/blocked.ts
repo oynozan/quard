@@ -13,12 +13,15 @@ function blockedOf(error: unknown): unknown {
 
 type Raise = (error: unknown, options?: unknown) => void;
 
-// A stream gets the error through one method, which feeds its completed
-// promise, its events and its error. So all of them reject the same way.
+// A stream gets the error through one internal method, which feeds its
+// completed promise, its events and its error. So all of them reject the
+// same way. An SDK without the method keeps its own error.
 function unwrapStream(result: object): void {
-    const target = result as { _raiseError: Raise };
-    const raise = target._raiseError.bind(result);
-    target._raiseError = (error, options) => raise(blockedOf(error), options);
+    const target = result as { _raiseError?: Raise };
+    const raise = target._raiseError;
+    if (typeof raise === "function") {
+        target._raiseError = (error, options) => raise.call(result, blockedOf(error), options);
+    }
 }
 
 // The run's result, or for a stream, the stream with its errors unwrapped
