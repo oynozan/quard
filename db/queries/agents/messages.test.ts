@@ -59,6 +59,7 @@ const traffic = (): MessageRow[] => [
 
 const triageToBilling = {
     delegated: 0,
+    delegatedMessages: 0,
     from: "triage",
     to: "billing",
     handoffs: 3,
@@ -69,6 +70,7 @@ const triageToBilling = {
 
 const billingToTriage = {
     delegated: 0,
+    delegatedMessages: 0,
     from: "billing",
     to: "triage",
     handoffs: 0,
@@ -79,6 +81,7 @@ const billingToTriage = {
 
 const triageToResearch = {
     delegated: 0,
+    delegatedMessages: 0,
     from: "triage",
     to: "research",
     handoffs: 1,
@@ -149,6 +152,7 @@ describe("agentMessageLinks", () => {
                 from: "orchestrator",
                 to: "billing",
                 delegated: 2,
+                delegatedMessages: 2,
                 untrusted: 1,
                 lastAt: new Date("2026-10-03T13:00:05.000Z"),
             },
@@ -178,6 +182,7 @@ describe("agentMessageLinks", () => {
                 handoffs: 1,
                 messages: 3,
                 delegated: 2,
+                delegatedMessages: 2,
                 untrusted: 1,
                 lastAt: new Date("2026-10-03T13:00:03.000Z"),
             },
@@ -195,9 +200,22 @@ describe("agentMessageLinks", () => {
         );
         const sent = { from: "orchestrator", handoffs: 0, untrusted: 0, delegated: 1 };
 
+        // Both messages to billing are delegations, though they make one
         expect(await agentMessageLinks(test.db, projectId, { since })).toEqual([
-            { ...sent, to: "billing", messages: 2, lastAt: new Date("2026-10-03T12:00:03.000Z") },
-            { ...sent, to: "research", messages: 1, lastAt: new Date("2026-10-03T12:00:04.000Z") },
+            {
+                ...sent,
+                to: "billing",
+                messages: 2,
+                delegatedMessages: 2,
+                lastAt: new Date("2026-10-03T12:00:03.000Z"),
+            },
+            {
+                ...sent,
+                to: "research",
+                messages: 1,
+                delegatedMessages: 1,
+                lastAt: new Date("2026-10-03T12:00:04.000Z"),
+            },
         ]);
     });
 

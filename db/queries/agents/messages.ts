@@ -12,6 +12,8 @@ export type AgentMessageRow = {
     // Delegations across processes among those messages: one per run and
     // sender's step named, however many messages name it
     delegated: number;
+    // The messages that are delegations, each one counted
+    delegatedMessages: number;
     // Ones with untrusted content, or that no record vouched for
     untrusted: number;
     lastAt: Date;
@@ -58,6 +60,7 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
             sql<number>`(count(DISTINCT (t.run_id, t.parent_step_id)) FILTER (WHERE t.delegation))::int`.as(
                 "delegated",
             ),
+            sql<number>`(count(*) FILTER (WHERE t.delegation))::int`.as("delegatedMessages"),
             sql<number>`(count(*) FILTER (WHERE t.untrusted))::int`.as("untrusted"),
             sql<Date>`max(t.at)`.as("lastAt"),
         ])
