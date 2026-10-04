@@ -22,8 +22,28 @@ describe("policy file schema", () => {
         expect(policy.guards?.delegate).toEqual([{ type: "limit", delegateTo: "to" }]);
     });
 
+    it("keeps the options of an x402 guard", () => {
+        const x402 = {
+            type: "x402",
+            maxPerRun: 2,
+            maxPaymentsPerRun: 10,
+            blockHosts: ["*.evil.dev"],
+            untrusted: "allow",
+            assetCaps: { "0xabc": "1000000" },
+            fleetCheck: false,
+            approveAbove: 1,
+        };
+
+        expect(policySchema.parse({ version: 1, guards: { x402: [x402] } }).guards?.x402).toEqual([x402]);
+    });
+
     it.each([
         ["no version", { guards: {} }],
+        [
+            "an x402 asset cap that is not atomic units",
+            { version: 1, guards: { x402: [{ type: "x402", assetCaps: { a: "1.5" } }] } },
+        ],
+        ["a negative x402 cap", { version: 1, guards: { x402: [{ type: "x402", maxPerDay: -1 }] } }],
         ["an empty delegate argument", { version: 1, guards: { t: [{ type: "limit", delegateTo: "" }] } }],
         ["an unknown run limit", { version: 1, runLimits: { handoffs: 3 } }],
         ["a run limit that is not a whole number", { version: 1, runLimits: { steps: 2.5 } }],

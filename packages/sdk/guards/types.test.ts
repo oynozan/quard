@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { GUARD_TYPES, isGuardType } from "./types.ts";
 
 describe("guard types", () => {
-    it("lists the five guard types", () => {
-        expect(GUARD_TYPES).toEqual(["source", "action", "approval", "egress", "limit"]);
+    it("lists the six guard types", () => {
+        expect(GUARD_TYPES).toEqual(["source", "action", "approval", "egress", "limit", "x402"]);
     });
 
     it.each(GUARD_TYPES)("accepts %s", (type) => {

@@ -4,7 +4,9 @@ import { runLimits, type RunLimits } from "../core/config.ts";
 import { guardedToolOptions, guardedToolsRevision } from "../context/registry.ts";
 import { ruleName } from "../guards/action/action.ts";
 import { limitRules } from "../guards/limit/limit.ts";
+import type { Mode } from "../guards/call.ts";
 import type { GuardOptions } from "../guards/options.ts";
+import { x402Rules } from "../guards/x402/settings.ts";
 import { currentPolicy, policyOptions, policyVersion, signatureMode } from "./state.ts";
 
 const MAX_NAME = 200;
@@ -23,7 +25,7 @@ function clip(text: string): string {
     return text === "" ? "-" : text.slice(0, MAX_NAME);
 }
 
-function ruleNames(options: GuardOptions): Array<[guard: string, rule: string]> {
+function ruleNames(options: GuardOptions): Array<[guard: string, rule: string, mode?: Mode]> {
     switch (options.type) {
         case "source":
             return [["source", "source"]];
@@ -35,12 +37,20 @@ function ruleNames(options: GuardOptions): Array<[guard: string, rule: string]> 
             return EGRESS_RULES.map((rule) => ["egress", rule]);
         case "limit":
             return limitRules(options).map((rule) => ["limit", rule]);
+        // Its product defaults run in observe mode, so each rule has its own
+        case "x402":
+            return x402Rules(options).map(({ rule, mode }) => ["x402", rule, mode]);
     }
 }
 
 function entriesOf(tool: string, options: GuardOptions): RuleEntry[] {
     const mode = options.type === "approval" ? "block" : (options.mode ?? "block");
-    return ruleNames(options).map(([guard, rule]) => ({ tool: clip(tool), guard, rule: clip(rule), mode }));
+    return ruleNames(options).map(([guard, rule, own]) => ({
+        tool: clip(tool),
+        guard,
+        rule: clip(rule),
+        mode: own ?? mode,
+    }));
 }
 
 // Functions can't be hashed, so each becomes its rule's or its option's name

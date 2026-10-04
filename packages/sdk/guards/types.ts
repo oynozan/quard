@@ -1,5 +1,5 @@
-// The five guard types from PROJECT.md
-export const GUARD_TYPES = ["source", "action", "approval", "egress", "limit"] as const;
+// The six guard types from PROJECT.md
+export const GUARD_TYPES = ["source", "action", "approval", "egress", "limit", "x402"] as const;
 
 export type GuardType = (typeof GUARD_TYPES)[number];
 

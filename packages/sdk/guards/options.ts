@@ -68,4 +68,26 @@ export type LimitOptions = Common & {
     delegateTo?: string;
 };
 
-export type GuardOptions = SourceOptions | ActionOptions | ApprovalOptions | EgressOptions | LimitOptions;
+// Checks each x402 payment before it is signed. USD amounts use the
+// stablecoin list; other tokens only meet the count caps and assetCaps.
+export type X402Options = Common & {
+    type: "x402";
+    maxPerPayment?: number;
+    maxPerRun?: number;
+    // Per UTC day, across every process of the project
+    maxPerDay?: number;
+    maxPaymentsPerRun?: number;
+    // Hosts of the paid URL; "*.acme.com" also matches subdomains
+    allowHosts?: string[];
+    blockHosts?: string[];
+    // A host or payee first seen in untrusted content
+    untrusted?: "block" | "allow";
+    // Atomic units per asset address, for tokens with no USD value
+    assetCaps?: Record<string, string>;
+    // Reports each payee to control and refuses quarantined ones
+    fleetCheck?: boolean;
+    // Asks a person for payments above this many USD
+    approveAbove?: number;
+};
+
+export type GuardOptions = SourceOptions | ActionOptions | ApprovalOptions | EgressOptions | LimitOptions | X402Options;

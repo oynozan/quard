@@ -65,7 +65,27 @@ const limit = z.strictObject({
     delegateTo: z.string().min(1).optional(),
 });
 
-export const guardOptionsJson = z.discriminatedUnion("type", [source, action, approval, egress, limit]);
+const usd = z.number().nonnegative().optional();
+
+const x402 = z.strictObject({
+    type: z.literal("x402"),
+    name,
+    mode,
+    onBlock,
+    maxPerPayment: usd,
+    maxPerRun: usd,
+    maxPerDay: usd,
+    maxPaymentsPerRun: z.number().int().nonnegative().optional(),
+    allowHosts: hosts,
+    blockHosts: hosts,
+    untrusted: z.enum(["block", "allow"]).optional(),
+    // Atomic units per asset address
+    assetCaps: z.record(z.string().min(1), z.string().regex(/^\d{1,78}$/)).optional(),
+    fleetCheck: z.boolean().optional(),
+    approveAbove: usd,
+});
+
+export const guardOptionsJson = z.discriminatedUnion("type", [source, action, approval, egress, limit, x402]);
 
 export const signaturesConfig = z
     .strictObject({
