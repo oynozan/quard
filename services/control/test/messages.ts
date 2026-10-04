@@ -9,6 +9,7 @@ import {
     type HelloMessage,
     type LookupMessage,
     type RulesSnapshot,
+    type RunCount,
     type RunCountMessage,
 } from "@quard/shared";
 
@@ -102,6 +103,7 @@ export function lookupMessage(
     return { type: "lookup", id: newEventId(), target };
 }
 
-export function runCountMessage(fields: Partial<RunCountMessage> = {}): RunCountMessage {
-    return { type: "run_count", id: newEventId(), runId: RUN, counter: "steps", add: 1, ...fields };
+// Adds to counters of RUN, one step when no counts are given
+export function runCountMessage(counts: RunCount[] = [{ counter: "steps", add: 1 }]): RunCountMessage {
+    return { type: "run_count", id: newEventId(), runId: RUN, counts };
 }

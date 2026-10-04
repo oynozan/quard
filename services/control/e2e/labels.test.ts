@@ -81,16 +81,37 @@ describe("label records across processes", { timeout: 30_000 }, () => {
     it("shares a run's counters between two processes", async () => {
         const sender = await openClient(control.port, project.key);
         await sender.hello();
-        const first = runCountMessage({ max: 2 });
-        const second = runCountMessage({ max: 2 });
-        const third = runCountMessage({ max: 2 });
+        const pay = (amount: number) =>
+            runCountMessage([
+                { counter: "calls:payInvoice", add: 1, max: 5 },
+                { counter: "amount:payInvoice:amount", add: amount, max: 1000 },
+            ]);
+        const first = pay(600);
+        const second = pay(300);
+        const third = pay(200);
 
         sender.send(first);
-        expect(await sender.next("counted")).toEqual({ type: "counted", id: first.id, ok: true, used: 1 });
+        expect(await sender.next("run_counted")).toEqual({
+            type: "run_counted",
+            id: first.id,
+            ok: true,
+            used: [1, 600],
+        });
         receiver.send(second);
-        expect(await receiver.next("counted")).toEqual({ type: "counted", id: second.id, ok: true, used: 2 });
+        expect(await receiver.next("run_counted")).toEqual({
+            type: "run_counted",
+            id: second.id,
+            ok: true,
+            used: [2, 900],
+        });
+        // The amount would pass its cap, so the call is not counted either
         sender.send(third);
-        expect(await sender.next("counted")).toEqual({ type: "counted", id: third.id, ok: false, used: 2 });
+        expect(await sender.next("run_counted")).toEqual({
+            type: "run_counted",
+            id: third.id,
+            ok: false,
+            used: [2, 900],
+        });
         await sender.close();
     });
 });

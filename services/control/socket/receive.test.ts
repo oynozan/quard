@@ -51,7 +51,7 @@ describe("receive", () => {
             "counted",
             "fleet_result",
             "labels",
-            "counted",
+            "run_counted",
         ]);
         const stored = await test.db
             .selectFrom("sdk_connections")
