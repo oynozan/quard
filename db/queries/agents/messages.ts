@@ -17,14 +17,14 @@ export type AgentMessageRow = {
     lastAt: Date;
 };
 
-// The sender of a message that no record vouched for
-const UNKNOWN = "unknown";
+// A message that names a step another agent took in the same run came
+// through quard.resume(), so it is also a delegation, as in agentLinks
+const DELEGATION = sql<boolean>`(m.kind = 'message' AND coalesce(p.agent <> m.to_agent, false))`;
 
 // Messages and handoffs between agents from `since` on, per sender and
-// receiver. A message that names the sender's step came through
-// quard.resume(), so it is also counted as delegated. When no record
-// vouched for a message but it names a step of its run, that step's agent
-// sent it.
+// receiver. A delegation is from the agent of the step it names, as in
+// agentLinks, whoever a record vouched for. Any other message is from the
+// sender it recorded.
 export async function agentMessageLinks(db: Db, projectId: string, options: LinksOptions): Promise<AgentMessageRow[]> {
     const rows = db
         .selectFrom("agent_messages as m")
@@ -35,14 +35,12 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
                 .onRef("p.step_id", "=", "m.parent_step_id"),
         )
         .select([
-            sql<string>`CASE WHEN m.from_agent = ${UNKNOWN} THEN coalesce(p.agent, m.from_agent) ELSE m.from_agent END`.as(
-                "sender",
-            ),
+            sql<string>`CASE WHEN ${DELEGATION} THEN p.agent ELSE m.from_agent END`.as("sender"),
             "m.to_agent as receiver",
             "m.kind",
             "m.run_id",
             "m.parent_step_id",
-            sql<boolean>`(m.parent_step_id IS NOT NULL)`.as("named_step"),
+            DELEGATION.as("delegation"),
             sql<boolean>`(m.trust = 'untrusted' OR NOT m.verified)`.as("untrusted"),
             "m.at",
         ])
@@ -57,7 +55,7 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
             sql<number>`(count(*) FILTER (WHERE t.kind <> 'message'))::int`.as("handoffs"),
             sql<number>`(count(*) FILTER (WHERE t.kind = 'message'))::int`.as("messages"),
             // Once per run and step, like a delegation made in one process
-            sql<number>`(count(DISTINCT (t.run_id, t.parent_step_id)) FILTER (WHERE t.kind = 'message' AND t.named_step))::int`.as(
+            sql<number>`(count(DISTINCT (t.run_id, t.parent_step_id)) FILTER (WHERE t.delegation))::int`.as(
                 "delegated",
             ),
             sql<number>`(count(*) FILTER (WHERE t.untrusted))::int`.as("untrusted"),

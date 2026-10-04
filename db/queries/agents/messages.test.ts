@@ -112,21 +112,26 @@ describe("agentMessageLinks", () => {
         expect(await linksOf("nobody")).toEqual([]);
     });
 
-    it("takes the sender of an unvouched message from the step it names", async () => {
+    it("counts a message as delegated only when it names another agent's step of its run", async () => {
         const projectId = await projectWith(
             [
                 ...runs(),
                 tool(r1, "orchestrator", s1, "2026-10-03T12:00:01.000Z"),
                 model(r2, "orchestrator", s1, "2026-10-03T13:00:01.000Z"),
                 tool(r2, "orchestrator", s2, "2026-10-03T13:00:02.000Z"),
+                tool(r2, "billing", s3, "2026-10-03T13:00:03.000Z"),
             ],
             [
+                // No record vouched for it, so its step tells who sent it
                 row(r1, "message", "unknown", "billing", "12:00:02", { parentStepId: s1, verified: false }),
-                // The step is in another run, or there is none
+                // The step is in another run, or there is none, so it stays a message
                 row(r1, "message", "unknown", "billing", "12:00:03", { parentStepId: s2, verified: false }),
-                row(r1, "message", "unknown", "billing", "12:00:04", { verified: false }),
-                // A vouched sender stays, whoever owns the step
-                row(r2, "message", "planner", "billing", "13:00:02", { parentStepId: s1 }),
+                row(r1, "message", "unknown", "billing", "12:00:04", { parentStepId: stepOf(9), verified: false }),
+                row(r1, "message", "unknown", "billing", "12:00:05", { verified: false }),
+                // A step of the receiver itself is no delegation
+                row(r2, "message", "unknown", "billing", "13:00:04", { parentStepId: s3, verified: false }),
+                // A delegation is from the agent of its step, as in one process
+                row(r2, "message", "planner", "billing", "13:00:05", { parentStepId: s1 }),
             ],
         );
 
@@ -135,38 +140,36 @@ describe("agentMessageLinks", () => {
                 ...billingToTriage,
                 from: "unknown",
                 to: "billing",
-                delegated: 1,
-                lastAt: new Date("2026-10-03T12:00:04.000Z"),
+                messages: 4,
+                untrusted: 4,
+                lastAt: new Date("2026-10-03T13:00:04.000Z"),
             },
             {
                 ...billingToTriage,
                 from: "orchestrator",
                 to: "billing",
-                messages: 1,
-                delegated: 1,
+                delegated: 2,
                 untrusted: 1,
-                lastAt: new Date("2026-10-03T12:00:02.000Z"),
-            },
-            {
-                ...billingToTriage,
-                from: "planner",
-                to: "billing",
-                messages: 1,
-                delegated: 1,
-                untrusted: 0,
-                lastAt: new Date("2026-10-03T13:00:02.000Z"),
+                lastAt: new Date("2026-10-03T13:00:05.000Z"),
             },
         ]);
     });
 
     it("counts the messages that name the sender's step as delegated across processes", async () => {
-        const projectId = await projectWith(runs(), [
-            row(r1, "message", "orchestrator", "billing", "12:00:02", { parentStepId: s1 }),
-            row(r2, "message", "orchestrator", "billing", "13:00:02", { parentStepId: s2, trust: "untrusted" }),
-            // A reply with no carrier stays a message
-            row(r2, "message", "orchestrator", "billing", "13:00:03"),
-            row(r1, "handoff", "orchestrator", "billing", "12:00:04"),
-        ]);
+        const steps = [
+            tool(r1, "orchestrator", s1, "2026-10-03T12:00:01.000Z"),
+            tool(r2, "orchestrator", s2, "2026-10-03T13:00:01.000Z"),
+        ];
+        const projectId = await projectWith(
+            [...runs(), ...steps],
+            [
+                row(r1, "message", "orchestrator", "billing", "12:00:02", { parentStepId: s1 }),
+                row(r2, "message", "orchestrator", "billing", "13:00:02", { parentStepId: s2, trust: "untrusted" }),
+                // A reply with no carrier stays a message
+                row(r2, "message", "orchestrator", "billing", "13:00:03"),
+                row(r1, "handoff", "orchestrator", "billing", "12:00:04"),
+            ],
+        );
 
         expect(await agentMessageLinks(test.db, projectId, { since })).toEqual([
             {
