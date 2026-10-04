@@ -1,6 +1,6 @@
 "use server";
 
-import { createAgentKey, createProject, listAgentKeys, revokeAgentKey } from "@quard/db";
+import { createAgentKey, findOrCreateFirstProject, listAgentKeys, revokeAgentKey } from "@quard/db";
 import { refresh } from "next/cache";
 import { headers } from "next/headers";
 import { sameOrigin } from "@/lib/auth/origin";
@@ -31,7 +31,7 @@ export async function createKey(name: string): Promise<CreateKeyResult> {
     // A set QUARD_PROJECT_ID that matches no project is a setup mistake, not a new install
     if (!project && process.env.QUARD_PROJECT_ID?.trim()) return { error: "QUARD_PROJECT_ID names no project." };
     // A new install has no project yet, so its first key makes one
-    const projectId = project?.id ?? (await createProject(db, "Default"));
+    const projectId = project?.id ?? (await findOrCreateFirstProject(db, "Default"));
     const { id, key, prefix } = await createAgentKey(db, projectId, value);
     refresh();
     return { key: { id, name: value, prefix }, secret: key };

@@ -107,6 +107,21 @@ describe("createKey", () => {
         expect(await names(id)).toEqual([]);
         expect(mocks.refresh).not.toHaveBeenCalled();
     });
+
+    it("makes one Default project when two first keys are created at once", async () => {
+        // Back to a new install, with two open connections so both reads go out at once
+        await test.db.deleteFrom("projects").execute();
+        vi.stubEnv("QUARD_PROJECT_ID", "");
+        const read = () => database().selectFrom("projects").select("id").execute();
+        await Promise.all([read(), read()]);
+
+        const results = await Promise.all([createKey("billing"), createKey("support")]);
+
+        expect(results.map((result) => "secret" in result)).toEqual([true, true]);
+        const projects = await test.db.selectFrom("projects").select(["id", "name"]).execute();
+        expect(projects.map((row) => row.name)).toEqual(["Default"]);
+        expect(await names(projects[0].id)).toEqual(["billing", "support"]);
+    });
 });
 
 describe("revokeKey", () => {
