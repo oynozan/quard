@@ -456,6 +456,12 @@ importers:
       '@quard/shared':
         specifier: workspace:*
         version: link:../packages/shared
+      '@x402/core':
+        specifier: 'catalog:'
+        version: 2.28.0
+      '@x402/fetch':
+        specifier: 'catalog:'
+        version: 2.28.0
       openai:
         specifier: 'catalog:'
         version: 7.27.0(undici@8.11.2)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.6.5)

@@ -10,6 +10,8 @@
         "@openai/agents": "catalog:",
         "@quard/db": "workspace:*",
         "@quard/shared": "workspace:*",
+        "@x402/core": "catalog:",
+        "@x402/fetch": "catalog:",
         "openai": "catalog:",
         "quard": "link:lib/quard",
         "zod": "catalog:"
