@@ -56,8 +56,9 @@ async function addThere(control: Control, run: RunState, adds: readonly RunAdd[]
 }
 
 // Adds to the counters of a shared run, through control while it is
-// there, in one message so control adds all of them or none. Returns
-// each counter's new total.
+// there, in one message so control adds all of them or none. A call
+// with more counts than one message takes counts here. Returns each
+// counter's new total.
 export async function addToRun(
     control: Control | undefined,
     run: RunState,
