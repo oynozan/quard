@@ -20,7 +20,13 @@ export type { AgentStatsRow } from "./queries/agents/stats.ts";
 export { claimOnce, claimRequest, findActiveGrant, useGrant } from "./queries/approvals/claims.ts";
 export { decideApproval, revokeGrant } from "./queries/approvals/decide.ts";
 export type { DecideResult } from "./queries/approvals/decide.ts";
-export { countOpenRequests, listDecidedRequests, listGrants, listOpenRequests } from "./queries/approvals/list.ts";
+export {
+    countOpenRequests,
+    getOpenRequest,
+    listDecidedRequests,
+    listGrants,
+    listOpenRequests,
+} from "./queries/approvals/list.ts";
 export { decidedRequests, getApprovalRequest, openApprovalRequest } from "./queries/approvals/requests.ts";
 export { runWaiters } from "./queries/approvals/run-waiters.ts";
 export type {

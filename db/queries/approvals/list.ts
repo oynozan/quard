@@ -42,6 +42,19 @@ export async function listOpenRequests(db: Db, projectId: string, limit = 100): 
     return withWaiters(db, projectId, requests);
 }
 
+// One open request with the calls waiting on it
+export async function getOpenRequest(db: Db, projectId: string, id: string): Promise<OpenApprovalItem | undefined> {
+    const request = await db
+        .selectFrom("approval_requests")
+        .select([...REQUEST_FIELDS, "args"])
+        .$narrowType<JsonFields>()
+        .where("project_id", "=", projectId)
+        .where("id", "=", id)
+        .where("answer", "is", null)
+        .executeTakeFirst();
+    return request === undefined ? undefined : (await withWaiters(db, projectId, [request]))[0];
+}
+
 // Adds the calls waiting on each request, oldest first
 async function withWaiters(db: Db, projectId: string, requests: OpenRequest[]): Promise<OpenApprovalItem[]> {
     const waiters = await db

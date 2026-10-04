@@ -1,4 +1,12 @@
-import { countOpenRequests, getRun, listDecidedRequests, listGrants, listOpenRequests, type Db } from "@quard/db";
+import {
+    countOpenRequests,
+    getOpenRequest,
+    getRun,
+    listDecidedRequests,
+    listGrants,
+    listOpenRequests,
+    type Db,
+} from "@quard/db";
 import { unstable_rethrow } from "next/navigation";
 import { projectScope } from "../scope";
 import { runDetailOf } from "../runs/live/detail";
@@ -48,7 +56,7 @@ export async function getApproval(id: string): Promise<ApprovalDetail | null> {
     const scope = await projectScope();
     if (!scope) return null;
     const { db, project } = scope;
-    const item = (await listOpenRequests(db, project.id)).find((entry) => entry.id === id);
+    const item = await getOpenRequest(db, project.id, id);
     if (!item) return null;
     const now = Date.now();
     const runs = await runsOf(db, project.id, [item.runId], now);

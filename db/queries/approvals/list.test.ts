@@ -4,7 +4,7 @@ import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
 import { claimRequest } from "./claims.ts";
 import { decideApproval, revokeGrant } from "./decide.ts";
-import { countOpenRequests, listDecidedRequests, listGrants, listOpenRequests } from "./list.ts";
+import { countOpenRequests, getOpenRequest, listDecidedRequests, listGrants, listOpenRequests } from "./list.ts";
 import { openApprovalRequest } from "./requests.ts";
 import { addWaiter, finishWaiters } from "./waiters.ts";
 
@@ -137,6 +137,24 @@ describe("listOpenRequests", () => {
         expect(await ids()).toEqual([live, newest, left, done, stale]);
         expect(await ids(3)).toEqual([live, newest, left]);
         expect(await ids(1)).toEqual([live, newest]);
+    });
+});
+
+describe("getOpenRequest", () => {
+    it("reads one open request with the calls waiting on it, in this project only", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const id = await openAt(projectId, 1, "live");
+        const decided = await openAt(projectId, 2, "none");
+        await decideApproval(test.db, projectId, decided, "deny", "dana@acme.com");
+
+        expect(await getOpenRequest(test.db, projectId, id)).toMatchObject({
+            id,
+            args: requestInput().args,
+            openedAt: at(1),
+            waiters: [{ doneAt: null }],
+        });
+        expect(await getOpenRequest(test.db, projectId, decided)).toBeUndefined();
+        expect(await getOpenRequest(test.db, await createProject(test.db, "Other"), id)).toBeUndefined();
     });
 });
 
