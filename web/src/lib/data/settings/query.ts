@@ -4,6 +4,7 @@ import {
     listAgentKeys,
     originOverrides,
     projectSettings,
+    RETENTION,
     ruleSets,
     type AgentKeyRow,
     type ConnectedAppRow,
@@ -19,8 +20,9 @@ import type { AgentKey, SdkConnection, SettingsData } from "./types";
 // Overrides come from the newest runs, the same window the runs list reads
 const RUNS = 200;
 
-// An app offline for longer than this drops off the list, with its rules
-const APP_DAYS = 30;
+// An app offline for longer than this drops off the list, with its rules.
+// The cleanup deletes its connections then.
+const APP_DAYS = RETENTION.connectionDays;
 
 function empty(): SettingsData {
     return { hasProject: false, keys: [], retention: [], origins: [], rules: [], sdks: [] };
