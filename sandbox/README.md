@@ -70,11 +70,10 @@ The examples play the part of your app. Three backend services work with the das
 
 5. In the dashboard, sign in, go to Settings and create an agent key.
 
-6. Add the agent key and the same hash key to `sandbox/.env`, as a real app would:
+6. Add the agent key to `sandbox/.env`, as a real app would. It is the only Quard secret the examples need:
 
     ```sh
     QUARD_AGENT_KEY=qk_live_...
-    QUARD_HASH_KEY=<the same 64 hex characters as in web/.env>
     ```
 
 7. Run the smallest example. It configures Quard and watches one model call, which then shows on the Runs page:
