@@ -6,6 +6,29 @@ const KEY = parseHashKey("ab".repeat(32));
 const redactor = createRedactor(KEY);
 const IBAN = "DE89370400440532013000";
 
+type HtmlNode = { id: string; parent?: HtmlNode; prev?: HtmlNode; next?: HtmlNode; children: HtmlNode[] };
+
+// Nodes that know their parent and their siblings, as parsed HTML does
+function addChildren(parent: HtmlNode, count: number): HtmlNode[] {
+    for (let at = 0; at < count; at++) {
+        const prev = parent.children.at(-1);
+        const node: HtmlNode = { id: `${parent.id}.${at}`, parent, prev, children: [] };
+        if (prev !== undefined) {
+            prev.next = node;
+        }
+        parent.children.push(node);
+    }
+    return parent.children;
+}
+
+function linkedTable(rows: number, cells: number): HtmlNode {
+    const table: HtmlNode = { id: "table", children: [] };
+    for (const row of addChildren(table, rows)) {
+        addChildren(row, cells);
+    }
+    return table;
+}
+
 describe("redactText", () => {
     it("masks IBANs, card numbers and emails, and removes secrets", () => {
         const text = `Pay DE89 3704 0044 0532 0130 00 with 4111 1111 1111 1111, mail Jane@Acme.com, key sk-${"x".repeat(30)}`;
@@ -128,6 +151,32 @@ describe("redactor.value", () => {
             from: { iban: "DE89…3000" },
             to: [{ iban: "DE89…3000" }],
         });
+    });
+
+    it("copies each node of a table linked like parsed HTML once, and fast", () => {
+        const table = linkedTable(30, 30);
+        const start = performance.now();
+
+        const json = JSON.stringify(redactor.value(table));
+
+        expect(performance.now() - start).toBeLessThan(1_000);
+        const ids = json.match(/"id":"[^"]*"/g) ?? [];
+        expect(new Set(ids).size).toBe(ids.length);
+        // Most of the 931 nodes are kept, each once
+        expect(ids.length).toBeGreaterThan(800);
+    });
+
+    it("copies each of ten objects that all point at each other once, and fast", () => {
+        const objects = Array.from({ length: 10 }, (_, id): Record<string, unknown> => ({ id }));
+        for (const object of objects) {
+            objects.forEach((other, at) => (object[`to${at}`] = other));
+        }
+        const start = performance.now();
+
+        const json = JSON.stringify(redactor.value(objects[0]));
+
+        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(json.match(/"id":\d/g)).toHaveLength(10);
     });
 
     it("removes whatever a secret-named field holds", () => {

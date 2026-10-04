@@ -20,6 +20,15 @@ const SENSITIVE = new Set(["iban", "email"]);
 const HASHED = /^(.*)#([0-9a-f]{32})$/;
 const MAX_DEPTH = 32;
 
+// What one value() call has walked through
+type Walk = {
+    // The objects the current value sits in, as many as its depth
+    parents: Set<object>;
+    copied: Set<object>;
+    // Some value sat inside itself, so it can never be JSON
+    cyclic: boolean;
+};
+
 // Hidden characters and look-alike spaces are cleaned first, so they
 // can't split a value past the masks
 export function redactText(text: string): string {
@@ -44,8 +53,7 @@ export function createRedactor(hashKey: Buffer): Redactor {
         return `${kind}:${mask}#${keyedHash(hashKey, kind, raw)}`;
     };
 
-    // parents holds the objects input sits in, so its size is the depth
-    const value = (input: unknown, parents: Set<object>): unknown => {
+    const value = (input: unknown, walk: Walk): unknown => {
         if (typeof input === "string") {
             return redactText(input);
         }
@@ -60,22 +68,32 @@ export function createRedactor(hashKey: Buffer): Redactor {
         if (input === null || typeof input !== "object") {
             return input;
         }
-        // Too deep to check, or inside itself, so nothing in it is kept
-        if (parents.size >= MAX_DEPTH || parents.has(input)) {
+        // Inside itself, so nothing in it is kept
+        if (walk.parents.has(input)) {
+            walk.cyclic = true;
             return CUT;
         }
-        parents.add(input);
+        // Too deep, or met again after a cycle, where copying every path could take minutes
+        if (walk.parents.size >= MAX_DEPTH || (walk.cyclic && walk.copied.has(input))) {
+            return CUT;
+        }
+        walk.parents.add(input);
+        walk.copied.add(input);
         const clean = Array.isArray(input)
-            ? input.map((item: unknown) => value(item, parents))
+            ? input.map((item: unknown) => value(item, walk))
             : Object.fromEntries(
                   Object.entries(input).map(([name, item]) => [
                       redactText(name),
-                      SECRET_FIELD.test(name) ? CUT : value(item, parents),
+                      SECRET_FIELD.test(name) ? CUT : value(item, walk),
                   ]),
               );
-        parents.delete(input);
+        walk.parents.delete(input);
         return clean;
     };
 
-    return { text: redactText, key, value: (input) => value(input, new Set()) };
+    return {
+        text: redactText,
+        key,
+        value: (input) => value(input, { parents: new Set(), copied: new Set(), cyclic: false }),
+    };
 }

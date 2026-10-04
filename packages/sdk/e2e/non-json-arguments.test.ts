@@ -52,6 +52,28 @@ function circularInvoice(): Invoice {
     return invoice;
 }
 
+type HtmlNode = { id: string; parent?: HtmlNode; prev?: HtmlNode; next?: HtmlNode; children: HtmlNode[] };
+
+// A table whose nodes know their parent and their siblings, as parsed HTML does
+function linkedTable(size: number): HtmlNode {
+    const table: HtmlNode = { id: "table", children: [] };
+    const add = (parent: HtmlNode): HtmlNode[] => {
+        for (let at = 0; at < size; at++) {
+            const prev = parent.children.at(-1);
+            const node: HtmlNode = { id: `${parent.id}.${at}`, parent, prev, children: [] };
+            if (prev !== undefined) {
+                prev.next = node;
+            }
+            parent.children.push(node);
+        }
+        return parent.children;
+    };
+    for (const row of add(table)) {
+        add(row);
+    }
+    return table;
+}
+
 describe("a guarded tool called with values JSON can't hold", () => {
     it("uploads a BigInt as its digits, and every event after it", async () => {
         connect();
@@ -90,6 +112,20 @@ describe("a guarded tool called with values JSON can't hold", () => {
         expect(await flushUploads()).toBe(true);
 
         expect(toolCalls().map((event) => event.arguments)).toEqual([{ amount: 5, self: "…" }, { amount: 6 }]);
+    });
+
+    it("uploads at once a table whose nodes link to each other, each node once", async () => {
+        connect();
+        const save = guard(async (_input: unknown) => "saved", { type: "limit", name: "save" });
+
+        expect(await quard.run({}, () => save(linkedTable(30)))).toBe("saved");
+        const start = performance.now();
+        expect(await flushUploads()).toBe(true);
+
+        expect(performance.now() - start).toBeLessThan(1_000);
+        const ids = JSON.stringify(toolCalls()[0]?.arguments).match(/"id":"[^"]*"/g) ?? [];
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(ids.length).toBeGreaterThan(800);
     });
 
     it("asks and counts through control with them, and uploads every event", async () => {
