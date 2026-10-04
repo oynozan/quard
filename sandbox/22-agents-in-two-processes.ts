@@ -1,4 +1,4 @@
-// 15 · Agents in two processes
+// 22 · Agents in two processes
 //
 // An orchestrator in this process reads a supplier invoice on a web page
 // and hands the payment to a billing agent in a second process. The brief

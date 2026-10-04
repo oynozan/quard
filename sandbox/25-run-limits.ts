@@ -1,4 +1,4 @@
-// 18 · Run limits
+// 25 · Run limits
 //
 // Every run has limits on delegation depth, fan-out, turns back and forth
 // between two agents, model calls and cost. They are product defaults, so

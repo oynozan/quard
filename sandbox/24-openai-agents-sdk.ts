@@ -1,4 +1,4 @@
-// 17 · The OpenAI Agents SDK
+// 24 · The OpenAI Agents SDK
 //
 // quardRunner() returns the SDK's own Runner, with every model call going
 // through the wrapped client. guardedTool() is the SDK's tool() with each

@@ -1,4 +1,4 @@
-// 16 · Shared memory
+// 23 · Shared memory
 //
 // quard.memory() wraps a store that has get and put (or search, read and
 // write). A write stores the labels of what the writing agent had read,
