@@ -9,7 +9,7 @@ function headers(): string[] {
 describe("RunsEmpty", () => {
     it("keeps the header row and says there are no runs yet under it", () => {
         render(<RunsEmpty />);
-        expect(headers()).toEqual(["Run", "Status", "Guard decisions", "Cost", "Duration", "Started"]);
+        expect(headers()).toEqual(["Run", "Status", "Guard decisions", "Cost", "Spend", "Duration", "Started"]);
         expect(screen.getAllByRole("row")).toHaveLength(1);
         expect(screen.getByRole("status").textContent).toBe("No runs yet");
         expect(screen.getByRole("heading", { level: 3, name: "No runs yet" })).toBeTruthy();
@@ -20,7 +20,7 @@ describe("RunsEmpty", () => {
 describe("RunsNoMatch", () => {
     it("keeps the header row, says nothing matches and offers to clear the filters", () => {
         render(<RunsNoMatch />);
-        expect(headers()).toHaveLength(6);
+        expect(headers()).toHaveLength(7);
         expect(screen.getAllByRole("row")).toHaveLength(1);
         expect(screen.getByRole("status").textContent).toBe("No runs matchClear filters");
         expect(screen.getByRole("heading", { level: 3, name: "No runs match" })).toBeTruthy();

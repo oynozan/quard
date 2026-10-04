@@ -20,6 +20,17 @@ describe("RunSummary", () => {
         expect(tile("Estimated cost")).toBe("$0.0062");
     });
 
+    it("shows x402 spend next to the cost", () => {
+        const { rerender } = render(<RunSummary run={makeRow({ spendUsd: 0.25 })} observed={NONE} />);
+        expect(tile("x402 spend")).toBe("$0.25");
+
+        rerender(<RunSummary run={makeRow({ spendUsd: 0.25, spendKnown: false })} observed={NONE} />);
+        expect(tile("x402 spend")).toBe("Unknown");
+
+        rerender(<RunSummary run={makeRow()} observed={NONE} />);
+        expect(tile("x402 spend")).toBe("None");
+    });
+
     it("shows a dash for the cost when a model's price is unknown", () => {
         render(<RunSummary run={makeRow({ costKnown: false })} observed={NONE} />);
         expect(tile("Estimated cost")).toBe("—");

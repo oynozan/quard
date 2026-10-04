@@ -142,7 +142,7 @@ describe("OverviewPage", () => {
         ).toBeTruthy();
         expect(region("Guard decisions").getByText("Blocked").parentElement?.textContent).toBe("Blocked00");
 
-        expect(headers("Recent runs")).toEqual(["Run", "Status", "Guard decisions", "Cost", "Started"]);
+        expect(headers("Recent runs")).toEqual(["Run", "Status", "Guard decisions", "Cost", "Spend", "Started"]);
         expect(screen.getAllByRole("status").map((line) => line.textContent)).toEqual([
             "No approvals waiting",
             "No runs yet",

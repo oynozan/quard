@@ -3,6 +3,7 @@ import { CrossGlyph, WarningGlyph } from "@/components/icons/glyphs";
 import type { RunRow } from "@/lib/data/runs/types";
 import { formatCost, formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SpendValue } from "@/components/payments/values";
 import { costText } from "./lib/cost";
 
 // Observe-mode results that would have blocked or asked if the rule were on.
@@ -31,14 +32,14 @@ function Split({ glyph, value, word, tone }: { glyph?: ReactNode; value: number;
     );
 }
 
-// Four tiles: agents, steps, cost and the guard decisions, problems first.
+// Five tiles: agents, steps, cost, x402 spend and the guard decisions, problems first.
 export function RunSummary({ run, observed }: { run: RunRow; observed: Observed }) {
     const { allowed, asked, blocked } = run.decisions;
     const { wouldBlock, wouldAsk } = observed;
     return (
         <dl
             aria-label="Run summary"
-            className="grid grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,2fr)] gap-[10px] max-[980px]:grid-cols-3 max-[560px]:grid-cols-2"
+            className="grid grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,2fr)] gap-[10px] max-[980px]:grid-cols-4 max-[560px]:grid-cols-2"
         >
             <Tile label="Agents">
                 <Counter>{formatInt(run.agents.length)}</Counter>
@@ -46,10 +47,15 @@ export function RunSummary({ run, observed }: { run: RunRow; observed: Observed 
             <Tile label="Steps">
                 <Counter>{formatInt(run.steps)}</Counter>
             </Tile>
-            <Tile label="Estimated cost" className="max-[560px]:col-span-2">
+            <Tile label="Estimated cost">
                 <Counter>{costText(run.costUsd, run.costKnown, formatCost)}</Counter>
             </Tile>
-            <Tile label="Guard decisions" className="max-[980px]:col-span-3 max-[560px]:col-span-2">
+            <Tile label="x402 spend">
+                <Counter>
+                    <SpendValue usd={run.spendUsd} known={run.spendKnown} />
+                </Counter>
+            </Tile>
+            <Tile label="Guard decisions" className="max-[980px]:col-span-4 max-[560px]:col-span-2">
                 <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
                     {blocked ? (
                         <Split value={blocked} word="blocked" glyph={<CrossGlyph size={13} />} tone="text-danger" />

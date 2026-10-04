@@ -43,7 +43,7 @@ const runLink = (run: RunRow) => screen.getByRole("link", { name: `Run ${shortId
 // The table keeps its header row, with no run rows under it
 function expectHeaderOnly() {
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
-    expect(headers).toEqual(["Run", "Status", "Guard decisions", "Cost", "Duration", "Started"]);
+    expect(headers).toEqual(["Run", "Status", "Guard decisions", "Cost", "Spend", "Duration", "Started"]);
     expect(screen.getAllByRole("row")).toHaveLength(1);
 }
 

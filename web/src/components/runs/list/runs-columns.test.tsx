@@ -26,6 +26,7 @@ describe("runs columns", () => {
             "Status",
             "Guard decisions",
             "Cost",
+            "Spend",
             "Duration",
             "Started",
         ]);

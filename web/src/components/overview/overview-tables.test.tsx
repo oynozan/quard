@@ -103,10 +103,11 @@ describe("RunsSection", () => {
         expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Recent runs2");
         expect(screen.getByRole("link", { name: "View all" }).getAttribute("href")).toBe("/runs");
         const row = bodyRows()[1];
-        const [name, statusCell, , cost, started] = cellsOf(row);
+        const [name, statusCell, , cost, spend, started] = cellsOf(row);
         expect(name).toBe("orchestrator64da1210 · 2 agents · 14 steps");
         expect(statusCell).toBe("Running");
         expect(cost).toBe("$0.03");
+        expect(spend).toBe("None");
         expect(started).toBe("1 min ago");
         expect(within(row).getByRole("link").getAttribute("href")).toBe(`/runs/${runs[1].id}`);
     });
@@ -123,12 +124,20 @@ describe("RunsSection", () => {
         expect(cellsOf(bodyRows()[0])[3]).toBe("—");
     });
 
+    it("shows x402 spend next to the cost, and Unknown when a token has no USD value", () => {
+        const { rerender } = render(<RunsSection runs={[runRow({ spendUsd: 0.25 })]} now={NOW} />);
+        expect(cellsOf(bodyRows()[0])[4]).toBe("$0.25");
+
+        rerender(<RunsSection runs={[runRow({ spendUsd: 0.25, spendKnown: false })]} now={NOW} />);
+        expect(cellsOf(bodyRows()[0])[4]).toBe("Unknown");
+    });
+
     it("draws the guard decisions of each run", () => {
         render(<RunsSection runs={[runRow({ startedAt: NOW - 3 * HOUR })]} now={NOW} />);
         const bar = within(bodyRows()[0]).getAllByRole("cell")[2];
 
         expect(within(bar).getByRole("img", { name: "5 allowed, 0 asked, 1 blocked" })).toBeTruthy();
-        expect(cellsOf(bodyRows()[0])[4]).toBe("3 h ago");
+        expect(cellsOf(bodyRows()[0])[5]).toBe("3 h ago");
     });
 
     it("says a run has no guard decisions yet instead of drawing an empty bar", () => {
@@ -146,7 +155,7 @@ describe("RunsSection", () => {
         expectEmptyTable(
             "Recent runs",
             "/runs",
-            ["Run", "Status", "Guard decisions", "Cost", "Started"],
+            ["Run", "Status", "Guard decisions", "Cost", "Spend", "Started"],
             "No runs yet",
         );
     });

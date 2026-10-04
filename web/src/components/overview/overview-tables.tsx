@@ -9,6 +9,7 @@ import { formatAge, formatCost, shortId } from "@/lib/format";
 import type { ApprovalRequest, Incident, RunSummary } from "@/lib/data/types";
 import { REPLAY_TONE } from "@/components/incidents/lib/labels";
 import { costText } from "@/components/runs/detail/lib/cost";
+import { SpendValue } from "@/components/payments/values";
 
 // The overview lists a few requests; the approvals page has them all
 const APPROVALS_SHOWN = 5;
@@ -97,11 +98,12 @@ export function RunsSection({ runs, now }: { runs: RunSummary[]; now: number }) 
             <SectionHeading title="Recent runs" count={runs.length} href="/runs" />
             <DataTable minWidth={680}>
                 <colgroup>
-                    <col style={{ width: "28%" }} />
-                    <col style={{ width: "16%" }} />
-                    <col style={{ width: "30%" }} />
-                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "26%" }} />
                     <col style={{ width: "14%" }} />
+                    <col style={{ width: "28%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "12%" }} />
                 </colgroup>
                 <thead>
                     <tr>
@@ -109,6 +111,7 @@ export function RunsSection({ runs, now }: { runs: RunSummary[]; now: number }) 
                         <Th>Status</Th>
                         <Th>Guard decisions</Th>
                         <Th>Cost</Th>
+                        <Th>Spend</Th>
                         <Th>Started</Th>
                     </tr>
                 </thead>
@@ -142,6 +145,9 @@ export function RunsSection({ runs, now }: { runs: RunSummary[]; now: number }) 
                             </Td>
                             <Td className="mono text-[12px] text-ink-2">
                                 {costText(run.costUsd, run.costKnown, formatCost)}
+                            </Td>
+                            <Td className="mono text-[12px] text-ink-2">
+                                <SpendValue usd={run.spendUsd} known={run.spendKnown} />
                             </Td>
                             <Td className="text-[12px] text-ink-2">
                                 {formatAge(run.startedAt, now)} ago

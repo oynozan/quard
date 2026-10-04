@@ -20,6 +20,7 @@ describe("RunsTable", () => {
             "Status",
             "Guard decisions",
             "Cost",
+            "Spend",
             "Duration",
             "Started",
         ]);
@@ -31,6 +32,7 @@ describe("RunsTable", () => {
             steps: 1234,
             status: "blocked",
             costUsd: 1.5,
+            spendUsd: 0.004,
             durationMs: 75_000,
             decisions: { allowed: 4, asked: 1, blocked: 2 },
         });
@@ -41,11 +43,19 @@ describe("RunsTable", () => {
             "Blocked",
             "",
             "$1.50",
+            "$0.004",
             "1 min 15 s",
             "12 min ago",
         ]);
         expect(within(row).getByRole("img", { name: "4 allowed, 1 asked, 2 blocked" })).toBeTruthy();
         expect(row.querySelector("time")?.getAttribute("dateTime")).toBe("2026-10-03T12:00:00.000Z");
+    });
+
+    it("says spend is unknown when a settled token has no USD value, and None before any payment", () => {
+        render(<RunsTable runs={[makeRow({ spendKnown: false }), makeRow({ id: "1".repeat(32) })]} now={NOW} />);
+        const [, unknown, none] = screen.getAllByRole("row");
+        expect(cells(unknown)[4]).toBe("Unknown");
+        expect(cells(none)[4]).toBe("None");
     });
 
     it("opens the run from a link named for it", () => {

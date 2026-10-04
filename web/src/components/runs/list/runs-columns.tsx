@@ -1,11 +1,11 @@
 import { Th } from "@/components/kit/data-table";
 
 // Shared by the table and its skeleton so both keep one geometry.
-export const RUNS_MIN_WIDTH = 840;
-export const RUNS_COLUMNS = 7;
+export const RUNS_MIN_WIDTH = 920;
+export const RUNS_COLUMNS = 8;
 
 // The decisions column is fixed so the 208px outcome bar always fits.
-const WIDTHS = ["44px", "30%", "14%", "230px", "11%", "14%", "16%"];
+const WIDTHS = ["44px", "27%", "12%", "230px", "10%", "10%", "12%", "14%"];
 
 export function RunsColgroup() {
     return (
@@ -29,6 +29,7 @@ export function RunsHead() {
                 <Th className={FULL}>Status</Th>
                 <Th className={FULL}>Guard decisions</Th>
                 <Th className={FULL}>Cost</Th>
+                <Th className={FULL}>Spend</Th>
                 <Th className={FULL}>Duration</Th>
                 <Th className={FULL}>Started</Th>
             </tr>
