@@ -6,6 +6,7 @@ import {
     Settings,
     ShieldCheck,
     Siren,
+    Tags,
     Waypoints,
     type LucideIcon,
 } from "lucide-react";
@@ -25,6 +26,7 @@ export const PRIMARY_NAV: NavItem[] = [
     { href: "/agents", label: "Agents", icon: Waypoints },
     { href: "/summary", label: "Summary", icon: ChartColumn },
     { href: "/search", label: "Search", icon: Search },
+    { href: "/labels", label: "Labels", icon: Tags },
 ];
 
 export const WORKSPACE_NAV: NavItem[] = [{ href: "/settings", label: "Settings", icon: Settings }];

@@ -17,6 +17,7 @@ describe("pageTitle", () => {
     it("names the section a nested path belongs to", () => {
         expect(pageTitle("/runs/abc123")).toBe("Runs");
         expect(pageTitle("/summary")).toBe("Summary");
+        expect(pageTitle("/labels")).toBe("Labels");
         expect(pageTitle("/settings/keys")).toBe("Settings");
     });
 
