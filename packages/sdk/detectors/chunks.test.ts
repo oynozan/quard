@@ -63,6 +63,70 @@ describe("chunkText", () => {
         expect(chunkText(`${secret} and more`, 40)[0]).toBe(secret);
     });
 
+    it("cuts once before a value longer than the limit, not in a run of tiny chunks", () => {
+        const text = `${"w ".repeat(30)}sk-${"x".repeat(60)} done`;
+
+        const ends = chunkSpans(text, 40).map((span) => span.end);
+
+        expect(ends).toEqual([...new Set(ends)]);
+    });
+
+    it("never cuts inside an IBAN or card written with no-break spaces", () => {
+        const iban = "DE89 3704 0044 0532 0130 00";
+        const card = "5555 5555 5555 4444";
+        const text = `${"x ".repeat(18)}${iban}${" y".repeat(14)}${card}${" z".repeat(20)}`;
+
+        const sent = chunkText(text, 40).map(redactText).join(" ");
+
+        expect(sent).not.toMatch(/0532|5555 5555/);
+    });
+
+    it("never cuts inside a secret found by its name", () => {
+        const token = "a1b2c3d4".repeat(8);
+        const text = `{"data":"aa","refresh_token":"${token}","more":"${"b".repeat(30)}"}`;
+
+        const sent = chunkText(text, 40).map(redactText).join(" ");
+
+        expect(sent).toContain('refresh_token":"…');
+        expect(sent).not.toContain(token.slice(24, 40));
+    });
+
+    it("never splits a private key at a blank line inside it", () => {
+        const body = "a1B2c3D4".repeat(8);
+        const key = [
+            "-----BEGIN RSA PRIVATE KEY-----",
+            "Proc-Type: 4,ENCRYPTED",
+            "DEK-Info: AES-128-CBC,0A1B2C3D4E5F",
+            "",
+            body,
+            body,
+            "-----END RSA PRIVATE KEY-----",
+        ].join("\n");
+
+        const sent = chunkText(`${"Intro words here. ".repeat(3)}\n\n${key}`, 80).map(redactText);
+
+        expect(sent).toEqual([`${"Intro words here. ".repeat(3)}`, "[private key]"]);
+    });
+
+    it("never cuts a private key after a key id found inside it", () => {
+        const body = "a1B2c3D4".repeat(4);
+        const key = ["-----BEGIN PRIVATE KEY-----", ["AKIA", "IOSFODNN7EXAMPLE"].join(""), body, body, body].join("\n");
+
+        const sent = chunkText(`${"w ".repeat(20)}${key}\n-----END PRIVATE KEY----- done`, 60).map(redactText);
+
+        expect(sent.join(" ")).not.toContain(body);
+    });
+
+    it("cuts a long run of card numbers in time that grows with the text, not its square", () => {
+        const text = "4111 1111 1111 1111,".repeat(80_000);
+
+        const started = performance.now();
+        const spans = chunkSpans(text);
+
+        expect(spans.at(-1)?.end).toBe(text.length);
+        expect(performance.now() - started).toBeLessThan(1500);
+    });
+
     it("never splits a character made of two halves", () => {
         const text = `${"a".repeat(39)}😀${"b".repeat(10)}`;
 

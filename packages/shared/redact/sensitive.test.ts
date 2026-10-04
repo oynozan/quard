@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ibanFrom } from "../normalize/iban.ts";
 import { findSensitive, maskCard, maskIban, maskSensitive, type SensitiveKind } from "./sensitive.ts";
 import { blankSpans } from "./spans.ts";
 
@@ -36,6 +37,36 @@ describe("findSensitive", () => {
             kind: "ibans",
             value: "DE89370400440532013000",
         });
+    });
+
+    it("finds an IBAN and a card written with no-break spaces, where they sit", () => {
+        const iban = "DE89 3704 0044 0532 0130 00";
+        const card = "4242 4242 4242 4242";
+        const text = `pay ${iban} or ${card}`;
+
+        expect(findSensitive(text).map(({ kind, start, end }) => ({ kind, value: text.slice(start, end) }))).toEqual([
+            { kind: "ibans", value: iban },
+            { kind: "cards", value: card },
+        ]);
+    });
+
+    it("adds secrets found by their name only when asked", () => {
+        const text = "login password=hunter2000 now";
+
+        expect(findSensitive(text)).toEqual([]);
+        expect(findSensitive(text, { named: true })).toEqual([
+            { kind: "secrets", start: 6, end: 25, value: "password=hunter2000" },
+        ]);
+    });
+
+    it("finds many different IBANs in time that grows with the text, not its square", () => {
+        const rows = Array.from({ length: 16_000 }, (_, i) => `Row ${i}: pay ${ibanFrom("DE", i.toString(16))} today`);
+
+        const started = performance.now();
+        const found = findSensitive(rows.join("\n"));
+
+        expect(found).toHaveLength(16_000);
+        expect(performance.now() - started).toBeLessThan(1500);
     });
 });
 

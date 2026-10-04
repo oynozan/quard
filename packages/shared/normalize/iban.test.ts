@@ -42,6 +42,10 @@ describe("findIbans", () => {
         expect(findIbans("XX12 DE89370400440532013000")).toEqual([VALID]);
     });
 
+    it("finds an IBAN with several spaces or tabs between groups", () => {
+        expect(findIbans("Pay DE89  3704\t0044  0532   0130  00 now")).toEqual([VALID]);
+    });
+
     it("finds IBANs in lower case", () => {
         expect(findIbans("iban: de89370400440532013000.")).toEqual([VALID]);
     });

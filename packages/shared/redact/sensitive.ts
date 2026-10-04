@@ -1,7 +1,7 @@
-import { findIbans } from "../normalize/iban.ts";
+import { ibanSpans } from "../normalize/iban.ts";
 import { cleanText } from "../normalize/text.ts";
 import { findCards } from "./cards.ts";
-import { findSecrets, SECRET_MASK } from "./secrets.ts";
+import { findNamedSecrets, findSecrets, SECRET_MASK } from "./secrets.ts";
 import { blankSpans, type Span } from "./spans.ts";
 
 export type SensitiveKind = "secrets" | "cards" | "ibans";
@@ -21,25 +21,16 @@ const MASKS: Record<SensitiveKind, (value: string) => string> = {
     ibans: maskIban,
 };
 
-// findIbans gives normalized values, so find where each one is written,
-// spaces included
-function ibanSpans(text: string): Span[] {
-    const ibans = new Set(findIbans(text.replace(/[ \t]+/g, " ")));
-    return [...ibans].flatMap((iban) =>
-        [...text.matchAll(new RegExp(iban.split("").join("\\s*"), "gi"))].map((match) => ({
-            start: match.index,
-            end: match.index + match[0].length,
-            value: iban,
-        })),
-    );
-}
-
 // Secrets, card numbers and IBANs in a text. IBANs come first, so their
-// digits are not read again as card numbers.
-export function findSensitive(text: string): Sensitive[] {
-    const ibans = ibanSpans(text).map((span) => ({ ...span, kind: "ibans" as const }));
-    const cards = findCards(blankSpans(text, ibans)).map((span) => ({ ...span, kind: "cards" as const }));
-    const secrets = findSecrets(text).map((span) => ({ ...span, kind: "secrets" as const }));
+// digits are not read again as card numbers. Look-alike spaces, such as
+// no-break spaces, count as spaces; the swap keeps every index. `named`
+// adds secrets found by their name, such as password=... or a Cookie header.
+export function findSensitive(text: string, { named = false } = {}): Sensitive[] {
+    const plain = text.replace(/\p{Zs}/gu, " ");
+    const ibans = ibanSpans(plain).map((span) => ({ ...span, kind: "ibans" as const }));
+    const cards = findCards(blankSpans(plain, ibans)).map((span) => ({ ...span, kind: "cards" as const }));
+    const found = [...findSecrets(plain), ...(named ? findNamedSecrets(plain) : [])];
+    const secrets = found.map((span) => ({ ...span, kind: "secrets" as const }));
     return [...secrets, ...ibans, ...cards];
 }
 

@@ -1,3 +1,5 @@
+import type { Span } from "../redact/spans.ts";
+
 // IBAN length per country (ISO 13616 registry)
 const LENGTHS: Record<string, number> = {
     AD: 24,
@@ -91,7 +93,8 @@ const LENGTHS: Record<string, number> = {
     YE: 30,
 };
 
-const IBAN_IN_TEXT = /\b([A-Z]{2})\d{2}(?: ?[A-Z0-9]){11,32}/gi;
+// Spaces or tabs may sit between the characters, any number of them
+const IBAN_IN_TEXT = /\b([A-Z]{2})\d{2}(?:[ \t]*[A-Z0-9]){11,32}/gi;
 
 export function normalizeIban(value: string): string {
     return value.replace(/\s+/g, "").toUpperCase();
@@ -145,11 +148,9 @@ function rawLength(raw: string, count: number): number {
     return index;
 }
 
-type IbanMatch = { start: number; end: number; iban: string };
-
-// Each valid IBAN in a text, with where it sits
-function ibanMatches(text: string): IbanMatch[] {
-    const found: IbanMatch[] = [];
+// Each valid IBAN in a text, in normalized form, with where it is written
+export function ibanSpans(text: string): Span[] {
+    const found: Span[] = [];
     const pattern = new RegExp(IBAN_IN_TEXT.source, "gi");
     let match = pattern.exec(text);
     while (match !== null) {
@@ -158,7 +159,7 @@ function ibanMatches(text: string): IbanMatch[] {
         // A match can run into the next word, so cut it to the country length
         if (length !== undefined && isValidIban(candidate.slice(0, length))) {
             const end = match.index + rawLength(match[0], length);
-            found.push({ start: match.index, end, iban: candidate.slice(0, length) });
+            found.push({ start: match.index, end, value: candidate.slice(0, length) });
             pattern.lastIndex = end;
         } else {
             pattern.lastIndex = match.index + 1;
@@ -169,15 +170,15 @@ function ibanMatches(text: string): IbanMatch[] {
 }
 
 export function findIbans(text: string): string[] {
-    return ibanMatches(text).map((match) => match.iban);
+    return ibanSpans(text).map((match) => match.value);
 }
 
 // Replaces each valid IBAN in a text, given in normalized form
 export function replaceIbans(text: string, replace: (iban: string) => string): string {
     let out = "";
     let last = 0;
-    for (const match of ibanMatches(text)) {
-        out += text.slice(last, match.start) + replace(match.iban);
+    for (const match of ibanSpans(text)) {
+        out += text.slice(last, match.start) + replace(match.value);
         last = match.end;
     }
     return out + text.slice(last);
