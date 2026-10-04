@@ -7,6 +7,8 @@ import type { Side } from "./rounds.ts";
 import { standInsOf, withStandIns } from "./standins.ts";
 import { NOT_A_TOOL_RESULT, withoutContent } from "./without.ts";
 
+export const NO_SUSPECT = "Nothing to replay: the verdict found no suspect content to leave out";
+
 type Body = Record<string, unknown>;
 
 // Replay counts reruns that ask for the harmful call, so it needs one
@@ -27,6 +29,50 @@ export type ReplayPlan = {
     firstRoundUsd: number | undefined;
 };
 
+// Hosts and domains also match calls that never used the content
+const BROAD = /^(host|domain):/;
+
+// The same tool counts as harm with: the entry's value; else values of the
+// damaging call that came from the run's content; else, when the model made
+// every value up (such as a mistyped IBAN), a value the suspect content holds
+function harmKeys(verdict: StoredVerdict, run: Pick<StoredRun, "steps" | "labels">): string[] {
+    const { entry, damage, values } = verdict;
+    if (entry.key !== null) {
+        return [entry.key];
+    }
+    const traced = values.filter((value) => !value.generated).map((value) => value.key);
+    const held = run.labels
+        .filter((label) => entry.contentId !== null && label.contentId === entry.contentId)
+        .flatMap((label) => label.keys)
+        .filter((key) => !BROAD.test(key));
+    const own = run.steps.filter((step) => step.stepId === damage.stepId).flatMap(keysOf);
+    return traced.length > 0 ? traced : held.length > 0 ? held : own;
+}
+
+// The tool call whose result held the suspect content. Across agents, when
+// the turning call never read that result, the message that carried it in.
+function suspectCall(
+    verdict: StoredVerdict,
+    run: Pick<StoredRun, "steps">,
+    input: unknown[],
+): { callId: string; origin: string; without: unknown[] } | undefined {
+    const callOf = (stepId: string) =>
+        run.steps.find((step) => step.stepId === stepId && step.kind === "tool_call" && step.callId !== null)?.callId ??
+        undefined;
+    const handoff = verdict.acrossAgents?.handoff;
+    const tries = [
+        { callId: callOf(verdict.entry.stepId), origin: verdict.entry.origin },
+        { callId: handoff ? callOf(handoff.stepId) : undefined, origin: `agent:${handoff?.from}` },
+    ];
+    for (const { callId, origin } of tries) {
+        const without = callId === undefined ? undefined : withoutContent(input, callId);
+        if (callId !== undefined && without !== undefined) {
+            return { callId, origin, without };
+        }
+    }
+    return undefined;
+}
+
 // Room for the answer when a rerun's cost is guessed
 const OUTPUT_TOKENS = 1_000;
 
@@ -44,34 +90,33 @@ export function planReplay(
     calls: ModelCallRecord[],
 ): ReplayPlan {
     const { entry, turning, damage } = verdict;
-    const stepsOf = (stepId: string) => run.steps.filter((step) => step.stepId === stepId);
-    // The tool call whose result held the suspect content
-    const source = stepsOf(entry.stepId).filter((step) => step.kind === "tool_call" && entry.contentId !== null);
-    const callId = source.map((step) => step.callId).find((id) => id !== null) ?? null;
-    const cost = stepsOf(turning.stepId)
+    const cost = run.steps
+        .filter((step) => step.stepId === turning.stepId)
         .map(costOfStep)
         .find((usd) => usd !== undefined);
     const base = {
         model: calls.find((call) => call.stepId === turning.stepId)?.model ?? "",
-        harmfulCall: {
-            tool: damage.tool,
-            keys: entry.key === null ? stepsOf(damage.stepId).flatMap(keysOf) : [entry.key],
-        },
-        removed: { contentId: entry.contentId, origin: entry.origin, callId },
+        harmfulCall: { tool: damage.tool, keys: harmKeys(verdict, run) },
+        removed: { contentId: entry.contentId, origin: entry.origin, callId: null as string | null },
     };
     const plan = { base, firstRoundUsd: cost === undefined ? undefined : 10 * cost };
     if (damage.kind !== undefined) {
         return { ...plan, ready: NOT_A_CALL[damage.kind] };
+    }
+    if (entry.contentId === null) {
+        return { ...plan, ready: NO_SUSPECT };
     }
     const request = rebuildRequest(calls, turning.stepId);
     if (typeof request === "string") {
         return { ...plan, ready: request };
     }
     const body = replayBody(request);
-    const without = withoutContent(body.input as unknown[], callId);
-    if (without === undefined) {
+    const suspect = suspectCall(verdict, run, body.input as unknown[]);
+    if (suspect === undefined) {
         return { ...plan, ready: NOT_A_TOOL_RESULT };
     }
+    base.removed = { contentId: entry.contentId, origin: suspect.origin, callId: suspect.callId };
+    const without = suspect.without;
     const standIns = standInsOf([...run.labels.flatMap((label) => label.keys), ...run.steps.flatMap(keysOf)]);
     const bodies = { with: withStandIns(body, standIns), without: withStandIns({ ...body, input: without }, standIns) };
     const guess = rerunUsd(bodies.with);

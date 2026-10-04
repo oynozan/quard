@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { bodies, MODEL, PAGE } from "../test/attack.ts";
 import { attackRun, changeStep, IBAN_KEY, label, STEP } from "../test/runs.ts";
 import { findVerdict } from "../rootcause/verdict.ts";
-import { NOT_A_CALL, planReplay } from "./plan.ts";
+import { NO_SUSPECT, NOT_A_CALL, planReplay } from "./plan.ts";
 import { NOT_RECORDED } from "./request.ts";
 import { NOT_A_TOOL_RESULT, REMOVED } from "./without.ts";
 
@@ -87,14 +87,61 @@ describe("planReplay", () => {
         expect(plan).toMatchObject({ base: { model: "" }, ready: NOT_RECORDED });
     });
 
-    it("is limited when the entry is no tool result", () => {
+    it("has nothing to replay when the verdict found no suspect content", () => {
         const verdict = verdictOf();
         const prompt = { ...verdict, entry: { ...verdict.entry, stepId: STEP.ask, contentId: null } };
 
         expect(planReplay(prompt, attackRun(), calls())).toMatchObject({
             base: { removed: { callId: null } },
-            ready: NOT_A_TOOL_RESULT,
+            ready: NO_SUSPECT,
         });
+    });
+
+    it("is limited when the suspect content is no tool result in the turning request", () => {
+        const verdict = verdictOf();
+        const prompt = { ...verdict, entry: { ...verdict.entry, stepId: STEP.ask, contentId: "c1" } };
+
+        expect(planReplay(prompt, attackRun(), calls())).toMatchObject({ ready: NOT_A_TOOL_RESULT });
+    });
+
+    it("counts a value of the suspect content as harm when the model made every value up", () => {
+        const verdict = verdictOf();
+        const mistyped = { key: "id:gb33bukb202015555555", generated: true, appearances: [] };
+        const run = attackRun();
+        const labels = run.labels.map((item) =>
+            item.contentId === "c2" ? { ...item, keys: [...item.keys, "host:evil-pay.com"] } : item,
+        );
+        const made = { ...verdict, entry: { ...verdict.entry, key: null }, values: [mistyped] };
+
+        expect(planReplay(made, { ...run, labels }, calls()).base.harmfulCall).toEqual({
+            tool: "payInvoice",
+            keys: [IBAN_KEY, "id:2026-114"],
+        });
+    });
+
+    it("falls back to the damaging call's own values when nothing else holds one", () => {
+        const verdict = verdictOf();
+        const mistyped = { key: "id:gb33bukb202015555555", generated: true, appearances: [] };
+        const none = { ...verdict, entry: { ...verdict.entry, key: null, contentId: null }, values: [mistyped] };
+
+        expect(planReplay(none, attackRun(), calls()).base.harmfulCall.keys).toEqual([IBAN_KEY]);
+    });
+
+    it("leaves out the message that carried the content in, when the turning call never read it", () => {
+        const verdict = verdictOf();
+        // The page was read in the researcher's process; billing read it as a message
+        const entry = { ...verdict.entry, stepId: "e".repeat(16), agent: "researcher" };
+        const message = { stepId: STEP.fetch, kind: "message" as const, from: "researcher", to: "billing" };
+        const handoff = { ...message, at: verdict.turning.at, trust: "untrusted" as const, verified: true };
+        const across = { entryAgent: "researcher", handoff, turningAgent: "billing", damageAgent: "billing" };
+
+        const plan = planReplay({ ...verdict, entry, acrossAgents: across }, attackRun(), calls());
+
+        expect(plan.base.removed).toEqual({ contentId: "c2", origin: "agent:researcher", callId: "call_1_0" });
+        const without =
+            typeof plan.ready === "string" ? [] : (plan.ready.bodies.without.input as { output?: string }[]);
+        expect(without.at(-1)?.output).toBe(REMOVED);
+        expect(planReplay({ ...verdict, entry }, attackRun(), calls()).ready).toBe(NOT_A_TOOL_RESULT);
     });
 
     it.each(["detection", "limit"] as const)("is limited when the damage kind is %s", (kind) => {
