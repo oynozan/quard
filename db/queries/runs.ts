@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import type { Db } from "../connect/connect.ts";
+import { beatingRuns } from "./approvals/run-waiters.ts";
 
 export type RunSummary = {
     runId: string;
@@ -114,13 +115,21 @@ export type RunListItem = RunSummary & {
 const IN_RUN = "project_id = runs.project_id AND run_id = runs.run_id";
 const GUARDS = `${IN_RUN} AND (guard <> 'permission' OR decision <> 'allow')`;
 
-// Newest runs first. `before` pages back from a start time. `runIds` keeps only
-// those runs; the limit then defaults to how many ids there are.
-export async function listRuns(
-    db: Db,
-    projectId: string,
-    options: { limit?: number; before?: Date; runIds?: string[] } = {},
-): Promise<RunListItem[]> {
+// Every filter applies before the limit
+type ListRunsOptions = {
+    limit?: number;
+    // Pages back from a start time
+    before?: Date;
+    // Only these runs, and the limit then defaults to how many there are
+    runIds?: string[];
+    // Only the runs this agent took part in
+    agent?: string;
+    // Only open runs with a call on an open request that beat since then
+    beatSince?: Date;
+};
+
+// Newest runs first
+export async function listRuns(db: Db, projectId: string, options: ListRunsOptions = {}): Promise<RunListItem[]> {
     if (options.runIds?.length === 0) {
         return [];
     }
@@ -156,6 +165,14 @@ export async function listRuns(
     }
     if (options.runIds !== undefined) {
         query = query.where("run_id", "in", options.runIds);
+    }
+    if (options.agent !== undefined) {
+        query = query.where(
+            sql<boolean>`EXISTS (SELECT 1 FROM events WHERE ${sql.raw(IN_RUN)} AND agent = ${options.agent})`,
+        );
+    }
+    if (options.beatSince !== undefined) {
+        query = query.where("outcome", "is", null).where("run_id", "in", beatingRuns(db, projectId, options.beatSince));
     }
     const rows = await query
         .orderBy("started_at", "desc")
