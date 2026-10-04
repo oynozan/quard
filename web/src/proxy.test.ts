@@ -47,9 +47,10 @@ describe("proxy", () => {
         expect((await proxy(request("/", "quard_session=forged.value"))).status).toBe(307);
     });
 
-    it("keeps the sign-in page and the session endpoint open", async () => {
+    it("keeps the sign-in page, the session endpoint and the health check open", async () => {
         expect((await proxy(request("/sign-in"))).headers.get("x-middleware-next")).toBe("1");
         expect((await proxy(request("/api/auth/session"))).headers.get("x-middleware-next")).toBe("1");
+        expect((await proxy(request("/api/health"))).headers.get("x-middleware-next")).toBe("1");
     });
 
     it("moves signed-in people off the sign-in page, to a safe place only", async () => {

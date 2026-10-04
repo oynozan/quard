@@ -5,7 +5,8 @@ import { safeNext } from "@/lib/auth/redirect";
 import { LOCAL_SESSION, skipsSignIn } from "@/lib/auth/skip";
 import { SESSION_COOKIE } from "@/lib/auth/session-token";
 
-const PUBLIC_PATHS = ["/sign-in", "/api/auth/session"];
+// The health check is open so Docker and load balancers can probe it
+const PUBLIC_PATHS = ["/sign-in", "/api/auth/session", "/api/health"];
 
 // Every page and API route needs a valid session. Without one, pages send people to sign in.
 export async function proxy(request: NextRequest) {
