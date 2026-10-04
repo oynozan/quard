@@ -30,6 +30,11 @@ describe("GuardDetails", () => {
         expect(screen.getByText("The IBAN came from a web page.")).toBeTruthy();
     });
 
+    it("shows the policy file version the decision was made with", () => {
+        const container = show({ policy: "2026-10-01.3" });
+        expect(detailValue(container, "Policy")).toBe("2026-10-01.3");
+    });
+
     it("marks an enforced block red and an observed block as off", () => {
         expect(squareTone(show())).toBe("bg-danger");
         const observed = show({ mode: "observe" });
@@ -67,7 +72,7 @@ describe("GuardDetails", () => {
         expect(detailValue(container, "Degraded")).toBe("Yes, sent late");
     });
 
-    it("leaves out hashes the SDK did not send and a reason the guard did not give", () => {
+    it("leaves out hashes and a policy the SDK did not send and a reason the guard did not give", () => {
         const container = show({ outcome: "allow", ruleHash: "", rulesHash: "", reason: "" });
         expect([...container.querySelectorAll("dt")].map((term) => term.textContent)).toEqual([
             "Decision",

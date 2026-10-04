@@ -103,6 +103,41 @@ describe("runDetailOf", () => {
         ]);
         expect(detail.graph).toEqual({ nodes: detail.agents, edges: [] });
         expect(detail.limits).toEqual([]);
+        expect(detail.warnings).toEqual([]);
+    });
+
+    it("gives each agent the version its last model call reported", () => {
+        const run = storedRun();
+        const [first, , second] = run.steps;
+        first!.detail = { agentVersion: "a".repeat(16) };
+        second!.detail = { agentVersion: "b".repeat(16) };
+
+        // The later call without a version keeps the one before; researcher reported none
+        expect(runDetailOf(run, LATER).agents.map((agent) => [agent.name, agent.version])).toEqual([
+            ["billing", "b".repeat(16)],
+            ["researcher", ""],
+        ]);
+    });
+
+    it("reads the code, tool and reason of each warning the SDK recorded", () => {
+        const run = storedRun();
+        const warning = { eventId: "w1", stepId: CHILD, agent: "researcher", at: at(4) };
+        run.warnings = [
+            { ...warning, body: { type: "warning", code: "detector_error", tool: "fetchPage", reason: "timeout" } },
+            { ...warning, stepId: null, at: at(8), body: null },
+        ];
+
+        expect(runDetailOf(run, LATER).warnings).toEqual([
+            {
+                agent: "researcher",
+                stepId: CHILD,
+                at: BASE + 4000,
+                code: "detector_error",
+                tool: "fetchPage",
+                reason: "timeout",
+            },
+            { agent: "researcher", stepId: null, at: BASE + 8000, code: "", tool: null, reason: null },
+        ]);
     });
 
     it("shows the recorded outcome in the run view", () => {

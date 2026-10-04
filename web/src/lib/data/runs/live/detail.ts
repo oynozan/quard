@@ -1,7 +1,14 @@
-import type { PaymentRow, RunDetail as StoredRun, RunListItem, RunWaiter } from "@quard/db";
+import type {
+    PaymentRow,
+    RunDetail as StoredRun,
+    RunListItem,
+    RunStep,
+    RunWaiter,
+    RunWarning as StoredWarning,
+} from "@quard/db";
 import { paymentsOf } from "../../payments/run";
 import { stillWaits } from "../../approvals/live/heartbeat";
-import type { ModelUsage, RunAgent, RunDetail, RunRow, Step } from "../types";
+import type { ModelUsage, RunAgent, RunDetail, RunRow, RunWarning, Step } from "../types";
 import { edgesOf } from "./links";
 import { decisionCounts, statusOf } from "./status";
 import { buildSteps, type StepSource } from "./steps";
@@ -14,8 +21,33 @@ function waitingOf(waiters: RunWaiter[], now: number): { live: RunWaiter[]; appr
     return { live, approvalId: (live[0] ?? waiters[0])?.requestId ?? null };
 }
 
+const text = (value: unknown) => (typeof value === "string" ? value : null);
+
+// The agent version each agent's last model call reported
+function versionsOf(steps: RunStep[]): Map<string, string> {
+    const versions = new Map<string, string>();
+    for (const step of steps) {
+        const version = text((step.detail as { agentVersion?: unknown } | null)?.agentVersion);
+        if (step.kind === "model_call" && version) versions.set(step.agent, version);
+    }
+    return versions;
+}
+
+// The fields of a stored warning event
+function warningOf(row: StoredWarning): RunWarning {
+    const body = (row.body ?? {}) as { code?: unknown; tool?: unknown; reason?: unknown };
+    return {
+        agent: row.agent,
+        stepId: row.stepId,
+        at: ms(row.at),
+        code: text(body.code) ?? "",
+        tool: text(body.tool),
+        reason: text(body.reason),
+    };
+}
+
 // The agent whose step started this agent's first model call is its parent
-function agentsOf(rootAgent: string, steps: Step[]): RunAgent[] {
+function agentsOf(rootAgent: string, steps: Step[], versions: Map<string, string>): RunAgent[] {
     const order = [rootAgent];
     for (const step of steps) if (!order.includes(step.agent)) order.push(step.agent);
     const byId = new Map(steps.map((step) => [step.id, step]));
@@ -37,7 +69,7 @@ function agentsOf(rootAgent: string, steps: Step[]): RunAgent[] {
         const priced = models.map((step) => step.model).filter((model): model is ModelUsage => model !== null);
         return {
             name,
-            version: "",
+            version: versions.get(name) ?? "",
             model: models.at(-1)?.name ?? "",
             parent: parents.get(name) ?? null,
             depth: depth(name),
@@ -97,7 +129,7 @@ export function runDetailOf(
 ): RunDetail {
     const { live, approvalId } = waitingOf(waiters, now);
     const steps = buildSteps(run, live, now);
-    const agents = agentsOf(run.agent, steps);
+    const agents = agentsOf(run.agent, steps, versionsOf(run.steps));
     const last = run.steps.at(-1);
     const status = statusOf(
         ms(run.lastEventAt),
@@ -133,5 +165,6 @@ export function runDetailOf(
         steps,
         limits: [],
         payments: paymentsOf(payments),
+        warnings: run.warnings.map(warningOf),
     };
 }

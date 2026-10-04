@@ -7,6 +7,7 @@ import { RunLimits } from "./run-limits";
 import { RunSummary, type Observed } from "./run-summary";
 import { treeOrder } from "./lib/tree";
 import { RunTimeline } from "./timeline/run-timeline";
+import { RunWarnings } from "./run-warnings";
 
 function observedOf(run: RunDetail): Observed {
     const observed = { wouldBlock: 0, wouldAsk: 0 };
@@ -28,6 +29,7 @@ export function RunView({ run, step }: { run: RunDetail; step?: string }) {
         <>
             <RunHeading run={summary} open={open} showApproval={!waiting} />
             <RunCallout run={run} />
+            <RunWarnings warnings={run.warnings} />
             <div className="reveal">
                 <RunSummary run={summary} observed={observedOf(run)} />
             </div>

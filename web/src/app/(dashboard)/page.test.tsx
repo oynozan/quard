@@ -2,6 +2,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OverviewData } from "@/lib/data/overview";
 import type { RunRow } from "@/lib/data/runs/types";
+import type { SdkReports } from "@/lib/data/sdk-reports";
 import type { ApprovalRequest, Incident } from "@/lib/data/types";
 import { openRequests } from "../../../test/approvals-overview/fixtures";
 import { stubResizeObserver } from "../../../test/overview/browser";
@@ -15,7 +16,9 @@ const data = vi.hoisted(() => ({
     listIncidents: vi.fn<(limit: number) => Promise<Incident[]>>(),
     openApprovalRequests: vi.fn<() => Promise<ApprovalRequest[]>>(),
     openApprovalCount: vi.fn<() => Promise<number>>(),
+    getSdkReports: vi.fn<(now: number) => Promise<SdkReports>>(),
 }));
+vi.mock("@/lib/data/sdk-reports", () => ({ getSdkReports: data.getSdkReports }));
 vi.mock("@/lib/data/overview", () => ({ getOverview: data.getOverview }));
 vi.mock("@/lib/data/runs/query", () => ({ listRuns: data.listRuns }));
 vi.mock("@/lib/data/incidents/query", () => ({ listIncidents: data.listIncidents }));
@@ -37,6 +40,7 @@ beforeEach(() => {
     data.listIncidents.mockResolvedValue([]);
     data.openApprovalRequests.mockResolvedValue([]);
     data.openApprovalCount.mockResolvedValue(0);
+    data.getSdkReports.mockResolvedValue({ configErrors: [], dropped: null });
 });
 
 afterEach(() => {
@@ -62,6 +66,19 @@ describe("OverviewPage", () => {
             expect(screen.getByRole("region", { name })).toBeTruthy();
         }
         expect(screen.getByRole("complementary", { name: "Fleet summary" })).toBeTruthy();
+        // Nothing went wrong in the SDKs, so there is no problems panel
+        expect(data.getSdkReports).toHaveBeenCalledWith(NOW);
+        expect(screen.queryByRole("region", { name: "SDK problems" })).toBeNull();
+    });
+
+    it("shows what SDKs reported under the terminal cards, before the tables", async () => {
+        data.getSdkReports.mockResolvedValue({ configErrors: [], dropped: { count: 12, lastAt: NOW - 60_000 } });
+        render(await OverviewPage());
+
+        const problems = screen.getByRole("region", { name: "SDK problems" });
+        expect(problems.textContent).toContain("12 events were lost in the last 24 hours");
+        expect(problems.previousElementSibling?.contains(screen.getByRole("region", { name: "Runs" }))).toBe(true);
+        expect(problems.nextElementSibling?.contains(screen.getByRole("region", { name: "Recent runs" }))).toBe(true);
     });
 
     it("shows the six newest runs from the database, aged by the request time", async () => {

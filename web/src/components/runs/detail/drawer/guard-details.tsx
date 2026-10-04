@@ -33,6 +33,11 @@ export function GuardDetails({ guard }: { guard: GuardDecision }) {
                         {guard.rulesHash}
                     </DetailRow>
                 ) : null}
+                {guard.policy ? (
+                    <DetailRow term="Policy" mono>
+                        {guard.policy}
+                    </DetailRow>
+                ) : null}
                 <DetailRow term="Mode">
                     {guard.mode === "observe" ? (
                         "Observe"

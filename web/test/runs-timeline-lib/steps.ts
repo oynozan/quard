@@ -48,6 +48,7 @@ export function makeGuard(fields: Partial<GuardDecision> = {}): GuardDecision {
         rule: "iban:from",
         ruleHash: "r1",
         rulesHash: "h1",
+        policy: null,
         reason: "value_not_from_allowed_origin",
         degraded: false,
         scan: null,

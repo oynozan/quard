@@ -54,6 +54,24 @@ describe("RunView", () => {
         expect(screen.queryByRole("region", { name: "Payments" })).toBeNull();
     });
 
+    it("lists the SDK's warnings above the summary, and none for a run without them", () => {
+        const warning = {
+            agent: "billing",
+            stepId: null,
+            at: 0,
+            code: "unwrapped_tool",
+            tool: "payInvoice",
+            reason: null,
+        };
+        const { unmount } = render(<RunView run={makeDetail()} />);
+        expect(screen.queryByRole("region", { name: "Warnings" })).toBeNull();
+        unmount();
+        render(<RunView run={makeDetail({ warnings: [warning] })} />);
+        const warnings = screen.getByRole("region", { name: "Warnings" });
+        expect(warnings.textContent).toContain("payInvoice is not wrapped with guard()");
+        expect(warnings.nextElementSibling?.contains(screen.getByLabelText("Run summary"))).toBe(true);
+    });
+
     it("shows the run's x402 payment steps under the timeline", () => {
         render(<RunView run={makeDetail({ payments: [makePayment({ delivered: false })] })} />);
         const payments = screen.getByRole("region", { name: "Payments" });

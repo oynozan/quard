@@ -46,6 +46,7 @@ export const decision = (
     requestId: null,
     degraded: false,
     score: null,
+    policy: null,
     ...fields,
 });
 

@@ -136,6 +136,15 @@ describe("buildSteps", () => {
         expect(source?.guard?.rulesHash).toBe("");
     });
 
+    it("keeps the policy file version a decision was made with", () => {
+        const run = storedRun();
+        run.decisions[2] = { ...run.decisions[2]!, policy: "2026-10-01" };
+        const [source, action] = buildSteps(run).filter((step) => step.kind === "guard_decision");
+
+        expect(action?.guard?.policy).toBe("2026-10-01");
+        expect(source?.guard?.policy).toBeNull();
+    });
+
     it("reads a decision stored without its event as on time and not scored", () => {
         const check: RunDecision = {
             eventId: "e00000000000000c",
@@ -155,7 +164,7 @@ describe("buildSteps", () => {
         };
         const [step] = buildSteps({ steps: [], labels: [], decisions: [check] });
 
-        expect(step?.guard).toMatchObject({ degraded: false, scan: { findings: [], jevScore: null } });
+        expect(step?.guard).toMatchObject({ degraded: false, policy: null, scan: { findings: [], jevScore: null } });
     });
 
     it("handles calls with no matching model call, an error, model-generated values and no arguments", () => {

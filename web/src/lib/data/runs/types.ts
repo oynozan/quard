@@ -45,6 +45,8 @@ export type GuardDecision = {
     ruleHash: string;
     // The hash of the active rules it was decided with, empty when the SDK sent none
     rulesHash: string;
+    // The policy file version it was decided with, null when the event had none
+    policy: string | null;
     reason: string;
     // Sent late while the backend was unreachable.
     degraded: boolean;
@@ -164,6 +166,16 @@ export type RunRow = RunSummary & {
     approvalId: string | null;
 };
 
+// Something an SDK reported it could not check or record
+export type RunWarning = {
+    agent: string;
+    stepId: string | null;
+    at: number;
+    code: string;
+    tool: string | null;
+    reason: string | null;
+};
+
 export type RunDetail = {
     summary: RunRow;
     agents: RunAgent[];
@@ -173,6 +185,8 @@ export type RunDetail = {
     limits: RunLimitUse[];
     // x402 payment steps, oldest first
     payments: Payment[];
+    // Oldest first
+    warnings: RunWarning[];
 };
 
 export type RunQuery = {

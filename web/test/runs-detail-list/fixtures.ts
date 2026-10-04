@@ -73,6 +73,7 @@ export function makeGuard(fields: Partial<GuardDecision> = {}): GuardDecision {
         rule: "iban:from",
         ruleHash: "rule-hash-1",
         rulesHash: "rules-hash-1",
+        policy: null,
         reason: "The IBAN came from a web page.",
         degraded: false,
         scan: null,
@@ -146,6 +147,7 @@ export function makeDetail(fields: Partial<RunDetail> = {}): RunDetail {
         steps: [makeStep()],
         limits: [makeLimit({ name: "depth" })],
         payments: [],
+        warnings: [],
         ...fields,
     };
 }

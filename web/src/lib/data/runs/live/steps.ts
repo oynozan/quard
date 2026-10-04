@@ -5,8 +5,8 @@ import type { Step } from "../types";
 import { agentSteps } from "./links";
 import { argsOf } from "./values";
 
-// Rows read with their own event also say whether they came late and carry a detector score
-type StoredDecision = RunDecision & Partial<Pick<RunDecisionDetail, "degraded" | "score">>;
+// Rows read with their own event also say whether they came late, a detector score and the policy
+type StoredDecision = RunDecision & Partial<Pick<RunDecisionDetail, "degraded" | "score" | "policy">>;
 
 // Stored steps with their labels and decisions, such as a whole stored run or an agent's recent calls.
 // A whole run also has its messages, handoffs and memory events.
@@ -187,6 +187,7 @@ function guardStep(decision: StoredDecision, labels: RunLabel[]): Step {
             rule: decision.rule,
             ruleHash: "",
             rulesHash: decision.rulesHash ?? "",
+            policy: decision.policy ?? null,
             reason,
             degraded: decision.degraded ?? false,
             scan:
