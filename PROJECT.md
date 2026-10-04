@@ -279,6 +279,7 @@ quard.configure({
 - Other values count only when they look like IDs: 8 or more characters, no spaces, at least one digit, matched on word boundaries.
 - Words, phrases, dates and amounts are not traced on their own. The call is still marked influenced.
 - A value found nowhere is **model-generated**. Rules can treat it as untrusted for sensitive fields like an IBAN.
+- A value a model wrote stays model-generated for the rest of the run once Quard has seen it pass through another agent's message or a memory item that no record vouched for. Later trusted tool output, and even the user's or the system's words, don't make it seen; only a record can. (**Claude's pick**)
 - No near-match or paraphrase matching in v1. The root-cause finder can add them later, offline.
 
 ### Guard types
@@ -421,18 +422,22 @@ Decided by the spec and Q11 to Q15.
     - `await quard.inject({ content })` stores the label record, then returns the three items for the channel's slot. On the receiving side, `await quard.resume(carrier, fn)` looks the record up once and runs `fn` inside that run. Both return promises. (**Claude's pick**)
     - On HTTP the three items ride in a W3C `baggage` header as `quard-run`, `quard-parent` and `quard-labels`. `quard.toBaggage(carrier)` writes the header, and `quard.resume()` also accepts the header text. (**Claude's pick**)
     - Values leave the process only as keyed hashes. The receiver hashes the values it finds in the message and takes each match's label from the record. A record vouches for a message only when the run and the content's hash both match. (**Claude's pick**)
+    - The content's hash is keyed with the install's hash key and covers the exact content: every character, every field and which value belongs to which key. (**Claude's pick**)
     - A missing, unreadable or mismatched reference counts as untrusted. So does a record that could not be stored or looked up. Value tracing reconnects the pieces later.
-    - The receiving agent gets no more tools than the sender had, and its depth continues from the sender's.
+    - The receiving agent gets no more tools than the sender had, and its depth continues from the sender's. When the record is missing, Quard records a warning and counts the agent as past the depth limit, so it can't delegate further once depth limits are on.
+    - A sender run that has read nothing vouches for nothing: its message counts as unknown content, untrusted and internal. The same goes for a memory write.
 - **Across agents.** Value labels search the whole run's content index, so an IBAN from one agent's web page is caught in another agent's payment.
 - **Shared memory** (Q14). A generic wrapper goes around the app's memory read and write functions, or around any store with get, put and search.
     - `quard.memory(store, { name })` returns the store with the same shape. Reads are `get`, `search` and `read`; writes are `put` and `write`. Items read get the origin `memory:<name>`. (**Claude's pick**)
-    - A write stores the item's labels before the inner write runs. Labels for the same content merge to the least trusted and most sensitive, so writing it again never makes it more trusted.
+    - A write stores the item's labels before the inner write runs. Labels for the same content merge to the least trusted and most sensitive, so writing it again never makes it more trusted. The backend keeps one merged label per item.
+    - An item changed outside the wrapper, even by one hidden character, fails the hash check and reads back as untrusted. Items must be read back in the shape they were written.
     - Labels live in the backend, keyed by a hash of the content. They come back on read, even in a later run.
     - Content changed outside the wrapper fails the hash check and reads back as untrusted.
     - Memory labels are not deleted with runs.
 - **Frameworks** (Q13). The OpenAI Agents SDK (JS) comes first. Its integration uses the wrapped OpenAI client, takes the current agent from the framework, and tags handoffs and agents-as-tools. Where it must stop something, it uses the SDK's tool guardrails and approval flow.
     - It ships as `quard/openai-agents`, so the core package does not need the Agents SDK. `quardRunner({ client })` returns a `Runner` whose runs land in one Quard run. `guardedTool({ ...toolOptions, guard })` runs every call of a tool through `guard()`. (**Claude's pick**)
     - A block becomes a tool guardrail rejection that the model reads. With `onBlock: "throw"` the run stops with `GuardBlockedError`. An approval still pauses inside the tool call, as everywhere else (Q21). (**Claude's pick**)
+    - A handoff passes control on, so the depth stays the same. An agent run as a tool adds a level, and its input is the caller's brief, labeled `agent:<caller>`. A run paused for the SDK's own approval resumes into the same Quard run, with its labels. (**Claude's pick**)
 
 ```ts
 // Sending: a guarded tool like any other. delegateTo names the receiver.
@@ -463,6 +468,7 @@ await quard.resume(request.headers.baggage, () => billingAgent(receive), { agent
 - When a run spans processes, its counters live in `control`. (**Claude's pick**)
     - Steps, cost and per-run tool counts move to `control` when a message first carries the run to another process. Until then they count in-process.
     - Fan-out and loops stay per process in v1, because they need more than a number.
+    - One call's per-run counts are added all or none. If a per-day limit or the fleet check refuses the call afterwards, its per-run counts stay counted.
 
 ## Payments (x402)
 
@@ -673,6 +679,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 
 - The SDK removes secrets, such as API keys and tokens, before anything leaves the process.
 - IBANs, card numbers and emails become keyed hashes plus a mask, such as `DE89…3000`. The email domain stays visible.
+- The user and password in a URL, such as `redis://user:pass@host`, are removed. A password that holds an apostrophe is not found in v1.
 - The same normalized value always gives the same hash, so search and value tracing still match.
 - Guards see real values in memory. The dashboard shows masks. Replay uses stand-ins. The AI reviewer sees placeholders.
 - The one exception is an open approval request: the approver sees the full values. After the decision only the hash is kept.
@@ -799,3 +806,5 @@ Not decided yet:
 - **Hosted MCP approvals.** Answering an approval request takes a follow-up model request. Decide whether monitor sends it inside the same client call or hands it to the app.
 - **WebSocket transport.** The OpenAI Agents SDK can reach the Responses API over a WebSocket. The fetch hook does not cover it yet.
 - **Node 26** becomes LTS on 2026-10-28. Move the services to it then.
+- **Hash key rotation for label records.** Memory labels outlive runs, but their hashes use the current key only. After a key change, items written before it read back as untrusted. Decide whether lookups also try the old key.
+- **Runs paused and never resumed.** A run paused for the Agents SDK's own approval stays open in the dashboard until it resumes. Decide when such a run counts as finished.
