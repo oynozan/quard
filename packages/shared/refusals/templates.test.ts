@@ -34,6 +34,7 @@ const X402: ReasonCode[] = [
     "x402_untrusted_payee",
     "x402_payee_quarantined",
     "x402_unknown_value_over_cap",
+    "x402_invalid_amount",
 ];
 
 describe("refusalText", () => {

@@ -1,7 +1,5 @@
-import { removeSecrets, urlHost, usdValue } from "@quard/shared";
+import { atomicAmount, removeSecrets, urlHost, usdValue } from "@quard/shared";
 import type { PaymentCreationContext } from "./client.ts";
-
-const ATOMIC = /^\d{1,78}$/;
 
 // The payment about to be signed, as the guard and the records see it
 export type Payment = {
@@ -48,9 +46,9 @@ export function paidHost(context: PaymentCreationContext): string {
 
 export function readPayment(context: PaymentCreationContext): Payment {
     const chosen = context.selectedRequirements;
-    const raw = chosen.amount ?? chosen.maxAmountRequired;
-    const validAmount = typeof raw === "string" && ATOMIC.test(raw);
-    const amount = validAmount ? raw : "0";
+    const read = atomicAmount(chosen.amount ?? chosen.maxAmountRequired);
+    const validAmount = read !== undefined;
+    const amount = read ?? "0";
     const url = resourceUrl(context);
     return {
         x402Version: context.paymentRequired.x402Version,

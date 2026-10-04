@@ -30,7 +30,8 @@ export type ReasonCode =
     | "x402_host_blocked"
     | "x402_untrusted_payee"
     | "x402_payee_quarantined"
-    | "x402_unknown_value_over_cap";
+    | "x402_unknown_value_over_cap"
+    | "x402_invalid_amount";
 
 const REASONS: Record<ReasonCode, (field: string) => string> = {
     permission_denied: () => "this agent is not allowed to use this tool",
@@ -65,6 +66,7 @@ const REASONS: Record<ReasonCode, (field: string) => string> = {
     x402_untrusted_payee: () => "the host or payee first appeared in untrusted content",
     x402_payee_quarantined: () => "the payee is new and many runs paid it at once, so it is blocked everywhere",
     x402_unknown_value_over_cap: () => "the amount is over the cap for this token",
+    x402_invalid_amount: () => "the payment amount could not be read",
 };
 
 export type RefusalInput = {

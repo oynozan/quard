@@ -45,13 +45,20 @@ function decisionOf(results: readonly RuleResult[], rule: string): string | unde
 }
 
 describe("checkPayment", () => {
-    it("caps one payment in USD, and counts a broken amount as over", () => {
+    it("caps one payment in USD", () => {
         expect(decisionOf(check({ maxPerPayment: 0.1 }).results, "max-per-payment")).toBe(
             "block:x402_over_payment_limit",
         );
         expect(decisionOf(check({ maxPerPayment: 1 }).results, "max-per-payment")).toBe("allow");
+    });
+
+    it("always refuses an amount it can't read, in any mode", () => {
         const broken = paymentOf({ amount: "0", validAmount: false, usd: 0 });
-        expect(decisionOf(check({}, broken).results, "max-per-payment")).toBe("block:x402_over_payment_limit");
+        const results = check({ mode: "observe" }, broken).results;
+
+        expect(results[0]).toMatchObject({ rule: "valid-amount", decision: "block", mode: "block" });
+        expect(decisionOf(results, "valid-amount")).toBe("block:x402_invalid_amount");
+        expect(decisionOf(check({}).results, "valid-amount")).toBeUndefined();
     });
 
     it("caps tokens with no USD value in atomic units", () => {

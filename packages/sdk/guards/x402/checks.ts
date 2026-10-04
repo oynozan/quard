@@ -89,8 +89,17 @@ export function checkPayment(
     const over = (total: number, max: number) => total > max;
     const { maxPerPayment, assetCaps, blockHosts, allowHosts, untrusted, maxPaymentsPerRun } = settings;
 
-    // A broken amount can't be checked, so it counts as over
-    const tooMuch = !payment.validAmount || (usd !== null && over(usd, maxPerPayment.value));
+    // The signer would sign an amount the checks can't read, so it is refused in any mode
+    if (!payment.validAmount) {
+        results.push({
+            guard: "x402",
+            rule: "valid-amount",
+            decision: "block",
+            mode: "block",
+            reason: "x402_invalid_amount",
+        });
+    }
+    const tooMuch = usd !== null && over(usd, maxPerPayment.value);
     results.push(result("max-per-payment", maxPerPayment, tooMuch ? "x402_over_payment_limit" : undefined));
     if (assetCaps !== undefined) {
         const cap = usd === null ? assetCap(assetCaps.value, payment.asset) : undefined;
