@@ -62,10 +62,11 @@ describe("runLimitCounts", () => {
         ]);
 
         const rows = await runLimitCounts(test.db, projectId, range);
+        const last = (time: string) => new Date(`2026-10-03T${time}.000Z`);
         expect(rows.sort((a, b) => a.rule.localeCompare(b.rule))).toEqual([
-            { rule: "max-cost", mode: "block", wouldStop: 0, stopped: 1 },
-            { rule: "max-depth", mode: "observe", wouldStop: 2, stopped: 0 },
-            { rule: "max-steps", mode: "block", wouldStop: 1, stopped: 1 },
+            { rule: "max-cost", mode: "block", wouldStop: 0, stopped: 1, lastAt: last("12:00:00") },
+            { rule: "max-depth", mode: "observe", wouldStop: 2, stopped: 0, lastAt: last("11:00:00") },
+            { rule: "max-steps", mode: "block", wouldStop: 1, stopped: 1, lastAt: last("12:00:00") },
         ]);
     });
 });

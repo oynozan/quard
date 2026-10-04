@@ -15,6 +15,7 @@ export type RunLimitRow = {
     wouldStop: number;
     // Runs an enforced limit stopped
     stopped: number;
+    lastAt: Date;
 };
 
 // Runs that went over each run limit in the range. Limits no run went over are left out.
@@ -26,6 +27,7 @@ export async function runLimitCounts(db: Db, projectId: string, range: TimeRange
             sql<"block" | "observe">`(array_agg(mode ORDER BY at DESC, event_id DESC))[1]`.as("mode"),
             sql<number>`(count(DISTINCT run_id) FILTER (WHERE NOT enforced))::int`.as("wouldStop"),
             sql<number>`(count(DISTINCT run_id) FILTER (WHERE enforced))::int`.as("stopped"),
+            sql<Date>`max(at)`.as("lastAt"),
         ])
         .where("project_id", "=", projectId)
         .where("guard", "=", "limit")
