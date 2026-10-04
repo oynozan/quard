@@ -5,6 +5,7 @@ import { newScope } from "../context/scope.ts";
 import { withoutRunEdges } from "../test/call.ts";
 import { resetAll } from "../test/reset.ts";
 import { checkRequestedCalls } from "./check.ts";
+import { addFrameworkTools } from "./framework-tools.ts";
 
 afterEach(() => {
     resetAll();
@@ -33,6 +34,20 @@ describe("checkRequestedCalls", () => {
             ["decision", ""],
             ["warning", "rmrf"],
         ]);
+    });
+
+    it("does not warn about tools the agent framework runs itself in that run", () => {
+        const scope = newScope();
+        const other = newScope();
+        addFrameworkTools(scope.run, ["transfer_to_billing"]);
+        takeEvents();
+
+        const calls = [{ callId: "c4", name: "transfer_to_billing", arguments: "{}" }];
+        checkRequestedCalls(calls, scope, "s1");
+        checkRequestedCalls([{ ...calls[0], callId: "c5" }] as typeof calls, other, "s2");
+
+        const warnings = takeEvents().filter((event) => event.type === "warning");
+        expect(warnings).toEqual([expect.objectContaining({ runId: other.run.runId, tool: "transfer_to_billing" })]);
     });
 
     it("marks a call blocked when the agent may not use the tool", () => {

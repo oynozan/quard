@@ -1,7 +1,8 @@
 import { now, record } from "../core/recorder.ts";
-import { isGuardedTool, registerCall } from "../context/registry.ts";
+import { registerCall } from "../context/registry.ts";
 import { mayUse, type Scope } from "../context/scope.ts";
 import { rulesHash } from "../policy/rules.ts";
+import { warnsUnwrapped } from "./framework-tools.ts";
 import { parseJson } from "./json.ts";
 import type { FunctionCall } from "./response.ts";
 
@@ -30,7 +31,7 @@ export function checkRequestedCalls(calls: readonly FunctionCall[], scope: Scope
             reason: allowed ? undefined : "permission_denied",
             rules: rulesHash(),
         });
-        if (!isGuardedTool(call.name)) {
+        if (warnsUnwrapped(scope, call.name)) {
             // An unwrapped tool can only be recorded, never stopped
             record({ type: "warning", ...base, code: "unwrapped_tool" });
         }
