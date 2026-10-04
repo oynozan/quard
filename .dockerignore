@@ -1,9 +1,16 @@
 **/node_modules
 **/coverage
 **/dist
+**/.next
+**/*.tsbuildinfo
 .git
-web/*
-!web/package.json
-docs/*
-!docs/package.json
+.claude
+.pglite
+docs
 sandbox
+# Never send secrets to the build
+**/.env*
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.tgz
