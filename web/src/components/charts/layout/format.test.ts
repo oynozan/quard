@@ -14,6 +14,11 @@ describe("formatValue", () => {
         expect(formatValue(12.345, "percent")).toBe("12.3%");
     });
 
+    it("keeps small costs readable", () => {
+        expect(formatValue(0.0042, "cost")).toBe("$0.0042");
+        expect(formatValue(1.5, "cost")).toBe("$1.50");
+    });
+
     it("drops a trailing zero from whole percents", () => {
         expect(formatValue(12, "percent")).toBe("12%");
     });

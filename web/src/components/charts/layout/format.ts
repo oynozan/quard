@@ -1,11 +1,13 @@
-import { formatCompact, formatInt, formatUsd } from "@/lib/format";
+import { formatCompact, formatCost, formatInt, formatUsd } from "@/lib/format";
 
 // How chart values print, as a string so server pages can pass it to client charts
-export type ValueFormat = "int" | "compact" | "usd" | "percent";
+// "cost" keeps two significant digits below a cent, for small payments
+export type ValueFormat = "int" | "compact" | "usd" | "cost" | "percent";
 
 export function formatValue(value: number, format: ValueFormat = "int"): string {
     if (format === "compact") return formatCompact(value);
     if (format === "usd") return formatUsd(value);
+    if (format === "cost") return formatCost(value);
     if (format === "percent") return `${+value.toFixed(1)}%`;
     return formatInt(Math.round(value));
 }
