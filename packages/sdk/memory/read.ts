@@ -11,16 +11,15 @@ import { keptLabels } from "./kept.ts";
 import { mergeLabels, type MemoryLabels } from "./merge.ts";
 import { localHash } from "./values.ts";
 
-// The labels this process kept for the content, or else the backend's.
-// Only records of this exact content vouch for it.
+// The labels this process kept for the content, merged with the
+// backend's, so a less trusted writer elsewhere wins. Only records of
+// this exact content vouch for it.
 async function findLabels(print: string): Promise<MemoryLabels | undefined> {
-    const own = keptLabels(print);
-    if (own !== undefined) {
-        return own;
-    }
     // A lookup that fails counts as no record
     const records = await lookupLabels({ kind: "memory", print }).catch(() => undefined);
-    const [first, ...rest] = (records ?? []).filter((found) => found.kind === "memory" && found.print === print);
+    const found = (records ?? []).filter((record) => record.kind === "memory" && record.print === print);
+    const own = keptLabels(print);
+    const [first, ...rest] = own === undefined ? found : [own, ...found];
     return first === undefined ? undefined : rest.reduce<MemoryLabels>(mergeLabels, first);
 }
 

@@ -81,4 +81,17 @@ describe("a memory item from a trusted writer", () => {
         expect(readContent()).toMatchObject({ trust: "untrusted", flags: ["invisible_text"] });
         expect(readEvent()).toMatchObject({ verified: 1, trust: "untrusted" });
     });
+
+    it("takes the least trusted labels when another process wrote the same content", async () => {
+        const agents = makeAgents();
+        await agents.write(NOTE);
+        const [mine] = backend.records;
+        const label = { trust: "untrusted", sensitivity: "public", origins: ["web:evil.com"], flagged: false };
+        backend.records.push({ ...mine, agent: "other", label } as LabelRecord);
+
+        await agents.read();
+
+        expect(readContent()).toMatchObject({ trust: "untrusted" });
+        expect(readEvent()).toMatchObject({ verified: 1, trust: "untrusted" });
+    });
 });

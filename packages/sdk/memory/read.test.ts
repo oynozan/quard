@@ -59,13 +59,13 @@ function originOf(scope: Scope, value: string): string | undefined {
 }
 
 describe("readThrough", () => {
-    it("reads labels this process kept, values first, with no backend", async () => {
+    it("reads labels this process kept, values first, when no backend answers", async () => {
         keepLabels(printOf(NOTE), labels("trusted", [webIban()]));
         const scope = newScope({ agent: "billing" });
 
         expect(await readThrough(scope, "notes", false, async () => NOTE)).toBe(NOTE);
 
-        expect(lookup).not.toHaveBeenCalled();
+        expect(lookup).toHaveBeenCalledWith({ kind: "memory", print: printOf(NOTE) });
         expect(contents()).toMatchObject([
             { agent: "billing", origin: "web:evil.com", trust: "untrusted", keys: [`iban:${IBAN}`] },
             { origin: "memory:notes", trust: "trusted", sensitivity: "internal", flags: [], keys: [] },
@@ -99,6 +99,18 @@ describe("readThrough", () => {
         expect(contents()[1]).toMatchObject({ origin: "memory:notes", trust: "untrusted", sensitivity: "internal" });
         expect(originOf(scope, IBAN)).toBe("web:evil.com");
         expect(memoryEvent()).toMatchObject({ verified: 1, trust: "untrusted", sensitivity: "internal" });
+    });
+
+    it("merges the labels it kept with the backend's, so the least trusted wins", async () => {
+        keepLabels(printOf(NOTE), labels("trusted"));
+        lookup.mockResolvedValueOnce([memoryRecord(printOf(NOTE), labels("untrusted", [webIban()]))]);
+        const scope = newScope();
+
+        await readThrough(scope, "notes", false, async () => NOTE);
+
+        expect(contents()[1]).toMatchObject({ origin: "memory:notes", trust: "untrusted" });
+        expect(originOf(scope, IBAN)).toBe("web:evil.com");
+        expect(memoryEvent()).toMatchObject({ verified: 1, trust: "untrusted" });
     });
 
     it.each([
