@@ -25,21 +25,23 @@ function counterKey(tool: string, counter: string): string {
     return `${tool}\u0000${counter}`;
 }
 
-// Only today and yesterday are kept
-function countsOf(day: string): Map<string, number> {
-    let counts = days.get(day);
-    if (counts === undefined) {
-        counts = new Map();
-        days.set(day, counts);
+// One day's entry in a store that keeps only today and yesterday
+export function dayEntry(store: Map<string, Map<string, number>>, day: string): Map<string, number> {
+    let entry = store.get(day);
+    if (entry === undefined) {
+        entry = new Map();
+        store.set(day, entry);
         const keep = [utcDay(), utcDay(Date.now() - DAY_MS)];
-        for (const known of days.keys()) {
+        for (const known of store.keys()) {
             if (!keep.includes(known)) {
-                days.delete(known);
+                store.delete(known);
             }
         }
     }
-    return counts;
+    return entry;
 }
+
+const countsOf = (day: string) => dayEntry(days, day);
 
 export function dayUsed(day: string, tool: string, counter: string): number {
     return days.get(day)?.get(counterKey(tool, counter)) ?? 0;

@@ -1,6 +1,6 @@
 import { MAX_DAY_COUNTS, newEventId, type CountMessage } from "@quard/shared";
 import type { FailResult, GuardCall, RuleResult } from "../../guards/call.ts";
-import { addDayUsed, dayCounts, dayUsed, noteDayUsed, takeDayUsed, utcDay } from "../../guards/limit/daily.ts";
+import { addDayUsed, dayCounts, dayUsed, takeDayUsed, utcDay } from "../../guards/limit/daily.ts";
 import { fitsControl } from "../../guards/limit/run-counts.ts";
 import type { LimitOptions } from "../../guards/options.ts";
 import type { Control } from "../../transport/link/control.ts";
@@ -13,10 +13,6 @@ type Taken = { tool: string; day: string; counters: Counter[]; at: "control" | "
 // No total passes the cap of a guard that blocks
 function fits(counters: readonly Counter[], totals: readonly number[]): boolean {
     return counters.every((found, index) => (totals[index] as number) <= (enforcedCap(found) ?? Infinity));
-}
-
-function noteTotals(taken: Taken, used: readonly number[]): void {
-    taken.counters.forEach(({ counter }, index) => noteDayUsed(taken.day, taken.tool, counter, used[index] as number));
 }
 
 // Counts here when control can't, adding nothing when a blocking cap is passed
@@ -64,6 +60,7 @@ function countMessage({ tool, day, counters }: Taken): CountMessage {
 // Asks control to add all of the call's counts or none, and counts here when no answer comes in time
 async function countThere(control: Control, taken: Taken): Promise<number[]> {
     const { tool, day, counters } = taken;
+    const noteTotals = control.replays.noteLater(day, tool, counters);
     const reply = await control.requests.request(countMessage(taken), {
         ms: control.replyMs,
         late: (late) => {
@@ -71,22 +68,20 @@ async function countThere(control: Control, taken: Taken): Promise<number[]> {
             if (counted === undefined) {
                 return;
             }
-            // Control counted a call that was refused meanwhile, so it gives the counts back
-            const refused = counted.ok && taken.at === "none";
-            const left = counted.used.map((used, index) => used - (refused ? (counters[index] as Counter).add : 0));
-            noteTotals(taken, left);
-            if (refused) {
+            if (counted.ok && taken.at === "none") {
+                // Control counted a call that was refused meanwhile, so it gives the counts back
                 control.replays.takeBack(day, tool, counters);
             } else if (counted.ok) {
                 // Control counted them after all, so the local counts are not sent again
                 counters.forEach(({ counter, add }) => control.replays.dropCount({ day, tool, counter, add }));
                 taken.at = "control";
             }
+            noteTotals(counted.used);
         },
     });
     const counted = dayCounted(reply, counters.length);
     if (counted !== undefined) {
-        noteTotals(taken, counted.used);
+        noteTotals(counted.used);
         taken.at = counted.ok ? "control" : "none";
         // A refused call was added to none of the counters
         return counters.map((found, index) => (counted.used[index] as number) + (counted.ok ? 0 : found.add));

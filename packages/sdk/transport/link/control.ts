@@ -1,6 +1,5 @@
 import { hostname } from "node:os";
 import { APPROVAL_BEAT_MS, createRedactor, type ClientMessage, type Redactor } from "@quard/shared";
-import { noteDayUsed } from "../../guards/limit/daily.ts";
 import type { FleetView } from "../../guards/limit/fleet.ts";
 import { knownVersions, type AgentVersion } from "../../monitor/versions.ts";
 import { rulesSnapshot } from "../../policy/rules.ts";
@@ -99,12 +98,7 @@ export function createControl(options: ControlOptions): Control {
         link.send(agentMessage(version, redactor));
     };
     link.listen({
-        ready: (message) => {
-            for (const count of message.counters) {
-                noteDayUsed(count.day, count.tool, count.counter, count.used);
-            }
-            knownVersions().forEach(sendAgent);
-        },
+        ready: () => knownVersions().forEach(sendAgent),
     });
     link.start();
     return {

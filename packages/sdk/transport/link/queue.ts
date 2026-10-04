@@ -5,13 +5,15 @@ import {
     type FleetMessage,
     type UncountMessage,
 } from "@quard/shared";
-import { noteDayUsed } from "../../guards/limit/daily.ts";
+import { dayEntry, noteDayUsed } from "../../guards/limit/daily.ts";
 import type { Link } from "./link.ts";
 import type { Reply, Requests } from "./requests.ts";
 
 export type FleetUse = Omit<FleetMessage, "type" | "id">;
 export type QueuedCount = { day: string; tool: string; counter: string; add: number };
 export type TakenCount = { counter: string; add: number };
+type Named = { counter: string };
+type DayCounter = Omit<QueuedCount, "add">;
 
 // What control missed while it was away, sent when it is back
 export type Replays = {
@@ -23,6 +25,8 @@ export type Replays = {
     dropCount(count: QueuedCount): void;
     // Takes counts of one tool and day back from control, now or once it is back
     takeBack(day: string, tool: string, counts: readonly TakenCount[]): void;
+    // For a count sent now, notes control's totals less what goes back to it after
+    noteLater(day: string, tool: string, counters: readonly Named[]): (used: readonly number[]) => void;
 };
 
 const MAX_USES = 1000;
@@ -37,10 +41,27 @@ export function dayCounted(reply: Reply | undefined, count: number): CountedMess
 export function createReplays(link: Link, requests: Requests, replyMs: number): Replays {
     // What control misses on each counter, below zero when it has counts to give back
     const counts = new Map<string, number>();
+    // What went back to control on each counter, by day
+    const sentBack = new Map<string, Map<string, number>>();
     const uses: FleetUse[] = [];
     let retry: NodeJS.Timeout | undefined;
 
-    const keyOf = (count: QueuedCount) => JSON.stringify([count.day, count.tool, count.counter]);
+    const keyOf = (count: DayCounter) => JSON.stringify([count.day, count.tool, count.counter]);
+    const sentSoFar = (count: DayCounter) => sentBack.get(count.day)?.get(keyOf(count)) ?? 0;
+
+    // Notes control's total less what went back since mark and what still waits to go back
+    function noteTotal(count: DayCounter, used: number, mark: number): void {
+        const waiting = Math.max(0, -(counts.get(keyOf(count)) ?? 0));
+        noteDayUsed(count.day, count.tool, count.counter, used - (sentSoFar(count) - mark) - waiting);
+    }
+
+    function noteLater(day: string, tool: string, counters: readonly Named[]) {
+        const named = counters.map(({ counter }) => ({ day, tool, counter }));
+        const marks = named.map(sentSoFar);
+        return (used: readonly number[]) => {
+            named.forEach((count, index) => noteTotal(count, used[index] as number, marks[index] as number));
+        };
+    }
 
     // A reconnect may never come, so what is kept while ready is sent again later
     function later(): void {
@@ -73,6 +94,12 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
         const message: UncountMessage = { type: "uncount", id: newEventId(), tool, day, counts: back };
         if (!link.send(message)) {
             taken.forEach(({ counter, add }) => dropCount({ day, tool, counter, add }));
+            return;
+        }
+        const sums = dayEntry(sentBack, day);
+        for (const { counter, add } of back) {
+            const key = keyOf({ day, tool, counter });
+            sums.set(key, (sums.get(key) ?? 0) + add);
         }
     }
 
@@ -111,18 +138,19 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
     function sendCount(count: QueuedCount): void {
         const { day, tool, counter, add } = count;
         const message: CountMessage = { type: "count", id: newEventId(), tool, day, counts: [{ counter, add }] };
+        const noteTotals = noteLater(day, tool, [count]);
         const late = (reply: Reply | undefined) => {
             const counted = dayCounted(reply, 1);
             // Control counted it after all, so it is not sent again
             if (counted !== undefined) {
-                noteDayUsed(day, tool, counter, counted.used[0] as number);
                 dropCount(count);
+                noteTotals(counted.used);
             }
         };
         void requests.request(message, { ms: replyMs, hold: false, late }).then((reply) => {
             const counted = dayCounted(reply, 1);
             if (counted !== undefined) {
-                noteDayUsed(day, tool, counter, counted.used[0] as number);
+                noteTotals(counted.used);
             } else {
                 keepCount(count);
             }
@@ -148,7 +176,15 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
         uses.splice(0).forEach(sendUse);
     }
 
-    link.listen({ ready: flush });
+    link.listen({
+        ready: (message) => {
+            // Control's totals at connect still hold what waits here to go back
+            for (const count of message.counters) {
+                noteTotal(count, count.used, sentSoFar(count));
+            }
+            flush();
+        },
+    });
 
     return {
         use: (use) => (link.ready() ? sendUse(use) : keepUse(use)),
@@ -157,5 +193,6 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
         keepCount,
         dropCount,
         takeBack,
+        noteLater,
     };
 }
