@@ -30,6 +30,12 @@ export function cleanText(text: string): string {
     return text.normalize("NFKC").replace(INVISIBLE, "");
 }
 
+// Removes hidden characters and turns look-alike spaces, such as
+// no-break spaces, into plain ones. Other characters stay as they are.
+export function plainSpaces(text: string): string {
+    return text.replace(INVISIBLE, "").replace(/\p{Zs}/gu, " ");
+}
+
 export function hasInvisible(text: string): boolean {
     return text.normalize("NFKC").replace(INVISIBLE, "") !== text.normalize("NFKC");
 }

@@ -36,7 +36,7 @@ quard.configure({
         if (event.decision === "ask" && !asked.has(event.stepId)) {
             asked.add(event.stepId);
             printEvent(event);
-            console.log("    · waiting. Answer at http://localhost:3000/approvals");
+            console.log("    · waiting. Answer at http://localhost:3100/approvals");
         }
         if (event.rule === "always-approved") {
             console.log("    · answered at once by the earlier Always approve");
@@ -78,4 +78,4 @@ const payTimed = guard(pay, { type: "approval", name: "payInvoice", timeout: 15 
 await quard.run({ agent: "payments" }, () =>
     runAgent(client, `Pay Acme Ltd 75 EUR for invoice 304 to IBAN ${IBAN}.`, { payInvoice: payTimed }),
 );
-console.log("  The request is still open at http://localhost:3000/approvals");
+console.log("  The request is still open at http://localhost:3100/approvals");

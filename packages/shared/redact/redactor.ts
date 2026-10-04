@@ -1,5 +1,6 @@
 import { replaceEmails } from "../normalize/email.ts";
 import { replaceIbans } from "../normalize/iban.ts";
+import { plainSpaces } from "../normalize/text.ts";
 import { isCard, replaceCards } from "./cards.ts";
 import { keyedHash } from "./hash.ts";
 import { CUT, maskCard, maskEmail, maskIban } from "./masks.ts";
@@ -19,8 +20,10 @@ const SENSITIVE = new Set(["iban", "email"]);
 const HASHED = /^(.*)#([0-9a-f]{32})$/;
 const MAX_DEPTH = 32;
 
+// Hidden characters and look-alike spaces are cleaned first, so they
+// can't split a value past the masks
 export function redactText(text: string): string {
-    const noSecrets = removeSecrets(text);
+    const noSecrets = removeSecrets(plainSpaces(text));
     return replaceEmails(replaceCards(replaceIbans(noSecrets, maskIban), maskCard), maskEmail);
 }
 

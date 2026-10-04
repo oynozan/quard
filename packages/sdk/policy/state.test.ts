@@ -46,10 +46,16 @@ describe("without a policy file or feed", () => {
         expect(policyVersion()).toBeUndefined();
         expect(policyOrigins()).toBeUndefined();
         expect(currentPreset()).toBe(PRESETS.balanced);
-        expect(effectiveDetectorRules({ flagAt: 0.7 })).toEqual({ mode: "observe", flagAt: 0.7, stripAt: 0.9 });
+        expect(effectiveDetectorRules({ flagAt: 0.7 })).toEqual({ mode: "enforce", flagAt: 0.7, stripAt: 0.9 });
         expect(signatureFeed()).toBeUndefined();
         expect(feedMissing()).toBe(false);
         expect(signatureMode()).toBe("block");
+    });
+
+    it("keeps the defaults for detector rules left undefined", () => {
+        const unset = { mode: undefined, flagAt: undefined, stripAt: 0.95 };
+
+        expect(effectiveDetectorRules(unset)).toEqual({ mode: "enforce", flagAt: 0.5, stripAt: 0.95 });
     });
 });
 

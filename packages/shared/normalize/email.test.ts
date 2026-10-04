@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { emailHost, findEmails, normalizeEmail, replaceEmails } from "./email.ts";
+import { emailHost, emailSpans, findEmails, normalizeEmail, replaceEmails } from "./email.ts";
+
+describe("emailSpans", () => {
+    it("gives where each address is written", () => {
+        expect(emailSpans("to Jane@Acme.com or bo@x.io")).toEqual([
+            { start: 3, end: 16, value: "Jane@Acme.com" },
+            { start: 20, end: 27, value: "bo@x.io" },
+        ]);
+    });
+});
 
 describe("email", () => {
     it("normalizes case and spaces", () => {

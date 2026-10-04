@@ -21,7 +21,7 @@ export type {
     ToolCallEvent,
     WarningEvent,
 } from "./events/schema.ts";
-export { MAX_BATCH, uploadBatch, uploadItem } from "./events/upload.ts";
+export { MAX_BATCH, MAX_BATCH_BYTES, uploadBatch, uploadItem } from "./events/upload.ts";
 export { APPROVAL_BEAT_MS, APPROVAL_STALE_MS, FLEET_CHECK } from "./control/constants.ts";
 export {
     agentMessage,
@@ -84,7 +84,7 @@ export type {
     Trust,
 } from "./labels/types.ts";
 export { findHosts, hostMatches, mainDomain, normalizeHost } from "./normalize/domain.ts";
-export { emailHost, findEmails, normalizeEmail, replaceEmails } from "./normalize/email.ts";
+export { emailHost, emailSpans, findEmails, normalizeEmail, replaceEmails } from "./normalize/email.ts";
 export { findIbans, isValidIban, normalizeIban, replaceIbans } from "./normalize/iban.ts";
 export { findIds, isIdentifierLike } from "./normalize/identifier.ts";
 export { findPaths, normalizePath } from "./normalize/path.ts";

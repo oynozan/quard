@@ -116,8 +116,8 @@ export const configureExtras = z.object({
                 typeof value === "object" &&
                 value !== null &&
                 typeof (value as Detector).name === "string" &&
-                typeof (value as Detector).score === "function",
-            "a detector needs a name and a score() function",
+                typeof (value as Detector).label === "function",
+            "a detector needs a name and a label() function",
         )
         .optional(),
     detectorRules: detectorRules.optional(),

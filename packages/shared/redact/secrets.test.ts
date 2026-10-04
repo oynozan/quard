@@ -78,8 +78,25 @@ describe("removeSecrets", () => {
         ['{"api_key":"abc123def"}', '{"api_key":"…"}'],
         ["token: abcdef123", "token: …"],
         ["https://x.io/cb?access_token=abcdef123&id=4", "https://x.io/cb?access_token=…&id=4"],
+        ["refresh_token=1//0gAbcDef", "refresh_token=…"],
+        ['{"client_secret": "s3cr3t-value"}', '{"client_secret": "…"}'],
+        ["X-Api-Key: abcdef123456", "X-Api-Key: …"],
+        ["id_token=abcdef123", "id_token=…"],
     ])("removes the value in %s", (text, expected) => {
         expect(removeSecrets(text)).toBe(expected);
+    });
+
+    it.each([
+        ["Cookie: session=8f14e45f; theme=dark\nAccept: */*", "Cookie: …\nAccept: */*"],
+        ['{"authorization": "Basic dXNlcjpzZWNyZXQ="}', '{"authorization": "…"}'],
+        ["Set-Cookie: sid=abc123def; HttpOnly", "Set-Cookie: …"],
+    ])("removes the whole header value in %s", (text, expected) => {
+        expect(removeSecrets(text)).toBe(expected);
+    });
+
+    it("stays fast on long hyphenated text", () => {
+        const text = "a-".repeat(50_000);
+        expect(removeSecrets(text)).toBe(text);
     });
 
     it("leaves plain text alone", () => {
@@ -91,9 +108,17 @@ describe("removeSecrets", () => {
 
 describe("SECRET_FIELD", () => {
     it("matches secret field names only", () => {
-        expect(["password", "API_KEY", "client-secret", "Authorization"].every((name) => SECRET_FIELD.test(name))).toBe(
-            true,
-        );
-        expect(["tokens", "input_tokens", "name"].some((name) => SECRET_FIELD.test(name))).toBe(false);
+        const secret = [
+            "password",
+            "API_KEY",
+            "client-secret",
+            "Authorization",
+            "sessionToken",
+            "x-api-key",
+            "id_token",
+        ];
+        expect(secret.every((name) => SECRET_FIELD.test(name))).toBe(true);
+        const plain = ["tokens", "input_tokens", "name", "secretary", "keyboard"];
+        expect(plain.some((name) => SECRET_FIELD.test(name))).toBe(false);
     });
 });

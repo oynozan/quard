@@ -34,7 +34,7 @@ describe("main", () => {
         expect(mocks.mkdir).toHaveBeenCalledWith(OUT_DIR, { recursive: true });
         expect(mocks.launch).toHaveBeenCalledWith("/default/chrome", 9334);
         expect(mocks.shoot.mock.calls.length).toBeGreaterThan(20);
-        expect(mocks.shoot.mock.calls[0]?.[2]).toMatchObject({ base: "http://localhost:3000", outDir: OUT_DIR });
+        expect(mocks.shoot.mock.calls[0]?.[2]).toMatchObject({ base: "http://localhost:3100", outDir: OUT_DIR });
         expect(mocks.close).toHaveBeenCalled();
         expect(mocks.kill).toHaveBeenCalled();
     });

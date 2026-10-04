@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanText, hasInvisible } from "./text.ts";
+import { cleanText, hasInvisible, plainSpaces } from "./text.ts";
 
 describe("cleanText", () => {
     it("removes zero-width and tag characters", () => {
@@ -18,6 +18,16 @@ describe("soft hyphens and other hidden marks", () => {
 
         expect(cleanText(`ig${soft}nore x@ev${soft}il.com${filler}`)).toBe("ignore x@evil.com");
         expect(hasInvisible(`in${soft}structions`)).toBe(true);
+    });
+});
+
+describe("plainSpaces", () => {
+    it("removes hidden characters and turns look-alike spaces into plain ones", () => {
+        expect(plainSpaces("DE89 3704 0044　x​y")).toBe("DE89 3704 0044 xy");
+    });
+
+    it("leaves other characters alone, so masks stay as they are", () => {
+        expect(plainSpaces("DE89…3000 Ａ")).toBe("DE89…3000 Ａ");
     });
 });
 

@@ -125,6 +125,28 @@ export const warningEvent = z.object({
     ...base,
     code: z.string(),
     tool: z.string().optional(),
+    // Why it happened, such as "http_401" or "timeout" for a detector error
+    reason: z.string().max(200).optional(),
+});
+
+const labelName = z.string().regex(/^[a-z][a-z_]{0,39}$/);
+
+// A chunk of public content and the label a detector gave it. The text
+// is redacted, and kept so people can check the label.
+export const chunkLabelEvent = z.object({
+    type: z.literal("chunk_label"),
+    ...base,
+    tool: z.string(),
+    detector: z.string().min(1),
+    // Where the chunk sits in the content, from 0
+    chunk: z.number().int().min(0),
+    text: z.string(),
+    label: labelName,
+    probabilities: z.record(labelName, z.number().min(0).max(1)),
+    // The chance the chunk is an attack: its risky labels added up
+    score: z.number().min(0).max(1),
+    // The detector's own answer to whether the chunk tries to instruct the AI agent
+    injection: z.number().min(0).max(1).optional(),
 });
 
 export const runEvent = z.discriminatedUnion("type", [
@@ -135,6 +157,7 @@ export const runEvent = z.discriminatedUnion("type", [
     decisionEvent,
     contentEvent,
     warningEvent,
+    chunkLabelEvent,
     configErrorEvent,
 ]);
 

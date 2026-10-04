@@ -58,7 +58,7 @@ quard.configure({
 });
 
 if (DASHBOARD) {
-    console.log("The rules in force also go to control. See them at http://localhost:3000/settings?tab=code");
+    console.log("The rules in force also go to control. See them at http://localhost:3100/settings?tab=code");
 }
 
 const prompt = "Pay invoice 114 from Acme Ltd: 4950 EUR to IBAN DE89 3704 0044 0532 0130 00.";

@@ -12,6 +12,13 @@ describe("redactText", () => {
         expect(redactText(text)).toBe("Pay DE89…3000 with 4111…1111, mail j…@acme.com, key sk-…");
     });
 
+    it("masks values split by no-break spaces or hidden characters", () => {
+        const nbsp = "DE89 3704 0044 0532 0130 00";
+        const card = "4111​1111​1111​1111";
+        const email = "ja‍ne@acme.com";
+        expect(redactText(`${nbsp} ${card} ${email}`)).toBe("DE89…3000 4111…1111 j…@acme.com");
+    });
+
     it("changes nothing the second time", () => {
         const once = redactText(`IBAN ${IBAN}, jane@acme.com, 5555555555554444`);
         expect(redactText(once)).toBe(once);

@@ -8,7 +8,8 @@ import { checkSource, originFor } from "../guards/source/source.ts";
 import { textOf } from "../labels/text-of.ts";
 import { currentPreset } from "../policy/state.ts";
 import { recordDecision } from "./checks.ts";
-import { detectContent, signContent } from "./content.ts";
+import { signContent } from "./content.ts";
+import { detectContent } from "./detect/detect.ts";
 
 const CONTENT_BLOCKED: FailResult = {
     guard: "source",

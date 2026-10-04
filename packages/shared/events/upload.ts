@@ -4,6 +4,9 @@ import { runEvent } from "./schema.ts";
 // Events reach webhook in batches of at most this many
 export const MAX_BATCH = 500;
 
+// And of at most this many bytes, events as JSON, unless one event alone is bigger
+export const MAX_BATCH_BYTES = 3 * 1024 * 1024;
+
 // One event as sent. The id makes a resend harmless; degraded marks
 // an event that waited because the backend was down.
 export const uploadItem = z.object({
