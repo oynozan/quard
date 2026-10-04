@@ -10,6 +10,7 @@ import { checkSource, originFor, receiveMessage, type Received } from "../guards
 import type { AddOptions } from "../labels/content-index.ts";
 import { isLabelRef } from "../labels/records.ts";
 import { textOf } from "../labels/text-of.ts";
+import { unvouchedKeys } from "../labels/unvouched.ts";
 import { currentPreset } from "../policy/state.ts";
 import { recordDecision } from "./checks.ts";
 import { signContent } from "./content.ts";
@@ -101,16 +102,12 @@ function indexText(
 // Values a verified, trusted message holds that its record did not vouch
 // for. The sender's model wrote them, so they stay model-generated here.
 // In an untrusted message they take its untrusted label.
-function unvouchedKeys(text: string, label: Label, message: Received | undefined): string[] {
+function madeUpKeys(text: string, label: Label, message: Received | undefined): string[] {
     if (message?.verified !== true || label.trust !== "trusted") {
         return [];
     }
     const vouched = new Set(message.values.map((value) => value.key));
-    const found = extractValues(text);
-    const isVouched = (value: (typeof found)[number]) => vouched.has(`${value.type}:${value.value}`);
-    // A host a vouched value shares still takes the message's label
-    const kept = new Set(found.filter(isVouched).flatMap((value) => value.keys));
-    return found.flatMap((value) => (isVouched(value) ? [] : value.keys.filter((key) => !kept.has(key))));
+    return unvouchedKeys(text, (value) => vouched.has(`${value.type}:${value.value}`));
 }
 
 // A message from another agent first brings in the labels its values had
@@ -123,7 +120,7 @@ function indexOutput(call: GuardCall, output: unknown, label: Label, message?: R
         indexText(call, value, label, stepId, { exclude, keepEarlier: true }, true);
     }
     const text = textOf(output);
-    const exclude = new Set([...echoedKeys(call), ...unvouchedKeys(text, label, message)]);
+    const exclude = new Set([...echoedKeys(call), ...madeUpKeys(text, label, message)]);
     indexText(call, text, label, call.stepId, { exclude, keepEarlier: message !== undefined });
 }
 
