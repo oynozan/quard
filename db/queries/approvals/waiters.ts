@@ -28,6 +28,17 @@ export async function addWaiter(db: Db, projectId: string, waiter: ApprovalWaite
         .execute();
 }
 
+// The request control last placed this call on, waiting or done
+export async function waiterRequest(db: Db, projectId: string, askId: string): Promise<string | undefined> {
+    const row = await db
+        .selectFrom("approval_waiters")
+        .select("request_id")
+        .where("project_id", "=", projectId)
+        .where("ask_id", "=", askId)
+        .executeTakeFirst();
+    return row?.request_id;
+}
+
 // Heartbeats from calls still waiting. Returns how many were noted.
 export async function beatWaiters(db: Db, projectId: string, askIds: string[]): Promise<number> {
     const result = await db

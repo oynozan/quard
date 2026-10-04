@@ -3,7 +3,7 @@ import { requestInput, waiterInput } from "../../test/approvals.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
 import { openApprovalRequest } from "./requests.ts";
-import { addWaiter, beatWaiters, finishWaiters } from "./waiters.ts";
+import { addWaiter, beatWaiters, finishWaiters, waiterRequest } from "./waiters.ts";
 
 let test: TestDb;
 
@@ -101,5 +101,23 @@ describe("beatWaiters and finishWaiters", () => {
         expect(await beatWaiters(test.db, other, [waiter.askId])).toBe(0);
         expect(await finishWaiters(test.db, other, [waiter.askId])).toBe(0);
         expect((await waiterRow(projectId, waiter.askId)).done_at).toBeNull();
+    });
+});
+
+describe("waiterRequest", () => {
+    it("names the request a call was last placed on, waiting or done, in this project only", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const first = await openApprovalRequest(test.db, projectId, requestInput());
+        const second = await openApprovalRequest(test.db, projectId, requestInput({ argsHash: "e".repeat(32) }));
+        const waiter = waiterInput(first.id);
+        expect(await waiterRequest(test.db, projectId, waiter.askId)).toBeUndefined();
+
+        await addWaiter(test.db, projectId, waiter);
+        expect(await waiterRequest(test.db, projectId, waiter.askId)).toBe(first.id);
+        await addWaiter(test.db, projectId, { ...waiter, requestId: second.id });
+        await finishWaiters(test.db, projectId, [waiter.askId]);
+
+        expect(await waiterRequest(test.db, projectId, waiter.askId)).toBe(second.id);
+        expect(await waiterRequest(test.db, await createProject(test.db, "Other"), waiter.askId)).toBeUndefined();
     });
 });

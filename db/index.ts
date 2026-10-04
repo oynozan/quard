@@ -43,7 +43,7 @@ export type {
     RequestDecision,
     RunWaiter,
 } from "./queries/approvals/types.ts";
-export { addWaiter, beatWaiters, finishWaiters } from "./queries/approvals/waiters.ts";
+export { addWaiter, beatWaiters, finishWaiters, waiterRequest } from "./queries/approvals/waiters.ts";
 export { connectedApps } from "./queries/control/connect/apps.ts";
 export type { ConnectedAppRow } from "./queries/control/connect/apps.ts";
 export { ruleSets } from "./queries/control/connect/rule-sets.ts";
