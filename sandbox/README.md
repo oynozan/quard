@@ -67,6 +67,31 @@ No Postgres? Run `pnpm --filter @quard/db dev:db` and set `DATABASE_URL=postgres
 
 With `QUARD_AGENT_KEY` set, every example sends its runs to the dashboard, and `05-human-approval.ts` waits for your answer at http://localhost:3100/approvals instead of asking in the terminal. Comment the line out to keep runs in the terminal only.
 
+## Check an install
+
+`00-check-deploy.ts` checks every part of an install in a few seconds: the dashboard, the docs, webhook, control, the live link and one real run. It exits with 1 when a check fails.
+
+```sh
+node sandbox/00-check-deploy.ts
+```
+
+It reads `sandbox/.env`, so it checks the local install. For a server, put its settings in `sandbox/.env.deploy`:
+
+```sh
+QUARD_AGENT_KEY=qk_live_...    # made in that dashboard
+QUARD_HASH_KEY=<the same 64 hex characters as on the server>
+QUARD_DASHBOARD_URL=https://app.example.com
+QUARD_DOCS_URL=https://docs.example.com
+QUARD_WEBHOOK_URL=https://ingest.example.com
+QUARD_CONTROL_URL=https://control.example.com
+```
+
+Then:
+
+```sh
+node --env-file=sandbox/.env.deploy sandbox/00-check-deploy.ts
+```
+
 ## Examples
 
 | File                           | What it shows                                                     |
