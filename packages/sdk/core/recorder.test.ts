@@ -1,7 +1,7 @@
 import type { RunEvent } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure, resetConfig } from "./config.ts";
-import { now, record, takeDropped, takeEvents } from "./recorder.ts";
+import { addDropped, now, record, takeDropped, takeEvents } from "./recorder.ts";
 
 function warning(code: string): RunEvent {
     return { type: "warning", runId: "r", stepId: "s", agent: "a", at: "t", code };
@@ -66,6 +66,16 @@ describe("recorder", () => {
         expect(events).toHaveLength(10_000);
         expect(events[0]).toEqual(warning("1"));
         expect(takeDropped()).toBe(1);
+        expect(takeDropped()).toBe(0);
+    });
+
+    it("counts events lost after they left the buffer with the ones it dropped", () => {
+        for (let i = 0; i <= 10_000; i++) {
+            record(warning(String(i)));
+        }
+        addDropped(2);
+
+        expect(takeDropped()).toBe(3);
         expect(takeDropped()).toBe(0);
     });
 

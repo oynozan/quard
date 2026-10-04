@@ -17,7 +17,7 @@ export const uploadItem = z.object({
 
 export const uploadBatch = z.object({
     events: z.array(uploadItem).min(1).max(MAX_BATCH),
-    // Events the SDK dropped because its buffer was full
+    // Events the SDK dropped, from a full buffer or because they could not be sent as JSON
     dropped: z.number().int().min(0).optional(),
 });
 

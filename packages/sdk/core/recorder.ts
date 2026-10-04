@@ -34,7 +34,12 @@ export function takeEvents(max = buffer.length): RunEvent[] {
     return buffer.splice(0, max);
 }
 
-// How many events a full buffer dropped since the last call
+// Counts events lost after they left the buffer, reported like the ones it drops
+export function addDropped(count: number): void {
+    dropped += count;
+}
+
+// How many events were dropped since the last call
 export function takeDropped(): number {
     const count = dropped;
     dropped = 0;

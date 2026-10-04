@@ -22,6 +22,11 @@ function toolCall(at = new Date().toISOString()): Extract<RunEvent, { type: "too
     };
 }
 
+// Arguments JSON can't hold even once redacted
+function unsendable(): RunEvent {
+    return { ...toolCall(), arguments: { amount: { toJSON: () => 10n } } };
+}
+
 type Sent = {
     url: string;
     headers: Record<string, string>;
@@ -131,6 +136,68 @@ describe("uploader", () => {
         expect(hook.sent).toHaveLength(2);
         expect(warn).toHaveBeenCalledTimes(1);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining("(401)"));
+    });
+
+    it("drops an event it can't turn into JSON, counts it as dropped and warns once", async () => {
+        const hook = webhook(202);
+        const warn = vi.fn();
+        const up = uploader(hook.send, warn);
+        record(unsendable());
+        record(toolCall());
+        expect(await up.flush()).toBe(true);
+        // With nothing left to send, the count waits for the next batch
+        record(unsendable());
+        expect(await up.flush()).toBe(true);
+        record(toolCall());
+        expect(await up.flush()).toBe(true);
+
+        expect(hook.sent.map(({ body }) => [body.events.length, body.dropped])).toEqual([
+            [1, 1],
+            [1, 1],
+        ]);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("JSON"));
+    });
+
+    it("drops a batch that stops turning into JSON instead of resending it forever", async () => {
+        const hook = webhook("down", 202);
+        const warn = vi.fn();
+        const up = uploader(hook.send, warn);
+        let open = true;
+        const handle = {
+            toJSON: () => {
+                if (!open) {
+                    throw new Error("handle closed");
+                }
+                return "handle";
+            },
+        };
+        record({ ...toolCall(), arguments: { handle } });
+        expect(await up.flush()).toBe(false);
+        open = false;
+
+        expect(await up.flush()).toBe(true);
+        record(toolCall());
+        expect(await up.flush()).toBe(true);
+
+        expect(hook.sent).toHaveLength(2);
+        expect(hook.sent[1]?.body).toMatchObject({ events: [expect.anything()], dropped: 1 });
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps sending on its timer after an event it can't send", async () => {
+        vi.useFakeTimers();
+        const hook = webhook(202);
+        const up = uploader(hook.send);
+        record(unsendable());
+        up.start();
+
+        await vi.advanceTimersByTimeAsync(1_000);
+        record(toolCall());
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        expect(hook.sent.map(({ body }) => [body.events.length, body.dropped])).toEqual([[1, 1]]);
+        up.stop();
     });
 
     it("marks old events degraded and reports what the buffer dropped", async () => {
