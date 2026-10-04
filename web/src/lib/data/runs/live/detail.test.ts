@@ -2,7 +2,16 @@ import type { RunListItem } from "@quard/db";
 import { APPROVAL_STALE_MS } from "@quard/shared";
 import { describe, expect, it } from "vitest";
 import { HOUR } from "@/lib/time";
-import { at, BASE, REQUEST, RUN, runWaiter, storedRun, storedWaitingRun } from "../../../../../test/runs-fixture";
+import {
+    at,
+    BASE,
+    CHILD,
+    REQUEST,
+    RUN,
+    runWaiter,
+    storedRun,
+    storedWaitingRun,
+} from "../../../../../test/runs-fixture";
 import { runDetailOf, runRowOf } from "./detail";
 import { decisionCounts, IDLE_MS, statusOf } from "./status";
 
@@ -126,6 +135,28 @@ describe("runDetailOf", () => {
         run.steps[3]!.parentStepId = run.steps[3]!.stepId;
 
         expect(runDetailOf(run, LATER).agents[1]?.parent).toBeNull();
+    });
+
+    it("puts an agent at the top when no stored step started it", () => {
+        const run = storedRun();
+        // Delegated before billing made a call of its own, so its calls have no parent step
+        run.steps[3]!.parentStepId = null;
+
+        expect(runDetailOf(run, LATER).agents.map((agent) => [agent.name, agent.parent, agent.depth])).toEqual([
+            ["billing", null, 0],
+            ["researcher", null, 0],
+        ]);
+    });
+
+    it("keeps the root agent at the top when an agent it delegated to calls it again", () => {
+        const run = storedRun();
+        // researcher hands back to billing, so this billing call has a researcher step as its parent
+        run.steps.push({ ...run.steps[0]!, stepId: "7".repeat(16), parentStepId: CHILD, at: at(7), durationMs: 500 });
+
+        expect(runDetailOf(run, LATER).agents.map((agent) => [agent.name, agent.parent, agent.depth])).toEqual([
+            ["billing", null, 0],
+            ["researcher", "billing", 1],
+        ]);
     });
 });
 

@@ -18,7 +18,8 @@ function agentsOf(rootAgent: string, steps: Step[]): RunAgent[] {
     for (const step of steps) if (!order.includes(step.agent)) order.push(step.agent);
     const byId = new Map(steps.map((step) => [step.id, step]));
     const parents = new Map<string, string | null>();
-    for (const name of order) {
+    // The root started the run, so an agent that calls it again does not become its parent
+    for (const name of order.slice(1)) {
         const first = steps.find((step) => step.agent === name && step.kind === "model_call" && step.parentId !== null);
         const parent = first?.parentId ? byId.get(first.parentId)?.agent : undefined;
         parents.set(name, parent && parent !== name ? parent : null);
