@@ -14,7 +14,7 @@ import { HOUR } from "@/lib/time";
 import { projectScope } from "../scope";
 import { timelineOf } from "./live/calls";
 import { linksOf } from "./live/links";
-import { activityOf, edgeOf, nodeOf, quietNode, statsOf } from "./live/rows";
+import { activityOf, nodeOf, quietNode, statsOf } from "./live/rows";
 import { versionsOf } from "./live/versions";
 import { hoursWindow, rosterWindow, WINDOW_DAYS } from "./live/windows";
 import type { AgentDetail, AgentGraph } from "./types";
@@ -49,12 +49,13 @@ export const getAgent = cache(async (name: string): Promise<AgentDetail | null> 
     const now = Date.now();
     const window = rosterWindow(now);
     const hours = hoursWindow(now);
-    const [roster, stats, buckets, groups, links, versions] = await Promise.all([
+    const [roster, stats, buckets, groups, links, messages, versions] = await Promise.all([
         agentRoster(db, project.id, window),
         agentStats(db, project.id, name, { since: window.dayAgo }),
         modelCallBuckets(db, project.id, { ...hours, bucketMs: HOUR, agent: name }),
         agentRecentCalls(db, project.id, name, { limit: RECENT_STEPS }),
         agentLinks(db, project.id, { since: window.since, agent: name }),
+        agentMessageLinks(db, project.id, { since: window.since, agent: name }),
         // One more than the page lists, for the tools before the oldest one listed
         agentVersions(db, project.id, name, { limit: VERSIONS + 1 }),
     ]);
@@ -63,7 +64,7 @@ export const getAgent = cache(async (name: string): Promise<AgentDetail | null> 
         agent: row ? nodeOf(row) : quietNode(name, lastSeen),
         stats: statsOf(stats),
         activity: activityOf(buckets, hours.since),
-        links: links.map(edgeOf),
+        links: linksOf(links, messages),
         versions: versionsOf(versions, VERSIONS),
         incidents: [],
         timeline: timelineOf(groups),

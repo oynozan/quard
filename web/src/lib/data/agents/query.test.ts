@@ -168,7 +168,7 @@ describe("agents from Postgres", () => {
 
         expect((await getAgentGraph()).edges).toEqual([
             { ...link("billing", "orchestrator", 1, 22), delegations: 0, messages: 1 },
-            { ...link("orchestrator", "billing", 0, 40), delegations: 0, messages: 1 },
+            link("orchestrator", "billing", 0, 40),
             { ...link("support", "helper", 0, D3 - 2), delegations: 0, handoffs: 1 },
         ]);
     });
@@ -218,6 +218,38 @@ describe("agents from Postgres", () => {
         expect(detail?.versions).toEqual([]);
         expect(detail?.incidents).toEqual([]);
         expect((await getAgent("orchestrator"))?.links).toEqual([poisoned]);
+    });
+
+    it("keeps a delegation across processes on both agents' pages, with handoffs", async () => {
+        await fleet();
+        const row = (runId: string, kind: "message" | "tool", from: string, to: string, secondsAgo: number) => ({
+            project_id: process.env.QUARD_PROJECT_ID!,
+            event_id: `${runId}${kind}${from}`,
+            run_id: runId,
+            step_id: S4,
+            kind,
+            from_agent: from,
+            to_agent: to,
+            parent_step_id: null,
+            trust: "trusted" as const,
+            sensitivity: "internal" as const,
+            at: ago(secondsAgo),
+        });
+        await test.db
+            .insertInto("agent_messages")
+            .values([
+                // billing's process took orchestrator's message, naming orchestrator's step
+                { ...row(NEW, "message", "orchestrator", "billing", 40), parent_step_id: S1 },
+                { ...row(EARLIER, "tool", "support", "helper", D3 - 2), step_id: S1 },
+            ])
+            .execute();
+        const acrossProcesses = link("orchestrator", "billing", 0, 40);
+
+        expect((await getAgent("billing"))?.links).toEqual([acrossProcesses]);
+        expect((await getAgent("orchestrator"))?.links).toEqual([acrossProcesses]);
+        expect((await getAgent("helper"))?.links).toEqual([
+            { ...link("support", "helper", 0, D3 - 2), delegations: 0, handoffs: 1 },
+        ]);
     });
 
     it("counts only the last 24 hours, but links and calls from further back", async () => {
