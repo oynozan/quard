@@ -1,7 +1,8 @@
 import { RunState, Runner, StreamedRunResult, type Agent } from "@openai/agents";
-import { currentScope, runScope, withScope, type Scope } from "../../context/scope.ts";
+import { currentScope, finishRun, newScope, withScope } from "../../context/scope.ts";
 import { unwrapBlocked } from "./blocked.ts";
 import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
+import { carryLabels, notePause, pausedOf, takePaused, type Paused } from "./paused.ts";
 
 type Run = (this: Runner, agent: Agent, input: unknown, options?: unknown) => Promise<unknown>;
 
@@ -15,29 +16,48 @@ export function followProvider(provider: object): void {
     providers.add(provider);
 }
 
-// A run() outside any quard scope starts a Quard run. It ends with the
-// result, or for a stream, when the stream completes.
-function startRun<T>(agent: string, call: () => Promise<T>): Promise<T> {
+// A run() outside any quard scope starts a Quard run, or goes back into
+// the run it stopped in. The run ends with the result, or for a stream,
+// when the stream completes. A run stopped for the SDK's approval does
+// not end until a resumed run does.
+function startRun<T>(agent: string, paused: Paused | undefined, call: () => Promise<T>): Promise<T> {
+    const back = takePaused(paused);
+    const root = back?.root ?? newScope({ agent });
+    const frame = topFrame(back?.frame ?? root, agent);
+    carryLabels(paused, root.run);
     return new Promise<T>((resolve, reject) => {
-        runScope({ agent }, async () => {
-            const root = currentScope() as Scope;
-            const result = await withScope(topFrame(root, agent), () => unwrapBlocked(call()));
+        const follow = async () => {
+            const result = await withScope(frame, () => unwrapBlocked(call()));
             if (result instanceof StreamedRunResult) {
                 // The caller reads the stream while the run goes on
                 resolve(result);
                 await result.completed;
             }
             return result;
-        }).then(resolve, reject);
+        };
+        follow().then(
+            (result) => {
+                if (!notePause(result, { root, frame })) {
+                    finishRun(root);
+                }
+                resolve(result);
+            },
+            (error: unknown) => {
+                finishRun(root, { error });
+                reject(error);
+            },
+        );
     });
 }
 
-function inFrame<T>(agent: string, call: () => Promise<T>): Promise<T> {
+function inFrame<T>(agent: string, input: unknown, call: () => Promise<T>): Promise<T> {
     const parent = currentScope();
+    const paused = pausedOf(input);
     if (parent === undefined) {
-        return startRun(agent, call);
+        return startRun(agent, paused, call);
     }
     const frame = isFrame(parent) ? toolFrame(parent, agent) : topFrame(parent, agent);
+    carryLabels(paused, frame.run);
     return withScope(frame, () => unwrapBlocked(call()));
 }
 
@@ -78,7 +98,7 @@ export function followRuns(): void {
             return call();
         }
         watch(this);
-        return inFrame(startingAgent(agent, input), call);
+        return inFrame(startingAgent(agent, input), input, call);
     };
     Runner.prototype.run = followed as unknown as Runner["run"];
 }

@@ -49,7 +49,7 @@ const result = await runner.run(orchestrator, "Pay invoice 114 from Acme Supplie
 - **The right agent.** The agent comes from the framework. A handoff switches it, and an agent run as a tool, with `agent.asTool()`, runs under its own name. Model calls and guarded tools carry that agent.
 - **The run graph.** Each switch is recorded as a handoff, from one agent to the other, through a handoff or a tool. The new agent's parent step is the step that handed over. A handoff keeps the delegation depth. An agent run as a tool is one level deeper, below the model call that asked for it.
 - **Model calls.** They use the Responses API over HTTP, so Quard sees each one and checks the [run limits](/concepts/run-limits) on steps and cost.
-- **Resumed runs.** A run resumed from `result.state` goes on with the agent it stopped at.
+- **Resumed runs.** A run stopped by the SDK's own `needsApproval` stays open. Resumed from `result.state`, or from a state rebuilt in the same process, it goes on in the same Quard run with the agent it stopped at. So the approved call's guards still see everything the run read. A state resumed inside another run, or a second time, brings the labels of the run it stopped in.
 
 ## guardedTool()
 

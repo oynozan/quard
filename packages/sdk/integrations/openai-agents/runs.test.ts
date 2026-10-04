@@ -108,7 +108,7 @@ describe("a run() inside a quard scope", () => {
 });
 
 describe("a resumed run", () => {
-    it("goes on with the agent it stopped at", async () => {
+    it("goes on in the same Quard run with the agent it stopped at", async () => {
         const send = tool({
             name: "sendReceipt",
             description: "Send the receipt",
@@ -128,12 +128,15 @@ describe("a resumed run", () => {
         const [approval] = first.interruptions;
         expect(approval).toBeDefined();
         first.state.approve(approval as NonNullable<typeof approval>);
+        expect(types()).toEqual(["run_started", "handoff"]);
+        const runId = events.find((event) => event.type === "run_started")?.runId;
         events = [];
         const second = await runner.run(orchestrator, first.state);
 
         expect(second.finalOutput).toBe("Sent.");
-        expect(events[0]).toMatchObject({ type: "run_started", agent: "billing" });
-        expect(modelCalls(events).map((call) => call.agent)).toEqual(["billing"]);
+        expect(types()).toEqual(["run_finished"]);
+        expect(events.at(-1)).toMatchObject({ runId, agent: "orchestrator", status: "completed" });
+        expect(modelCalls(events).map((call) => [call.agent, call.runId])).toEqual([["billing", runId]]);
     });
 });
 

@@ -60,7 +60,7 @@ function isPromise(value: unknown): value is PromiseLike<unknown> {
 }
 
 // Records how a run's function finished, so the dashboard need not guess
-function finishRun(scope: Scope, failure?: { error: unknown }): void {
+export function finishRun(scope: Scope, failure?: { error: unknown }): void {
     const error = failure?.error;
     record({
         type: "run_finished",
