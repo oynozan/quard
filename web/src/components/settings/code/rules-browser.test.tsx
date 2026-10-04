@@ -55,6 +55,12 @@ describe("RulesBrowser", () => {
         expect(shownRules()).toEqual(["payout-approval"]);
     });
 
+    it("finds a rule with no tools, such as a run limit, as the whole run", () => {
+        render(<RulesBrowser rules={RULES} />);
+        search("whole run");
+        expect(shownRules()).toEqual(["payout-approval"]);
+    });
+
     it("filters by guard type", async () => {
         render(<RulesBrowser rules={RULES} />);
         await pickOption("Guard type", "Limit");

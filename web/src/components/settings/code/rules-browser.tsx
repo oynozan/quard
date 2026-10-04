@@ -29,7 +29,8 @@ function matches(rule: RuleRow, query: string, guard: string, mode: string): boo
     if (guard !== "all" && rule.guard !== guard) return false;
     if (mode !== "all" && (rule.mode ?? "ask") !== mode) return false;
     if (!query) return true;
-    const text = [rule.name, rule.summary, rule.hash, ...rule.tools, ...rule.apps].join(" ").toLowerCase();
+    const tools = rule.tools.length > 0 ? rule.tools : ["whole run"];
+    const text = [rule.name, rule.summary, rule.hash, ...tools, ...rule.apps].join(" ").toLowerCase();
     return text.includes(query);
 }
 
