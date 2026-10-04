@@ -73,7 +73,7 @@ for (const service of SERVICES) {
 
 if (process.exitCode === undefined) {
     console.log("");
-    console.log("  Dashboard: http://localhost:3000  (sign in with email or GitHub)");
+    console.log("  Dashboard: http://localhost:3100  (sign in with email or GitHub)");
     if (!agentKey) {
         console.log("  Then: Settings → Create key, and add it to sandbox/.env as QUARD_AGENT_KEY.");
     }

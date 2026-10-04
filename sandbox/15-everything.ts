@@ -3,7 +3,7 @@
 // One script that fills the dashboard: every guard type, several agents,
 // a call that waits for your click, and runs that complete, fail and get
 // blocked. Start the backend first with node sandbox/dashboard.ts, open
-// http://localhost:3000, then run this and watch the runs come in.
+// http://localhost:3100, then run this and watch the runs come in.
 //
 //   1  A clean payment: model calls, tool calls, labels, masked values.
 //   2  Bank details from a web page with hidden instructions. The source
@@ -28,7 +28,7 @@ import { printEvent, title } from "./lib/show.ts";
 needsDashboard();
 
 const client = quard.wrap(new OpenAI());
-const DASHBOARD = "http://localhost:3000";
+const DASHBOARD = "http://localhost:3100";
 
 // Each run's link, and every decision that isn't a plain allow
 const asked = new Set<string>();

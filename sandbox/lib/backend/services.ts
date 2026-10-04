@@ -11,7 +11,7 @@ export const SERVICES: Service[] = [
     { name: "control", port: 4200, args: ["services/control/main.ts"], cwd: ROOT, health: "/health" },
     {
         name: "web",
-        port: 3000,
+        port: 3100,
         args: ["node_modules/next/dist/bin/next", "dev"],
         cwd: `${ROOT}web`,
         health: "/api/health",
