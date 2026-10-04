@@ -28,6 +28,8 @@ export function ApprovalsBoard({ data, now, approver, shown = SHOWN_STEP }: Prop
     const heading = useRef<HTMLDivElement>(null);
     // Every open request, listed here or not, like the sidebar count
     const waiting = view.open.length + view.more;
+    // The server lists every live request even past `shown`, so the next step starts after its list
+    const listed = Math.max(shown, data.open.length);
 
     function tell(message: string, id: string) {
         showToast(message, id);
@@ -119,7 +121,7 @@ export function ApprovalsBoard({ data, now, approver, shown = SHOWN_STEP }: Prop
                 ) : null}
                 {view.more > 0 ? (
                     <div className="mt-6">
-                        <MoreRequests more={view.more} shown={shown} />
+                        <MoreRequests more={view.more} shown={listed} />
                     </div>
                 ) : null}
             </section>

@@ -96,6 +96,16 @@ describe("ApprovalsBoard", () => {
         expect(status().textContent).toBe("Approved send_email once. 123 still open.");
     });
 
+    it("asks for a step past every request the server listed, though live ones go past the address's count", () => {
+        const live = Array.from({ length: 103 }, (_, n) => {
+            const item = openRequest(EMAIL);
+            return { ...item, request: { ...item.request, id: `apr_${n.toString(16).padStart(16, "0")}` } };
+        });
+        render(<ApprovalsBoard data={approvalsData({ open: live, more: 20 })} now={NOW} approver={ME} shown={100} />);
+        fireEvent.click(screen.getByRole("button", { name: "Show 20 more" }));
+        expect(router.replace).toHaveBeenCalledWith("/approvals?shown=203", { scroll: false });
+    });
+
     it("keeps the count and the way to the rest when every listed request is answered", () => {
         actions.answerApproval.mockReturnValue(later("decided").promise);
         show(approvalsData({ open: [openRequest(PAY)], more: 3 }));
