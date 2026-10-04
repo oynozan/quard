@@ -112,6 +112,7 @@ describe("@quard/shared", () => {
             "plainJson",
             "priceFrom",
             "priceOf",
+            "projectHashKey",
             "quarantineEntry",
             "quarantineMessage",
             "readPayment",

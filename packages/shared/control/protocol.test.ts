@@ -148,6 +148,7 @@ describe("serverMessage", () => {
             quarantine: [{ key: `iban:DE89…3000#${HASH}`, observe: false }],
             fleetObserveUntil: null,
             counters: [{ tool: "payInvoice", counter: "calls", day: "2026-10-03", used: 3 }],
+            hashKey: "ab".repeat(32),
         },
         { type: "asked", askId: ASK, requestId: `apr_${"1".repeat(16)}` },
         { type: "decided", askId: ASK, answer: "always", grantId: `grt_${"2".repeat(16)}` },

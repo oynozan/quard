@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyedHash, parseHashKey } from "./hash.ts";
+import { keyedHash, parseHashKey, projectHashKey } from "./hash.ts";
 
 const KEY = parseHashKey("ab".repeat(32));
 
@@ -25,5 +25,21 @@ describe("keyedHash", () => {
         const hash = keyedHash(KEY, "iban", "x");
         expect(keyedHash(KEY, "email", "x")).not.toBe(hash);
         expect(keyedHash(parseHashKey("cd".repeat(32)), "iban", "x")).not.toBe(hash);
+    });
+});
+
+describe("projectHashKey", () => {
+    it("derives the same 32 bytes for the same project", () => {
+        const key = projectHashKey(KEY, "project-1");
+        expect(key.length).toBe(32);
+        expect(projectHashKey(KEY, "project-1").equals(key)).toBe(true);
+        expect(parseHashKey(key.toString("hex")).equals(key)).toBe(true);
+    });
+
+    it("differs by project and by install key", () => {
+        const key = projectHashKey(KEY, "project-1");
+        expect(projectHashKey(KEY, "project-2").equals(key)).toBe(false);
+        expect(projectHashKey(parseHashKey("cd".repeat(32)), "project-1").equals(key)).toBe(false);
+        expect(key.equals(KEY)).toBe(false);
     });
 });
