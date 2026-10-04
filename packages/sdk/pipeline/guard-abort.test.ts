@@ -61,8 +61,39 @@ describe("guardWithSignal", () => {
 
         const refused = await pay(controller.signal, [{ amount: 1 }]);
 
-        expect(isGuardRefusal(refused) && refused.reason).toBe("approval_timed_out");
+        expect(isGuardRefusal(refused) && refused.reason).toBe("call_aborted");
         expect(raw).not.toHaveBeenCalled();
         expect(decisionsOf(events).map((event) => `${event.rule}:${event.decision}`)).toContain("aborted:block");
+    });
+});
+
+// Aborts the call as soon as its limit check is recorded
+function abortOnLimit(controller: AbortController) {
+    const events: RunEvent[] = [];
+    const onEvent = (event: RunEvent) => {
+        events.push(event);
+        if (event.type === "decision" && event.guard === "limit") {
+            controller.abort();
+        }
+    };
+    configure({ onEvent });
+    return events;
+}
+
+describe("a call aborted before it ran", () => {
+    it("is recorded with its own guard and reason, not as an approval", async () => {
+        const controller = new AbortController();
+        const events = abortOnLimit(controller);
+        const { pay } = payWith({ type: "limit", maxCallsPerRun: 5 });
+
+        const refused = await pay(controller.signal, [{ amount: 1 }]);
+
+        expect(isGuardRefusal(refused) && refused.guard).toBe("abort");
+        expect(String(refused)).toContain("the call was cancelled before it ran");
+        const decisions = decisionsOf(events);
+        expect(decisions.filter((event) => event.guard === "approval")).toEqual([]);
+        expect(decisions).toContainEqual(
+            expect.objectContaining({ guard: "abort", rule: "aborted", decision: "block", reason: "call_aborted" }),
+        );
     });
 });

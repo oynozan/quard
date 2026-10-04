@@ -10,8 +10,9 @@ import { isGuardType } from "../guards/types.ts";
 import { labelArguments } from "../labels/value-labels.ts";
 import { policyOptions, refreshSources, sourcesReady } from "../policy/state.ts";
 import { syncRules } from "../transport/link/active.ts";
+import { callAborted } from "./abort.ts";
 import { askHuman } from "./approval/human.ts";
-import { aborted, blocked } from "./approval/record.ts";
+import { blocked } from "./approval/record.ts";
 import { asksOf, decide, preChecks, recordDecision } from "./checks.ts";
 import { countCall } from "./count/count.ts";
 import { reportRefused } from "./count/fleet.ts";
@@ -158,7 +159,8 @@ async function runPipeline(code: Spec, args: unknown[], signal: AbortSignal | un
     }
 
     // 7. Count, then run inside the scope so calls made by the tool join this run
-    const stop = (await countCall(call, spec.list, checked)) ?? changed(call, approvedArgs) ?? aborted(call, signal);
+    const stop =
+        (await countCall(call, spec.list, checked)) ?? changed(call, approvedArgs) ?? callAborted(call, signal);
     if (stop !== undefined) {
         return refuse(spec, call, requested, stop);
     }

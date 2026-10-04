@@ -20,8 +20,9 @@ export type GuardCall = {
 export type Decision = "allow" | "block" | "ask";
 export type Mode = "block" | "observe";
 
+// "abort" refuses a call its caller gave up on
 type ResultBase = {
-    guard: GuardType | "permission" | "signature";
+    guard: GuardType | "permission" | "signature" | "abort";
     rule: string;
     mode: Mode;
 };
