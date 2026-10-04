@@ -1,9 +1,10 @@
 import { connect, createAgentKey, createProject, type AgentKeyMatch, type Db } from "@quard/db";
+import { projectKeys } from "@quard/db/server";
 import { hello } from "../connect/hello.ts";
 import { createContext, type Context, type ContextOptions } from "../server/context.ts";
 import type { Connection } from "../socket/registry.ts";
 import { asSocket, fakeSocket, type FakeSocket } from "./fake-socket.ts";
-import { helloMessage, REDACTOR } from "./messages.ts";
+import { helloMessage, INSTALL_KEY } from "./messages.ts";
 
 export type TestProject = AgentKeyMatch & { key: string };
 
@@ -27,9 +28,10 @@ export function failingUpdates(db: Db, table: string): Db {
     });
 }
 
+// Each context has its own keys, so a test can watch which project's it uses
 export function testContext(db: Db, options: Partial<ContextOptions> = {}): Context & { logs: string[] } {
     const logs: string[] = [];
-    const ctx = createContext({ db, redactor: REDACTOR, log: (message) => logs.push(message), ...options });
+    const ctx = createContext({ db, keys: projectKeys(INSTALL_KEY), log: (message) => logs.push(message), ...options });
     return Object.assign(ctx, { logs });
 }
 

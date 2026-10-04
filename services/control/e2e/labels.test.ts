@@ -5,7 +5,7 @@ import { createApp } from "../../webhook/app.ts";
 import { openClient, type Client } from "../test/client.ts";
 import { newProject, type TestProject } from "../test/context.ts";
 import { memoryRecord, messageRecord, PRINT, REF } from "../test/labels.ts";
-import { lookupMessage, REDACTOR, runCountMessage } from "../test/messages.ts";
+import { KEYS, lookupMessage, runCountMessage } from "../test/messages.ts";
 import { startTestControl, type TestControl } from "../test/server.ts";
 
 // A sender stores label records through webhook; a receiver in another
@@ -39,7 +39,7 @@ afterAll(async () => {
 });
 
 async function storeThroughWebhook(key: string, records: unknown[]): Promise<Response> {
-    const webhook = createApp({ db: test.db, redactor: REDACTOR });
+    const webhook = createApp({ db: test.db, keys: KEYS });
     return webhook.request(LABELS_PATH, {
         method: "POST",
         headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },

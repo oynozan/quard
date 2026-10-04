@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { askMessage, IBAN, REDACTOR, STEP } from "../test/messages.ts";
+import { askMessage, IBAN, KEYS, STEP } from "../test/messages.ts";
 import { requestInput } from "./input.ts";
 
 const DANA = "dana@acme.com";
+const REDACTOR = KEYS.redactor("project-1");
 
 describe("the stored request", () => {
     it("keeps a card number sent as a number for the approver, and masks it in what stays after the answer", () => {

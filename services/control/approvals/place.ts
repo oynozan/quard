@@ -23,7 +23,7 @@ export async function place(ctx: Context, projectId: string, ask: AskMessage): P
     if (once !== undefined) {
         return { type: "decided", answer: "once", requestId: once };
     }
-    const { id } = await openApprovalRequest(db, projectId, requestInput(ask, ctx.redactor));
+    const { id } = await openApprovalRequest(db, projectId, requestInput(ask, ctx.keys.redactor(projectId)));
     await addWaiter(db, projectId, waiterInput(ask, id));
     return { type: "asked", requestId: id };
 }

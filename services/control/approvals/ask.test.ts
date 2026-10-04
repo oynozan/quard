@@ -1,7 +1,7 @@
 import { claimOnce, decideApproval, getApprovalRequest } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { CUT, type ApprovalAnswer } from "@quard/shared";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Context } from "../server/context.ts";
 import { CONNECTION_LIMITS } from "../socket/limits.ts";
 import { failingUpdates, newProject, readyConnection, testContext, type TestProject } from "../test/context.ts";
@@ -53,9 +53,10 @@ function waiterRow(projectId: string, askId: string) {
 }
 
 describe("ask", () => {
-    it("opens a request and waits on it", async () => {
+    it("opens a request, redacted by its project's redactor, and waits on it", async () => {
         const { project, ctx, connection, socket } = await setup();
         const message = askMessage();
+        const redactor = vi.spyOn(ctx.keys, "redactor");
 
         await ask(ctx, connection, message);
 
@@ -81,6 +82,7 @@ describe("ask", () => {
             done_at: null,
         });
         expect(ctx.registry.waiting(project.projectId, String(asked?.requestId))).toHaveLength(1);
+        expect(redactor).toHaveBeenCalledWith(project.projectId);
     });
 
     it("lets an identical call wait on the same open request", async () => {

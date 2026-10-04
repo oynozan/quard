@@ -9,8 +9,8 @@ if (typeof config === "string") {
     process.exitCode = 1;
 } else {
     const db = connect(config.databaseUrl);
-    const { port, databaseUrl, redactor } = config;
-    const control = await startControl({ db, databaseUrl, redactor, port });
+    const { port, databaseUrl, keys } = config;
+    const control = await startControl({ db, databaseUrl, keys, port });
     console.log(`control listening on port ${control.port}`);
     let stopping: Promise<void> | undefined;
     const stop = () => {

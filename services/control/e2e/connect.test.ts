@@ -10,12 +10,11 @@ import { resetAll } from "../../../packages/sdk/test/reset.ts";
 import { activeControl } from "../../../packages/sdk/transport/link/active.ts";
 import { SDK_VERSION } from "../../../packages/sdk/transport/link/version.ts";
 import { newProject, type TestProject } from "../test/context.ts";
-import { REDACTOR } from "../test/messages.ts";
+import { KEYS } from "../test/messages.ts";
 import { only, startTestControl, type TestControl } from "../test/server.ts";
 
 // Connecting, agent versions and key revocation with the real SDK, control on a free port and PGlite
 
-const HASH_KEY = "ab".repeat(32);
 const INSTRUCTIONS = "You pay invoices. Send each receipt to billing@acme.com.";
 const WAIT = { timeout: 10_000, interval: 20 };
 
@@ -51,7 +50,6 @@ function linkSdk(): void {
     quard.configure({
         key: project.key,
         controlUrl: `http://127.0.0.1:${control.port}`,
-        hashKey: HASH_KEY,
         onEvent: (event) => events.push(event),
     });
 }
@@ -100,7 +98,7 @@ describe("an SDK connected to control", { timeout: 30_000 }, () => {
             version: call?.agentVersion,
             model: "gpt-test",
             tools: ["payInvoice"],
-            instructions: REDACTOR.text(INSTRUCTIONS),
+            instructions: KEYS.redactor(project.projectId).text(INSTRUCTIONS),
         });
         expect(version.instructions).not.toContain("billing@acme.com");
         expect(await connections()).toEqual([

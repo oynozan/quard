@@ -14,12 +14,13 @@ export async function rules(ctx: Context, connection: Connection, message: Rules
 // Instructions are redacted again here, so an old SDK never stores a raw value
 export async function agent(ctx: Context, connection: Connection, message: AgentMessage): Promise<void> {
     const { instructions } = message;
+    const redactor = ctx.keys.redactor(connection.projectId);
     await saveAgentVersion(ctx.db, connection.projectId, {
         agent: message.agent,
         version: message.version,
         model: message.model,
         tools: message.tools,
-        instructions: instructions === undefined ? undefined : ctx.redactor.text(instructions),
+        instructions: instructions === undefined ? undefined : redactor.text(instructions),
     });
 }
 

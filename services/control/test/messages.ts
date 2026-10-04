@@ -1,5 +1,5 @@
+import { projectKeys } from "@quard/db/server";
 import {
-    createRedactor,
     newEventId,
     parseHashKey,
     type AskMessage,
@@ -14,7 +14,9 @@ import {
     type UncountMessage,
 } from "@quard/shared";
 
-export const REDACTOR = createRedactor(parseHashKey("ab".repeat(32)));
+// QUARD_HASH_KEY in these tests, and the keys control makes from it
+export const INSTALL_KEY = parseHashKey("ab".repeat(32));
+export const KEYS = projectKeys(INSTALL_KEY);
 export const RUN = "1".repeat(32);
 export const STEP = "2".repeat(16);
 export const HASH = "c".repeat(32);

@@ -3,7 +3,7 @@ import type { TestDb } from "@quard/db/testing";
 import { expect } from "vitest";
 import { startControl, type ControlServer, type StartOptions } from "../server/start.ts";
 import type { ControlTiming } from "../server/timing.ts";
-import { REDACTOR } from "./messages.ts";
+import { KEYS } from "./messages.ts";
 
 // Short times, so a test never waits long on the timers
 export const FAST: Partial<ControlTiming> = {
@@ -27,7 +27,7 @@ export async function startTestControl(test: TestDb, options: Partial<StartOptio
     const control = await startControl({
         db: test.db,
         databaseUrl: test.url,
-        redactor: REDACTOR,
+        keys: KEYS,
         port: 0,
         log: (message) => logs.push(message),
         listen: async (url, heard, lost) => {

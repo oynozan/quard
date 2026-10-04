@@ -1,7 +1,11 @@
+import type { ProjectKeys } from "@quard/db/server";
+import { parseHashKey, projectHashKey } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+type Options = { port: number; keys: ProjectKeys };
+
 const close = vi.hoisted(() => vi.fn(async () => {}));
-const startControl = vi.hoisted(() => vi.fn(async (options: { port: number }) => ({ port: options.port, close })));
+const startControl = vi.hoisted(() => vi.fn(async (options: Options) => ({ port: options.port, close })));
 const destroy = vi.hoisted(() => vi.fn(async () => {}));
 const connect = vi.hoisted(() => vi.fn(() => ({ destroy })));
 
@@ -47,6 +51,9 @@ describe("control main", () => {
             expect.objectContaining({ db: { destroy }, databaseUrl: "postgres://db", port: 5999 }),
         );
         expect(log).toHaveBeenCalledWith("control listening on port 5999");
+        const keys = startControl.mock.calls[0]?.[0].keys;
+        const hashKey = projectHashKey(parseHashKey("ab".repeat(32)), "project-1").toString("hex");
+        expect(keys?.hashKey("project-1")).toBe(hashKey);
     });
 
     it("falls back to port 4200", async () => {

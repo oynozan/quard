@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Context } from "../server/context.ts";
 import type { Connection } from "../socket/registry.ts";
 import { brokenDb, newConnection, newProject, readyConnection, testContext } from "../test/context.ts";
-import { askMessage, REDACTOR } from "../test/messages.ts";
+import { askMessage, KEYS } from "../test/messages.ts";
 import { ask, beat } from "./ask.ts";
 import { createDelivery } from "./deliver.ts";
 
@@ -180,13 +180,13 @@ describe("delivery of approve once", () => {
         // The call to drop while it asks again, in the middle of opening its new request
         const dropping: { ask?: AskMessage } = {};
         const ctx: Context = testContext(test.db, {
-            redactor: {
-                ...REDACTOR,
-                value: (value) => {
+            keys: {
+                ...KEYS,
+                redactor: (projectId) => {
                     if (dropping.ask !== undefined) {
                         ctx.registry.drop(project.projectId, dropping.ask.askId);
                     }
-                    return REDACTOR.value(value);
+                    return KEYS.redactor(projectId);
                 },
             },
         });

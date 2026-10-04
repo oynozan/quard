@@ -10,13 +10,12 @@ import { paidAgentTools } from "../../../packages/sdk/test/x402/paid-agent.ts";
 import { startX402Server } from "../../../packages/sdk/test/x402/server.ts";
 import { createApp } from "../../webhook/app.ts";
 import { newProject, type TestProject } from "../test/context.ts";
-import { REDACTOR } from "../test/messages.ts";
+import { KEYS } from "../test/messages.ts";
 import { startTestControl, type TestControl } from "../test/server.ts";
 
 // The M5 acceptance test: x402 payments checked before signing, with the
 // real webhook, control, PGlite and a local x402 server
 
-const HASH_KEY = "ab".repeat(32);
 const WAIT = { timeout: 10_000, interval: 50 };
 
 let test: TestDb;
@@ -32,7 +31,7 @@ beforeAll(async () => {
 beforeEach(async () => {
     project = await newProject(test.db);
     control = await startTestControl(test);
-    const app = createApp({ db: test.db, redactor: REDACTOR });
+    const app = createApp({ db: test.db, keys: KEYS });
     webhook = await new Promise<ServerType>((resolve) => {
         const server = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => resolve(server));
     });
@@ -41,7 +40,6 @@ beforeEach(async () => {
         key: project.key,
         webhookUrl: `http://127.0.0.1:${(webhook.address() as AddressInfo).port}`,
         controlUrl: `http://127.0.0.1:${control.port}`,
-        hashKey: HASH_KEY,
     });
 });
 

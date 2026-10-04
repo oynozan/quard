@@ -33,6 +33,7 @@ export async function hello(ctx: Context, connection: Connection, message: Hello
                 quarantine,
                 fleetObserveUntil: observeUntil?.toISOString() ?? null,
                 counters,
+                hashKey: ctx.keys.hashKey(projectId),
             });
             ctx.registry.ready(connection);
         });

@@ -3,7 +3,7 @@ import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { openClient } from "../test/client.ts";
 import { newProject } from "../test/context.ts";
-import { askMessage, countMessage, fleetMessage, IBAN_VALUE } from "../test/messages.ts";
+import { askMessage, countMessage, fleetMessage, IBAN_VALUE, KEYS } from "../test/messages.ts";
 import { NEVER, startTestControl } from "../test/server.ts";
 
 const DANA = "dana@acme.com";
@@ -33,6 +33,7 @@ describe("the protocol over a real WebSocket", () => {
         const decided = await client.next("decided");
 
         expect(ready).toMatchObject({ type: "ready", quarantine: [], fleetObserveUntil: null, counters: [] });
+        expect(ready.hashKey).toBe(KEYS.hashKey(project.projectId));
         expect(decided).toEqual({ type: "decided", askId: ask.askId, answer: "once", requestId: asked.requestId });
         expect(Date.now() - decidedAt).toBeLessThan(1_500);
         await client.close();

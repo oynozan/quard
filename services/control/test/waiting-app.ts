@@ -1,11 +1,7 @@
 import { guard, quard } from "../../../packages/sdk/index.ts";
 
 // An app process whose payInvoice call waits in the dashboard until the test ends it
-quard.configure({
-    key: process.env.QUARD_TEST_KEY,
-    controlUrl: process.env.QUARD_TEST_CONTROL_URL,
-    hashKey: process.env.QUARD_TEST_HASH_KEY,
-});
+quard.configure({ key: process.env.QUARD_TEST_KEY, controlUrl: process.env.QUARD_TEST_CONTROL_URL });
 
 const payInvoice = guard(async (input: object) => `paid ${JSON.stringify(input)}`, {
     type: "approval",

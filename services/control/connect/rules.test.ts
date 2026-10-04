@@ -1,5 +1,5 @@
 import { startTestDb, type TestDb } from "@quard/db/testing";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { brokenDb, newConnection, newProject, readyConnection, testContext } from "../test/context.ts";
 import { agent, closed, rules } from "./rules.ts";
 
@@ -43,10 +43,11 @@ describe("rules", () => {
 });
 
 describe("agent", () => {
-    it("stores an agent version with its instructions redacted", async () => {
+    it("stores an agent version with its instructions redacted by its project's redactor", async () => {
         const project = await newProject(test.db);
         const ctx = testContext(test.db);
         const { connection } = await readyConnection(ctx, project);
+        const redactor = vi.spyOn(ctx.keys, "redactor");
         const message = {
             type: "agent" as const,
             agent: "billing",
@@ -74,6 +75,7 @@ describe("agent", () => {
             },
             { agent: "support", version: VERSION, model: "gpt-5", tools: ["payInvoice"], instructions: null },
         ]);
+        expect(redactor).toHaveBeenCalledWith(project.projectId);
     });
 });
 

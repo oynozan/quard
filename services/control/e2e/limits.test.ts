@@ -10,11 +10,11 @@ import { resetAll } from "../../../packages/sdk/test/reset.ts";
 import { activeControl } from "../../../packages/sdk/transport/link/active.ts";
 import { utcDay } from "../connect/hello.ts";
 import { newProject, type TestProject } from "../test/context.ts";
+import { KEYS } from "../test/messages.ts";
 import { only, startTestControl, type TestControl } from "../test/server.ts";
 
 // Per-day limits and the fleet check with the real SDK, control on a free port and PGlite
 
-const HASH_KEY = "ab".repeat(32);
 const INVOICE = { iban: "DE89370400440532013000", amount: 120 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WAIT = { timeout: 10_000, interval: 20 };
@@ -48,7 +48,6 @@ async function linkSdk(): Promise<void> {
     quard.configure({
         key: project.key,
         controlUrl: `http://127.0.0.1:${control.port}`,
-        hashKey: HASH_KEY,
         onEvent: (event) => events.push(event),
     });
     await vi.waitFor(() => expect(activeControl()?.link.ready()).toBe(true), WAIT);
@@ -148,16 +147,16 @@ describe("per-day limits through control", { timeout: 30_000 }, () => {
 });
 
 describe("the fleet check through control", { timeout: 30_000 }, () => {
-    it("only records would-block in its first 7 days", async () => {
+    it("only records would-block in its first 7 days, the IBAN hashed with the project's key", async () => {
         await linkSdk();
         const { rawPay, pay } = payTool();
 
         expect(await payInRuns(pay, 6)).toEqual(Array(6).fill("paid"));
 
         expect(rawPay).toHaveBeenCalledTimes(6);
-        expect(await quarantineList(test.db, project.projectId)).toEqual([
-            { key: expect.stringMatching(/^iban:/), observe: true },
-        ]);
+        // The SDK got that key from control's ready, since it has no other
+        const key = KEYS.redactor(project.projectId).key(`iban:${INVOICE.iban}`);
+        expect(await quarantineList(test.db, project.projectId)).toEqual([{ key, observe: true }]);
         expect(events).toContainEqual(
             expect.objectContaining({ rule: "fleet-check", decision: "block", mode: "observe", field: "iban" }),
         );

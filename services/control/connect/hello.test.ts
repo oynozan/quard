@@ -1,11 +1,15 @@
 import { addDayCounts, recordFleetUse } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
+import { projectHashKey, readyMessage } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { brokenDb, newConnection, newProject, testContext } from "../test/context.ts";
-import { fleetMessage, helloMessage, IBAN_VALUE, RULES } from "../test/messages.ts";
+import { fleetMessage, helloMessage, IBAN_VALUE, INSTALL_KEY, RULES } from "../test/messages.ts";
 import { hello, utcDay } from "./hello.ts";
 
 const DAY = 86_400_000;
+
+// The key the project's agents hash with, as ready carries it
+const hashKeyOf = (projectId: string) => projectHashKey(INSTALL_KEY, projectId).toString("hex");
 
 let test: TestDb;
 
@@ -34,7 +38,14 @@ describe("hello", () => {
 
         expect(connection.id).toMatch(/^con_[0-9a-f]{16}$/);
         expect(socket.sent).toEqual([
-            { type: "ready", at: now.toISOString(), quarantine: [], fleetObserveUntil: null, counters: [] },
+            {
+                type: "ready",
+                at: now.toISOString(),
+                quarantine: [],
+                fleetObserveUntil: null,
+                counters: [],
+                hashKey: hashKeyOf(project.projectId),
+            },
         ]);
         expect(ctx.registry.inProject(project.projectId)).toEqual([connection]);
         const row = await test.db
@@ -80,9 +91,25 @@ describe("hello", () => {
                 quarantine: [{ key: IBAN_VALUE.key, observe: true }],
                 fleetObserveUntil: new Date(now.getTime() + 7 * DAY).toISOString(),
                 counters: [{ ...today, counter: "calls", used: 3 }],
+                hashKey: hashKeyOf(project.projectId),
             },
         ]);
         expect(connection.known).toEqual(new Map([[IBAN_VALUE.key, true]]));
+    });
+
+    it("sends each project its own hash key, never the install's", async () => {
+        const ctx = testContext(test.db);
+        const ours = newConnection(ctx, await newProject(test.db));
+        const theirs = newConnection(ctx, await newProject(test.db, "Other"));
+
+        await hello(ctx, ours.connection, helloMessage());
+        await hello(ctx, theirs.connection, helloMessage());
+
+        const [ready, other] = [ours, theirs].map(({ socket }) => readyMessage.parse(socket.of("ready")[0]));
+        expect(ready?.hashKey).toBe(hashKeyOf(ours.connection.projectId));
+        expect(other?.hashKey).toBe(hashKeyOf(theirs.connection.projectId));
+        expect(other?.hashKey).not.toBe(ready?.hashKey);
+        expect([ready?.hashKey, other?.hashKey]).not.toContain(INSTALL_KEY.toString("hex"));
     });
 
     it("closes the socket when the session can't start", async () => {

@@ -4,7 +4,7 @@ import type { ApprovalAnswer, AskMessage } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Context } from "../server/context.ts";
 import { newProject, readyConnection, testContext, type TestProject } from "../test/context.ts";
-import { askMessage, REDACTOR } from "../test/messages.ts";
+import { askMessage, KEYS } from "../test/messages.ts";
 import { ask } from "./ask.ts";
 import { requestInput, waiterInput } from "./input.ts";
 
@@ -88,7 +88,8 @@ describe("an ask sent again after a reconnect, without the request id", () => {
         const call = { agent: message.agent, tool: message.tool, argsHash: message.argsHash };
         await claimOnce(test.db, project.projectId, { ...call, askId: "7".repeat(16) });
         // Control asked the call again on a new request, which the SDK never heard of
-        const { id: second } = await openApprovalRequest(test.db, project.projectId, requestInput(message, REDACTOR));
+        const input = requestInput(message, KEYS.redactor(project.projectId));
+        const { id: second } = await openApprovalRequest(test.db, project.projectId, input);
         await addWaiter(test.db, project.projectId, waiterInput(message, second));
         await decideApproval(test.db, project.projectId, second, "deny", DANA);
         const back = await readyConnection(ctx, project);

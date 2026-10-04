@@ -5,7 +5,7 @@ import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { openClient, refusedWith } from "../test/client.ts";
 import { brokenDb, newProject, type TestProject } from "../test/context.ts";
-import { REDACTOR } from "../test/messages.ts";
+import { KEYS } from "../test/messages.ts";
 import { silentClient } from "../test/raw.ts";
 import { startTestControl } from "../test/server.ts";
 import { startControl } from "./start.ts";
@@ -91,7 +91,7 @@ describe("startControl", () => {
 
     it("works with its own listener, clock and log", async () => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
-        const control = await startControl({ db: test.db, databaseUrl: test.url, redactor: REDACTOR, port: 0 });
+        const control = await startControl({ db: test.db, databaseUrl: test.url, keys: KEYS, port: 0 });
         const client = await openClient(control.port, project.key);
 
         const ready = await client.hello();

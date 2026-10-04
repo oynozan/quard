@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { serve, type ServerType } from "@hono/node-server";
 import { agentMessageLinks } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
+import { keyedHash, projectHashKey } from "@quard/shared";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../webhook/app.ts";
 import { newProject, type TestProject } from "../test/context.ts";
-import { REDACTOR } from "../test/messages.ts";
+import { IBAN, INSTALL_KEY, KEYS } from "../test/messages.ts";
 import { startTestControl, type TestControl } from "../test/server.ts";
 
 // The M4 acceptance test: an orchestrator in one process delegates to a
@@ -29,7 +30,7 @@ beforeAll(async () => {
 beforeEach(async () => {
     project = await newProject(test.db);
     control = await startTestControl(test);
-    const app = createApp({ db: test.db, redactor: REDACTOR });
+    const app = createApp({ db: test.db, keys: KEYS });
     webhook = await new Promise<ServerType>((resolve) => {
         const server = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => resolve(server));
     });
@@ -101,6 +102,9 @@ describe("M4: an orchestrator delegates to an agent in another process", { timeo
             .executeTakeFirstOrThrow();
         expect(record).toMatchObject({ run_id: runId, sender: "orchestrator", depth: 0 });
         expect(JSON.stringify(record)).not.toContain("DE89");
+        // Hashed with the project's key, which the SDK fetched with its agent key
+        const hash = keyedHash(projectHashKey(INSTALL_KEY, project.projectId), "iban", IBAN);
+        expect(record.value_labels).toContainEqual(expect.objectContaining({ hash }));
         // Both processes' events land in one run, named after the orchestrator
         await vi.waitFor(async () => expect(await blocks(runId)).toHaveLength(1), WAIT);
         expect(await blocks(runId)).toEqual([

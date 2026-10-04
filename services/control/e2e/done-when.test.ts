@@ -20,7 +20,6 @@ import { only, startTestControl, type TestControl } from "../test/server.ts";
 // The M3 acceptance test with the real SDK, control on a free port and PGlite
 
 const DANA = "dana@acme.com";
-const HASH_KEY = "ab".repeat(32);
 const INVOICE = { iban: "DE89370400440532013000", amount: 4950 };
 const APP = join(import.meta.dirname, "..", "test", "waiting-app.ts");
 const WAIT = { timeout: 10_000, interval: 20 };
@@ -66,7 +65,6 @@ function linkSdk(): void {
     quard.configure({
         key: project.key,
         controlUrl: controlUrl(),
-        hashKey: HASH_KEY,
         onEvent: (event) => events.push(event),
     });
 }
@@ -77,7 +75,6 @@ function startApp(): ChildProcess {
         ...process.env,
         QUARD_TEST_KEY: project.key,
         QUARD_TEST_CONTROL_URL: controlUrl(),
-        QUARD_TEST_HASH_KEY: HASH_KEY,
         QUARD_TEST_INVOICE: JSON.stringify(INVOICE),
     };
     return spawn(process.execPath, [APP], { env, stdio: ["ignore", "ignore", "inherit"] });
