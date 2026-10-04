@@ -42,6 +42,7 @@ An item reads back as untrusted and internal, the default for unknown content, w
 - Your read function returns it in another shape than it was written, for example with an added score field. Return items as they were written.
 - It was written before the store was wrapped, or by code that skips the wrapper.
 - Its labels couldn't be stored, or couldn't be looked up in time.
+- It was written before the server's [hash key changed](/self-host#when-the-hash-key-changes).
 
 A write still goes ahead when its labels can't be stored. Other processes then read the item as untrusted.
 

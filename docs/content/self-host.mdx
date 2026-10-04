@@ -49,7 +49,7 @@ Then fill in these lines in `.env`:
 | `PRIVY_APP_SECRET`         | The Privy App secret.                                                      |
 | `QUARD_SESSION_SECRET`     | Signs the dashboard's session cookie. Make it with `openssl rand -hex 32`. |
 
-The hash key turns IBANs, card numbers and emails into hashes, so they are never stored in clear. Every agent process uses the same key, so keep it with your other secrets. It never leaves your network. If it changes, search no longer finds values from older runs.
+The hash key turns IBANs, card numbers and emails into hashes, so they are never stored in clear. It stays on your server. Each project hashes with its own key, made from this one, and the SDK gets its project's key from Quard with the agent key. So your agents never need `QUARD_HASH_KEY`. Keep it with your other secrets. If it changes, [hashes made before no longer match](#when-the-hash-key-changes).
 
 These are optional:
 
@@ -90,7 +90,7 @@ Agent key: qk_live_…
 The agent key is shown once. Only its hash is stored.
 ```
 
-Copy the key now and keep it as a secret. Your agents send their runs with it.
+Copy the key now and keep it as a secret. Your agents send their runs with it, and it is the only Quard secret they need.
 
 You can also make keys in the dashboard, under [Settings](/guides/settings#create-a-key). On a new install, the first key there sets up the project.
 
@@ -112,3 +112,23 @@ docker compose up -d --build
 ```
 
 The migrate step brings the database up to date before the services start again.
+
+### If your agents set `hashKey`
+
+Agents used to set `hashKey` in `quard.configure()`, with the same `QUARD_HASH_KEY` as the server. Now each project hashes with its own key, and the SDK gets it from Quard.
+
+1. Update Quard as above. Keep `QUARD_HASH_KEY` in your `.env`.
+2. Update the `quard` package in your agents. Remove `hashKey` from `quard.configure()`, and `QUARD_HASH_KEY` from their settings.
+
+Moving to project keys changes every hash once, as a [new hash key](#when-the-hash-key-changes) would.
+
+## When the hash key changes
+
+Hashes made before the change don't match the new ones:
+
+- Search no longer finds IBANs and emails from older runs.
+- Shared memory items written before the change read back as untrusted.
+- Calls that an "always approve" grant covered ask again.
+- The fleet check sees every IBAN and email as new. Those in quarantine are no longer blocked, and those marked as known can be quarantined again.
+
+So change `QUARD_HASH_KEY` only if it leaked.

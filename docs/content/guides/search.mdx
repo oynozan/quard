@@ -14,14 +14,14 @@ Search finds the runs that read or sent a value: a domain, a bank account, an em
 | A file path or id | The same value                        |
 | An agent or tool  | The runs where it appears             |
 
-Card numbers can't be searched. To search IBANs and emails, the dashboard needs the same `QUARD_HASH_KEY` your agents use.
+Card numbers can't be searched. To search IBANs and emails, the dashboard needs the same `QUARD_HASH_KEY` as `webhook` and `control`.
 
 ## Read the results
 
 ![Search results](/images/guides/search-results.webp)
 
 1. **Summary.** How many steps matched, in how many runs, the kind of value and its masked form.
-2. **By hash.** Sensitive values are stored as keyed hashes, never in clear. Quard hashes what you typed the same way and matches on that.
+2. **By hash.** Sensitive values are stored as keyed hashes, never in clear. Quard hashes what you typed with your project's key and matches on that.
 3. **A run.** Matches are grouped by run, with its status, the agent that started it and when. Click the run id to open the run.
 4. **A match.** The step, the agent, the field and the value, with how it matched: **exact**, **same host**, **same domain**, or **inside a value** when it was part of a longer one. Click the row to open that step.
 5. **Origin.** Where the matched content came from, when Quard saw it before the step.

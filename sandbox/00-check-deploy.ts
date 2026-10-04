@@ -9,13 +9,13 @@
 //   control     answers /health as control
 //   worker      control's /health saw it in the last 30 s
 //   live link   control opens the WebSocket for the agent key
+//   hash key    webhook gives the agent key its project's hash key
 //   model call  one wrapped model call (only with OPENAI_API_KEY)
 //   run         one real run reaches webhook and every event is stored
 //
 // Settings come from sandbox/.env, and values already set win:
 //
 //   QUARD_AGENT_KEY       made in that install's dashboard: Settings > Create key
-//   QUARD_HASH_KEY        the same 64 hex characters as on the server
 //   QUARD_DASHBOARD_URL   http://localhost:3100 when unset
 //   QUARD_DOCS_URL        not checked when unset
 //   QUARD_WEBHOOK_URL     http://localhost:4100 when unset
@@ -33,7 +33,7 @@
 import { randomBytes } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { CONTROL_PATH, parseHashKey } from "@quard/shared";
+import { CONTROL_PATH, HASH_KEY_PATH, hashKeyReply } from "@quard/shared";
 import OpenAI from "openai";
 import { guard, quard } from "quard";
 
@@ -45,7 +45,6 @@ try {
 
 const env = process.env;
 const KEY = env.QUARD_AGENT_KEY ?? "";
-const HASH_KEY = env.QUARD_HASH_KEY ?? "";
 const DASHBOARD = trimmed(env.QUARD_DASHBOARD_URL || "http://localhost:3100");
 const DOCS = env.QUARD_DOCS_URL ? trimmed(env.QUARD_DOCS_URL) : undefined;
 const WEBHOOK = trimmed(env.QUARD_WEBHOOK_URL || "http://localhost:4100");
@@ -149,19 +148,27 @@ function liveLink(): Promise<string | undefined> {
     });
 }
 
-console.log("Checking the Quard install");
-
-let settings: string | undefined;
-if (!KEY || !HASH_KEY) {
-    settings = "set QUARD_AGENT_KEY and QUARD_HASH_KEY in sandbox/.env";
-} else {
+// The project's hash key, asked for the way the SDK asks webhook
+async function hashKey(): Promise<string | undefined> {
+    const url = `${WEBHOOK}${HASH_KEY_PATH}`;
     try {
-        parseHashKey(HASH_KEY);
+        const res = await fetch(url, {
+            headers: { authorization: `Bearer ${KEY}` },
+            signal: AbortSignal.timeout(TIMEOUT),
+        });
+        const body: unknown = await res.json().catch(() => undefined);
+        if (res.status === 401) return "webhook refused the agent key";
+        if (!res.ok) return `${url} answered ${res.status}`;
+        return hashKeyReply.safeParse(body).success ? undefined : `${url} sent no valid hash key`;
     } catch (error) {
-        settings = `QUARD_HASH_KEY: ${(error as Error).message}`;
+        return `${url}: ${reason(error)}`;
     }
 }
-report("Settings", settings, "agent key and hash key are set");
+
+console.log("Checking the Quard install");
+
+const settings = KEY ? undefined : "set QUARD_AGENT_KEY in sandbox/.env";
+report("Settings", settings, "agent key is set");
 
 const [dashboard, docs, webhook, control] = await Promise.all([
     page(`${DASHBOARD}/sign-in`),
@@ -179,6 +186,7 @@ else skip("Worker", "not checked: control did not answer");
 
 if (settings === undefined) {
     report("Live link", await liveLink(), "control accepts the agent key");
+    report("Hash key", await hashKey(), "webhook gives the agent its project's hash key");
     await checkRun();
 }
 
@@ -207,7 +215,6 @@ async function checkRun(): Promise<void> {
     let runId = "";
     quard.configure({
         key: KEY,
-        hashKey: HASH_KEY,
         webhookUrl: WEBHOOK,
         controlUrl: CONTROL,
         onEvent: (event) => {

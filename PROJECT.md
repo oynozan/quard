@@ -98,7 +98,7 @@ Code that must behave the same in the SDK and on the server:
 - event and API schemas (Zod)
 - label types: origin, trust, sensitivity
 - value normalizers: IBAN, email, URL, domain, file path
-- the keyed hash for sensitive values
+- the keyed hash for sensitive values, and each project's hash key, made from the install's key
 - refusal text templates
 
 The SDK bundles this package, so it must not hold database or server code.
@@ -149,7 +149,6 @@ quard.configure({
     key: process.env.QUARD_AGENT_KEY,
     webhookUrl: process.env.QUARD_WEBHOOK_URL,
     controlUrl: process.env.QUARD_CONTROL_URL,
-    hashKey: process.env.QUARD_HASH_KEY,
 });
 
 const client = quard.wrap(new OpenAI());
@@ -383,6 +382,7 @@ Decided by Q23.
 | Label lookups | A label that can't be looked up counts as untrusted |
 | Jev detector | Keeps working: the SDK calls Jev directly, not through the backend |
 | Decision records | Buffered, up to 10,000, and retried every 1 s to 60 s |
+| Uploads and label records, before the SDK has its project's hash key | Wait in the same buffer; no raw value leaves the process |
 
 If the buffer fills, the oldest allow records are dropped first, and the number lost is recorded. `webhook` stores it, and the overview shows how many events were lost in the last 24 hours. Records sent late carry `degraded: true`.
 
@@ -429,7 +429,7 @@ Decided by the spec and Q11 to Q15.
     - `await quard.inject({ content })` stores the label record, then returns the three items for the channel's slot. On the receiving side, `await quard.resume(carrier, fn)` looks the record up once and runs `fn` inside that run. Both return promises. (**Claude's pick**)
     - On HTTP the three items ride in a W3C `baggage` header as `quard-run`, `quard-parent` and `quard-labels`. `quard.toBaggage(carrier)` writes the header, and `quard.resume()` also accepts the header text. (**Claude's pick**)
     - Values leave the process only as keyed hashes. The receiver hashes the values it finds in the message and takes each match's label from the record. A record vouches for a message only when the run and the content's hash both match. (**Claude's pick**)
-    - The content's hash is keyed with the install's hash key and covers the exact content: every character, every field and which value belongs to which key. (**Claude's pick**)
+    - The content's hash is keyed with the project's hash key and covers the exact content: every character, every field and which value belongs to which key. (**Claude's pick**)
     - A missing, unreadable or mismatched reference counts as untrusted. So does a record that could not be stored or looked up. Value tracing reconnects the pieces later.
     - The receiving agent gets no more tools than the sender had, and its depth continues from the sender's. When the record is missing, Quard records a warning and counts the agent as past the depth limit, so it can't delegate further once depth limits are on.
     - A sender run that has read nothing vouches for nothing: its message counts as unknown content, untrusted and internal. The same goes for a memory write.
@@ -703,7 +703,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 ### Hosting
 
 - Self-hosted first. Teams run `web`, `webhook`, `control`, `worker` and Postgres as Docker containers from one compose file, in their own cloud. Traces stay in their network, except the model calls listed in [What AI models may see](#what-ai-models-may-see).
-- A hosted service comes later from the same code. Every stored row carries a project id, so that is not a rewrite.
+- A hosted service comes later from the same code. Every stored row carries a project id, so that is not a rewrite. Agents never hold the install's hash key, so a hosted user needs only an agent key. See [Redaction](#redaction).
 
 ### Storage
 
@@ -725,14 +725,19 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - The SDK removes secrets, such as API keys and tokens, before anything leaves the process.
 - IBANs, card numbers and emails become keyed hashes plus a mask, such as `DE89…3000`. The email domain stays visible.
 - The user and password in a URL, such as `redis://user:pass@host`, are removed. A password that holds an apostrophe is not found in v1.
-- The same normalized value always gives the same hash, so search and value tracing still match.
+- The same normalized value always gives the same hash in a project, so search and value tracing still match.
 - Ids are never masked. Run and step ids, agent versions, rules hashes and approval request ids keep their form, even when their digits pass a card check. Otherwise `webhook` would refuse the whole batch.
 - Secrets never become value keys. Values of fields named like secrets, such as `password` or `token`, and secrets inside text, such as `password=…` or a bearer token, are left out when Quard builds the keys for search and value tracing. Guards still scan them.
 - Guards see real values in memory. The dashboard shows masks. Replay uses stand-ins. The AI reviewer sees placeholders.
 - The one exception is an open approval request: the approver sees the full values. After the decision only the hash and the masked arguments are kept.
 - Chunks Jev labels are stored as they were sent to it, for the review queue: secrets removed, and emails, IBANs and cards masked. Only public content is stored this way. (**Owner**)
-- The hash is HMAC-SHA-256 with one random 32-byte key per install. The key is set in every agent process and on the server, which needs it to hash search input. It is never sent to us.
-- To rotate the key, add a new one and keep the old one for search until old runs expire.
+- The hash is HMAC-SHA-256. The install has one random 32-byte key, `QUARD_HASH_KEY`, and only the server holds it: `webhook`, `control` and `web`. It is never sent to agents or to us. (**Owner**)
+- Each project hashes with its own key, made from the install's key by `projectHashKey()` in `packages/shared`. Wherever the server hashes or redacts, such as search input, it uses the key of the request's project. (**Owner**)
+- Agents never set a hash key. The SDK gets its project's key with its agent key: `control` sends it in the `ready` message, and `webhook` serves it at `GET /v1/hash-key`, with `401 invalid_agent_key` for a bad or revoked key. Whichever answers first wins; both give the same key. (**Owner**)
+- Until the SDK has the key, uploads and label records wait in the buffer, and calls that hash for the backend wait for it. If the key can't be had, the SDK retries as it does while `webhook` is down. No raw value ever leaves the process. Without a backend nothing leaves the process, so no key is needed. (**Owner**)
+- Why: users of a hosted Quard can't be given the install's key. With it and a copy of the database, anyone could hash guessed IBANs or emails and find them in every customer's data. The agent key is now the only secret a user needs.
+- The move to project keys changes every hash once. Search misses older IBANs and emails, older memory items read back as untrusted, "always approve" grants ask again, and the fleet check sees every IBAN and email as new.
+- To rotate the install's key, add a new one and keep the old one for search until old runs expire.
 - Names and street addresses stay in clear in v1, because finding them needs a model.
 - v1 finds IBANs (pattern and mod-97 check), card numbers (pattern and Luhn check), emails and secrets (gitleaks-style patterns).
 
@@ -743,8 +748,9 @@ Decided by Q18 and Q19, all **Claude's pick**.
     - It checks them against the shared schemas and writes them to Postgres. A decision that blocks a tool call, or would in observe mode, opens the run's incident, which queues the finder's jobs.
     - The format is our own JSON API, not OpenTelemetry. (**Claude's pick**)
     - Most events arrive in batches. Label records that another process may read right away, such as messages to other agents and memory writes, are sent at once to `POST /v1/labels`. They are acknowledged only after they are stored. (**Claude's pick**)
+    - `GET /v1/hash-key` answers an agent key with its project's hash key. See [Redaction](#redaction). (**Owner**)
 - **control** is the SDK's live link to the backend. The SDK keeps one long-lived connection to it and reconnects if it drops.
-    - **Connect:** the SDK registers its agents, their versions and its active rules.
+    - **Connect:** the SDK registers its agents, their versions and its active rules. The `ready` answer carries the project's hash key.
     - **Counters:** per-day counters, fleet counters, per-run counters for runs that span processes, and quarantine lists.
     - **Approvals:** it creates requests, tracks heartbeats from waiting calls, and returns the decision to the waiting call.
     - **Revocation:** revoked agent keys and revoked "always approve" decisions.
@@ -823,6 +829,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Run limit settings | `runLimits` in code and the policy file; `delegateTo` on a limit guard | Claude's pick |
 | — | Shared run counters | Steps, cost and per-run tool counts in `control`; fan-out and loops per process | Claude's pick |
 | — | Auth | Agent keys for the SDK; Privy sign-in (email code or GitHub) for the dashboard | Owner |
+| — | Hash keys | One install key, only on the server; each project hashes with its own key made from it; the SDK gets its project's key with its agent key, from `control`'s `ready` or `webhook`'s `GET /v1/hash-key` | Owner |
 | — | SDK names | The `quard` object (`wrap`, `run`, `agent`, `configure`, `inject`, `resume`), `guard()`, `isGuardRefusal`, `GuardBlockedError` | Owner |
 | — | Blocked tool calls inside monitor | The call stays in the response, marked blocked; the guarded tool refuses it | Owner |
 | — | x402 payments | A sixth guard type, `x402`, before signing; every x402 response recorded; milestone after M4 | Owner |
@@ -864,5 +871,5 @@ Not decided yet:
 
 - **WebSocket transport.** The OpenAI Agents SDK can reach the Responses API over a WebSocket. The fetch hook does not cover it yet.
 - **Node 26** becomes LTS on 2026-10-28. Move the services to it then.
-- **Hash key rotation for label records.** Memory labels outlive runs, but their hashes use the current key only. After a key change, items written before it read back as untrusted. Decide whether lookups also try the old key.
+- **Hash key rotation for label records.** Memory labels outlive runs, but their hashes use the project's current key only. A new install key changes every project's key, and items written before it read back as untrusted. Decide whether lookups also try the old key.
 - **Runs paused and never resumed.** A run paused for the Agents SDK's own approval stays open in the dashboard until it resumes. Decide when such a run counts as finished.

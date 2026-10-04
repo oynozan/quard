@@ -4,7 +4,7 @@ This page builds a small agent that sends emails, puts a guard on its email tool
 
 You need:
 
-- Quard running, as [Self-host Quard](/self-host) shows, with an agent key and the hash key from your `.env`.
+- Quard running, as [Self-host Quard](/self-host) shows, and an agent key.
 - Node.js 22.12 or newer.
 - An OpenAI API key.
 
@@ -27,11 +27,12 @@ Make a file named `.env` in the same folder:
 QUARD_AGENT_KEY=qk_live_...
 QUARD_WEBHOOK_URL=http://localhost:4100
 QUARD_CONTROL_URL=http://localhost:4200
-QUARD_HASH_KEY=<the same 64 hex characters as on the server>
 OPENAI_API_KEY=sk-...
 ```
 
 The URLs point at `webhook` and `control`. Change them if Quard runs on another machine or on other ports.
+
+The agent key is the only Quard secret your agent needs. With it, the SDK asks Quard for the key that hashes IBANs, card numbers and emails.
 
 ## 3. Write the agent
 
@@ -45,7 +46,6 @@ quard.configure({
     key: process.env.QUARD_AGENT_KEY,
     webhookUrl: process.env.QUARD_WEBHOOK_URL,
     controlUrl: process.env.QUARD_CONTROL_URL,
-    hashKey: process.env.QUARD_HASH_KEY,
 });
 
 // Quard records every model call made through this client
@@ -121,7 +121,7 @@ Open the dashboard and go to **Runs**. The newest run is from the agent `assista
 
 The block also opened an incident, under **Incidents**, which traces the path that led to it.
 
-Nothing showing up? Check that `QUARD_WEBHOOK_URL` answers at `/health`, and that the agent key and the hash key match the ones Quard uses.
+Nothing showing up? Check that `QUARD_WEBHOOK_URL` answers at `/health`, and that your agent key is active under [Settings](/guides/settings#agent-keys).
 
 ## Next steps
 

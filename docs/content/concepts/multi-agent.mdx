@@ -49,7 +49,7 @@ When agents run in separate processes, three items go with each message:
 | Parent step id  | The sender's step that led to the message    |
 | Label reference | A key to the labels the sender stored for it |
 
-Together they are called the carrier. Set up both sides with `quard.configure()` and all four of `key`, `webhookUrl`, `controlUrl` and `hashKey`. The sender stores its labels through the webhook, and the receiver looks them up through `control`.
+Together they are called the carrier. Set up both sides with `quard.configure()` and all three of `key`, `webhookUrl` and `controlUrl`. The sender stores its labels through the webhook, and the receiver looks them up through `control`.
 
 ### Sending
 

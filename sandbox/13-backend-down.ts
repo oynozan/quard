@@ -12,7 +12,6 @@
 //
 // Run: node sandbox/13-backend-down.ts
 
-import { randomBytes } from "node:crypto";
 import OpenAI from "openai";
 import { guard, quard } from "quard";
 import { runAgent } from "./lib/agent.ts";
@@ -22,7 +21,6 @@ import { title } from "./lib/show.ts";
 // This replaces the backend settings lib/env.ts may have made.
 quard.configure({
     key: "qk_live_" + "demo".repeat(6),
-    hashKey: randomBytes(32).toString("hex"),
     webhookUrl: "http://localhost:4999",
     controlUrl: "http://localhost:4999",
 });

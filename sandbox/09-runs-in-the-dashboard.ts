@@ -1,9 +1,10 @@
 // 09 · Runs in the dashboard
 //
-// With an agent key and hash key in sandbox/.env, every run goes to the
-// local backend in batches. Before anything leaves the process, secrets
-// are removed and IBANs, card numbers and emails are masked. Their search
-// keys keep a hash made with your hash key, so search still finds them.
+// With an agent key in sandbox/.env, every run goes to the local backend
+// in batches. Before anything leaves the process, secrets are removed and
+// IBANs, card numbers and emails are masked. Their search keys keep a hash
+// made with the project's hash key, which the SDK gets from the backend,
+// so search still finds them.
 //
 // The same task runs three times and ends three ways the dashboard tells
 // apart: completed, failed (a tool throws) and blocked (a guard throws).

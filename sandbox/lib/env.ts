@@ -25,7 +25,6 @@ if (DASHBOARD) {
         key: process.env.QUARD_AGENT_KEY,
         webhookUrl,
         controlUrl: process.env.QUARD_CONTROL_URL || "http://localhost:4200",
-        hashKey: process.env.QUARD_HASH_KEY,
     });
     // Only a warning: example 13 runs with the backend down on purpose
     answered = await fetch(`${webhookUrl}/health`, { signal: AbortSignal.timeout(1000) }).then(
@@ -46,7 +45,7 @@ export const RECORDED = answered;
 export function needsDashboard(): void {
     if (!DASHBOARD) {
         console.error(
-            "This example needs the local Quard backend. Start webhook, control and the worker as sandbox/README.md shows, then add QUARD_AGENT_KEY and QUARD_HASH_KEY to sandbox/.env.",
+            "This example needs the local Quard backend. Start webhook, control and the worker as sandbox/README.md shows, then add QUARD_AGENT_KEY to sandbox/.env.",
         );
         process.exit(1);
     }

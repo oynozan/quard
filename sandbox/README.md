@@ -44,6 +44,8 @@ The examples play the part of your app. Three backend services work with the das
     QUARD_HASH_KEY=<64 hex characters>
     ```
 
+    Only the servers use it. The examples get their project's key from the backend, with the agent key.
+
 2. Start webhook (port 4100) in one terminal, from the repo root:
 
     ```sh
@@ -97,7 +99,6 @@ It reads `sandbox/.env`, so it checks the local install. For a server, put its s
 
 ```sh
 QUARD_AGENT_KEY=qk_live_...    # made in that dashboard
-QUARD_HASH_KEY=<the same 64 hex characters as on the server>
 QUARD_DASHBOARD_URL=https://app.example.com
 QUARD_DOCS_URL=https://docs.example.com
 QUARD_WEBHOOK_URL=https://ingest.example.com
