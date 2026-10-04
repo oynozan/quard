@@ -4,6 +4,7 @@ import { configure } from "../core/config.ts";
 import { isGuardRefusal } from "../core/refusal.ts";
 import { runScope } from "../context/scope.ts";
 import { dayUsed, utcDay } from "../guards/limit/daily.ts";
+import type { GuardOptions } from "../guards/options.ts";
 import { rulesSnapshot } from "../policy/rules.ts";
 import { decisionsOf } from "../test/events.ts";
 import { fakeSockets, READY, sentOf, type FakeSocket } from "../test/fake-socket.ts";
@@ -131,11 +132,14 @@ describe("approvals through control", () => {
         expect(isGuardRefusal(refused) && refused.reason).toBe("backend_unavailable");
     });
 
-    it("refuses an approval timeout that is not a positive number of seconds", () => {
-        for (const timeout of [0, -1, Number.NaN]) {
-            expect(() => guard(async () => "x", { type: "approval", name: "pay", timeout })).toThrow(
-                "An approval timeout must be a positive number of seconds",
-            );
+    it("refuses a timeout that is not a positive number of seconds", () => {
+        for (const type of ["approval", "action", "egress"] as const) {
+            for (const timeout of [0, -1, Number.NaN]) {
+                const options = { type, name: "pay", rules: [], timeout } as GuardOptions;
+                expect(() => guard(async () => "x", options)).toThrow(
+                    `An ${type} timeout must be a positive number of seconds`,
+                );
+            }
         }
     });
 });

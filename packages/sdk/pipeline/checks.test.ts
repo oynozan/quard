@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { registerGuardedTool } from "../context/registry.ts";
-import type { RuleResult } from "../guards/call.ts";
+import type { FailResult, RuleResult } from "../guards/call.ts";
 import type { GuardOptions } from "../guards/options.ts";
 import { rulesSnapshot } from "../policy/rules.ts";
 import { makeCall } from "../test/call.ts";
 import { resetAll } from "../test/reset.ts";
-import { asksOf, decide, preChecks, recordDecision } from "./checks.ts";
+import { asksOf, askTimeout, decide, preChecks, recordDecision } from "./checks.ts";
 
 afterEach(() => {
     resetAll();
@@ -61,6 +61,34 @@ describe("asksOf", () => {
         const asks = asksOf([result("allow"), result("ask"), result("ask", "observe"), result("block")]);
 
         expect(asks).toEqual([result("ask")]);
+    });
+});
+
+describe("ask timeouts", () => {
+    it("mark each guard's asks with that guard's timeout", () => {
+        const call = makeCall({ to: "x@other.com", amount: 50 }, [["user", "send it"]]);
+        const timed: GuardOptions[] = [
+            { type: "approval", timeout: 60 },
+            { type: "action", rules: [{ field: "amount", max: 10, onFail: "ask" }], timeout: 5 },
+            { type: "action", rules: [{ field: "amount", max: 100, onFail: "ask" }], timeout: 1 },
+            { type: "egress", allow: ["acme.com"], onFail: "ask", timeout: 30 },
+        ];
+        const results = preChecks(call, timed, true);
+
+        expect(asksOf(results).map((ask) => [ask.guard, ask.timeout])).toEqual([
+            ["action", 5],
+            ["egress", 30],
+            ["approval", 60],
+        ]);
+        expect(results.filter((r) => r.decision === "allow").some((r) => "timeout" in r)).toBe(false);
+    });
+
+    it("wait at most the shortest one, and with no limit when no guard set one", () => {
+        const ask = (timeout?: number): FailResult => ({ ...(result("ask") as FailResult), timeout });
+
+        expect(askTimeout([ask(), ask(30), ask(5)])).toBe(5);
+        expect(askTimeout([ask()])).toBeUndefined();
+        expect(askTimeout([])).toBeUndefined();
     });
 });
 

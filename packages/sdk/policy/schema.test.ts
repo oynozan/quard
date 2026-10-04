@@ -37,8 +37,24 @@ describe("policy file schema", () => {
         expect(policySchema.parse({ version: 1, guards: { x402: [x402] } }).guards?.x402).toEqual([x402]);
     });
 
+    it("keeps the ask timeout of approval, action and egress guards", () => {
+        const guards = [
+            { type: "approval", timeout: 60 },
+            { type: "action", rules: [{ field: "amount", max: 10, onFail: "ask" }], timeout: 30 },
+            { type: "egress", onFail: "ask", timeout: 0.5 },
+        ];
+
+        expect(policySchema.parse({ version: 1, guards: { pay: guards } }).guards?.pay).toEqual(guards);
+    });
+
     it.each([
         ["no version", { guards: {} }],
+        [
+            "a zero action timeout",
+            { version: 1, guards: { t: [{ type: "action", rules: [{ field: "a", max: 1 }], timeout: 0 }] } },
+        ],
+        ["a negative egress timeout", { version: 1, guards: { t: [{ type: "egress", timeout: -1 }] } }],
+        ["a timeout on a limit guard", { version: 1, guards: { t: [{ type: "limit", timeout: 5 }] } }],
         [
             "an x402 asset cap that is not atomic units",
             { version: 1, guards: { x402: [{ type: "x402", assetCaps: { a: "1.5" } }] } },

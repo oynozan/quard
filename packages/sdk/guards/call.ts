@@ -38,6 +38,8 @@ export type FailResult = ResultBase & {
     decision: "block" | "ask";
     reason: ReasonCode;
     field?: string;
+    // Seconds an ask waits at most, from its guard's timeout
+    timeout?: number;
 };
 
 export type RuleResult = AllowResult | FailResult;

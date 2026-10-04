@@ -326,6 +326,10 @@
                                             }
                                         ]
                                     }
+                                },
+                                "timeout": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
                                 }
                             },
                             "required": [
@@ -400,6 +404,10 @@
                                         "block",
                                         "ask"
                                     ]
+                                },
+                                "timeout": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
                                 },
                                 "payload": {
                                     "type": "object",

@@ -32,6 +32,8 @@ export type ActionRule = FromRule | MaxRule | NeverSeenRule | CustomRule;
 export type ActionOptions = Common & {
     type: "action";
     rules: ActionRule[];
+    // Seconds an ask waits for an answer, with no limit by default
+    timeout?: number;
 };
 
 // Approval always asks, so it has no mode
@@ -51,6 +53,8 @@ export type EgressOptions = Common & {
     allow?: string[];
     destinations?: (input: unknown) => string[];
     onFail?: "block" | "ask";
+    // Seconds an ask waits for an answer, with no limit by default
+    timeout?: number;
     // Kinds left out follow the policy file's strictness preset
     payload?: { secrets?: DataAction; cards?: DataAction; ibans?: DataAction };
 };

@@ -10,6 +10,8 @@ const onFail = z.enum(["block", "ask"]).optional();
 const field = z.string().min(1);
 const hosts = z.array(z.string().min(1)).optional();
 const dataAction = z.enum(["allow", "mask", "block"]).optional();
+// Seconds an ask waits for an answer
+const timeout = z.number().positive().optional();
 
 const source = z.strictObject({
     type: z.literal("source"),
@@ -32,14 +34,14 @@ const action = z.strictObject({
     mode,
     onBlock,
     rules: z.array(z.union([fromRule, maxRule, neverSeenRule])).min(1),
+    timeout,
 });
 
 const approval = z.strictObject({
     type: z.literal("approval"),
     name,
     onBlock,
-    // Seconds to wait for an answer
-    timeout: z.number().positive().optional(),
+    timeout,
 });
 
 const egress = z.strictObject({
@@ -49,6 +51,7 @@ const egress = z.strictObject({
     onBlock,
     allow: hosts,
     onFail,
+    timeout,
     payload: z.strictObject({ secrets: dataAction, cards: dataAction, ibans: dataAction }).optional(),
 });
 

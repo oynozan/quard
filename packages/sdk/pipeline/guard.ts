@@ -5,7 +5,7 @@ import { claimCall, registerGuardedTool, type RequestedCall } from "../context/r
 import { currentScope, mayUse, newScope, withScope, type Scope } from "../context/scope.ts";
 import type { FailResult, GuardCall, RuleResult } from "../guards/call.ts";
 import { maskArgs } from "../guards/egress/payload.ts";
-import type { ApprovalOptions, GuardOptions } from "../guards/options.ts";
+import type { GuardOptions } from "../guards/options.ts";
 import { isGuardType } from "../guards/types.ts";
 import { PaymentRefused } from "../guards/x402/frame.ts";
 import { labelArguments } from "../labels/value-labels.ts";
@@ -14,7 +14,7 @@ import { syncRules } from "../transport/link/active.ts";
 import { callAborted } from "./abort.ts";
 import { askHuman } from "./approval/human.ts";
 import { blocked } from "./approval/record.ts";
-import { asksOf, decide, preChecks, recordDecision } from "./checks.ts";
+import { asksOf, askTimeout, decide, preChecks, recordDecision } from "./checks.ts";
 import { countCall } from "./count/count.ts";
 import { reportRefused } from "./count/fleet.ts";
 import { finishOutput, paymentRefusal, recordToolCall, runTool } from "./output.ts";
@@ -141,9 +141,9 @@ async function runPipeline(code: Spec, args: unknown[], signal: AbortSignal | un
     // 6. Approval, then the block checks again with no wait before counting
     let approvedArgs: string | undefined;
     if (final?.decision === "ask") {
-        const approval = spec.list.find((item): item is ApprovalOptions => item.type === "approval");
+        const asks = asksOf(checked);
         approvedArgs = canonicalJson(input);
-        const answer = await askHuman(call, asksOf(checked), approval?.timeout, signal);
+        const answer = await askHuman(call, asks, askTimeout(asks), signal);
         const stopped = answer === "approved" ? changed(call, approvedArgs) : answer;
         if (stopped !== undefined) {
             return refuse(spec, call, requested, stopped);
@@ -199,8 +199,8 @@ export function guardWithSignal<F extends (...args: never[]) => unknown>(
         if (item.type === "x402") {
             throw new Error("An x402 guard wraps an x402 client: use quard.x402(client, options)");
         }
-        if (item.type === "approval" && item.timeout !== undefined && !(item.timeout > 0)) {
-            throw new Error("An approval timeout must be a positive number of seconds");
+        if ("timeout" in item && item.timeout !== undefined && !(item.timeout > 0)) {
+            throw new Error(`An ${item.type} timeout must be a positive number of seconds`);
         }
     }
     const tool = list.find((item) => item.name !== undefined)?.name;

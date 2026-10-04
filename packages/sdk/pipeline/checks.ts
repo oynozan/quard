@@ -5,11 +5,18 @@ import { checkApproval } from "../guards/approval/approval.ts";
 import type { FailResult, GuardCall, Mode, RuleResult } from "../guards/call.ts";
 import { checkEgress } from "../guards/egress/egress.ts";
 import { checkLimit } from "../guards/limit/limit.ts";
-import type { GuardOptions } from "../guards/options.ts";
+import type { ApprovalOptions, GuardOptions } from "../guards/options.ts";
 import { rulesHash } from "../policy/rules.ts";
 import { policyVersion } from "../policy/state.ts";
 import { checkSignatureInput } from "../signatures/check.ts";
 import { activeControl } from "../transport/link/active.ts";
+
+// Marks a guard's asks with its timeout
+function withTimeout(results: RuleResult[], timeout: number | undefined): RuleResult[] {
+    return timeout === undefined
+        ? results
+        : results.map((result) => (result.decision === "ask" ? { ...result, timeout } : result));
+}
 
 // The guards that act before a call, in pipeline order
 export function preChecks(call: GuardCall, list: readonly GuardOptions[], withApproval: boolean): RuleResult[] {
@@ -22,16 +29,17 @@ export function preChecks(call: GuardCall, list: readonly GuardOptions[], withAp
     }
     for (const options of list) {
         if (options.type === "action") {
-            results.push(...checkAction(call, options));
+            results.push(...withTimeout(checkAction(call, options), options.timeout));
         }
     }
     for (const options of list) {
         if (options.type === "egress") {
-            results.push(...checkEgress(call, options));
+            results.push(...withTimeout(checkEgress(call, options), options.timeout));
         }
     }
-    if (withApproval && list.some((options) => options.type === "approval")) {
-        results.push(...checkApproval());
+    const approval = list.find((options): options is ApprovalOptions => options.type === "approval");
+    if (withApproval && approval !== undefined) {
+        results.push(...withTimeout(checkApproval(), approval.timeout));
     }
     return results;
 }
@@ -48,6 +56,12 @@ export function decide(results: readonly RuleResult[]): FailResult | undefined {
 // The enforced asks a human must settle
 export function asksOf(results: readonly RuleResult[]): FailResult[] {
     return results.filter((result): result is FailResult => result.mode === "block" && result.decision === "ask");
+}
+
+// The shortest timeout, in seconds, among the guards that asked
+export function askTimeout(asks: readonly FailResult[]): number | undefined {
+    const timeouts = asks.flatMap((ask) => (ask.timeout === undefined ? [] : [ask.timeout]));
+    return timeouts.length === 0 ? undefined : Math.min(...timeouts);
 }
 
 // What one rule decided. Output checks can also pass, strip or flag.

@@ -118,6 +118,36 @@ describe("approval in the pipeline", () => {
         expect(await approvalFor("pay", [{ type: "action", rules: [rule] }])({ amount: 1 })).toEqual({ amount: 1 });
     });
 
+    it("stops waiting after an action guard's timeout when it asks", async () => {
+        configure({ approver: () => new Promise<never>(() => {}) });
+        const ask = { name: "always-ask", check: () => "ask" as const };
+        const pay = guard(noop, { type: "action", name: "pay", rules: [ask], timeout: 0.05 });
+
+        const output = await pay({ amount: 1 });
+
+        expect(isGuardRefusal(output) && output.reason).toBe("approval_timed_out");
+    });
+
+    it("waits at most the shortest timeout among the guards that asked", async () => {
+        configure({ approver: () => new Promise<never>(() => {}) });
+        const ask = { name: "always-ask", check: () => "ask" as const };
+
+        const output = await approvalFor("pay", [{ type: "action", rules: [ask], timeout: 0.05 }])({ amount: 1 });
+
+        expect(isGuardRefusal(output) && output.reason).toBe("approval_timed_out");
+    });
+
+    it("ignores the timeout of a guard that did not ask", async () => {
+        configure({ approver: () => new Promise((resolve) => setTimeout(() => resolve("once"), 100)) });
+        const pass = { name: "pass", check: () => "allow" as const };
+        const pay = guard(noop, [
+            { type: "approval", name: "pay" },
+            { type: "action", rules: [pass], timeout: 0.01 },
+        ]);
+
+        expect(await pay({ amount: 1 })).toBe("done");
+    });
+
     it("counts limits right after the re-check, so parallel approvals can't race past them", async () => {
         configure({ approver: async () => "once" });
         const raw = vi.fn(noop);
