@@ -15,8 +15,8 @@ type Raise = (error: unknown, options?: unknown) => void;
 
 // A stream gets the error through one method, which feeds its completed
 // promise, its events and its error. So all of them reject the same way.
-function unwrapStream(result: StreamedRunResult<never, never>): void {
-    const target = result as unknown as { _raiseError: Raise };
+function unwrapStream(result: object): void {
+    const target = result as { _raiseError: Raise };
     const raise = target._raiseError.bind(result);
     target._raiseError = (error, options) => raise(blockedOf(error), options);
 }
