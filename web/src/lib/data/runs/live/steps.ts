@@ -1,6 +1,6 @@
 import type { RunDecision, RunDecisionDetail, RunLabel, RunStep, RunWaiter } from "@quard/db";
 import { contextOf, isInfluenced } from "../../labels/context";
-import type { GuardType, Label, Outcome, StepKind } from "../../types";
+import type { DecisionGuard, Label, Outcome, StepKind } from "../../types";
 import type { Step } from "../types";
 import { argsOf } from "./values";
 
@@ -10,13 +10,14 @@ type StoredDecision = RunDecision & Partial<Pick<RunDecisionDetail, "degraded" |
 // Stored steps with their labels and decisions, such as a whole stored run or an agent's recent calls
 export type StepSource = { steps: RunStep[]; labels: RunLabel[]; decisions: StoredDecision[] };
 
-const GUARDS: ReadonlySet<string> = new Set<GuardType>([
+const GUARDS: ReadonlySet<string> = new Set<DecisionGuard>([
     "source",
     "action",
     "approval",
     "egress",
     "limit",
     "permission",
+    "signature",
 ]);
 
 // Every call passes a permission check, so only the ones that stopped something get a row
@@ -156,7 +157,7 @@ function toolStep(
 function guardStep(decision: StoredDecision, labels: RunLabel[]): Step {
     const at = ms(decision.at);
     const context = contextOf(readBefore(labels, at).map(labelOf));
-    const guard = decision.guard as GuardType;
+    const guard = decision.guard as DecisionGuard;
     const reason = decision.reason ?? "";
     return {
         ...base,

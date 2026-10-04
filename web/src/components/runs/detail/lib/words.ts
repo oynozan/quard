@@ -1,5 +1,5 @@
 import type { GuardDecision, Step, StepStatus } from "@/lib/data/runs/types";
-import type { GuardType, StepKind } from "@/lib/data/types";
+import type { DecisionGuard, StepKind } from "@/lib/data/types";
 
 export const KIND_WORD: Record<StepKind, string> = {
     model_call: "Model call",
@@ -14,13 +14,14 @@ export const KIND_WORD: Record<StepKind, string> = {
 
 export const EDGE_WORD = { delegation: "Delegation", handoff: "Handoff", message: "Message" };
 
-export const GUARD_WORD: Record<GuardType, string> = {
+export const GUARD_WORD: Record<DecisionGuard, string> = {
     source: "Source guard",
     action: "Action guard",
     approval: "Approval guard",
     egress: "Egress guard",
     limit: "Limit guard",
     permission: "Permission check",
+    signature: "Signature feed",
 };
 
 export const STATUS_WORD: Record<StepStatus, string> = {

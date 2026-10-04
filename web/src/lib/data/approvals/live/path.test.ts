@@ -118,6 +118,21 @@ describe("checksOf", () => {
         ]);
     });
 
+    it("lists a signature from the feed that sent the call to a person", () => {
+        const stored = storedRun();
+        stored.decisions.push({
+            ...stored.decisions[4]!,
+            eventId: "e00000000000000d",
+            guard: "signature",
+            rule: "PROMPT-INJECTION-1",
+            reason: "signature_matched",
+        });
+        const run = runDetailOf({ ...stored, steps: stored.steps.filter((step) => step.stepId !== T2) }, now);
+        expect(checksOf(run, item).filter((check) => check.guard === "signature")).toEqual([
+            expect.objectContaining({ rule: "PROMPT-INJECTION-1", outcome: "ask", reason: "Signature matched" }),
+        ]);
+    });
+
     it("is empty until the run arrives", () => {
         expect(checksOf(null, item)).toEqual([]);
     });

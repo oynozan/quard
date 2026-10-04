@@ -1,4 +1,4 @@
-import type { GuardMode, GuardType, Label, Outcome, RunStatus, RunSummary, StepKind, ValueLabel } from "../types";
+import type { DecisionGuard, GuardMode, Label, Outcome, RunStatus, RunSummary, StepKind, ValueLabel } from "../types";
 
 // The run limits PROJECT.md names
 export type LimitName = "depth" | "fan-out" | "loops" | "steps" | "cost";
@@ -33,7 +33,7 @@ export type SourceScan = {
 };
 
 export type GuardDecision = {
-    guard: GuardType;
+    guard: DecisionGuard;
     tool: string;
     // The rule's own result. In observe mode the call ran anyway: show it as "would block".
     outcome: Outcome;

@@ -81,6 +81,27 @@ export function attack(runId: string, agent: string, ended = false): UploadItem[
     return events.map((event) => item(event));
 }
 
+// A signature from the feed that matched the payInvoice arguments and blocked the call
+export function signatureMatch(runId: string, agent: string): UploadItem[] {
+    return [
+        item({
+            type: "decision",
+            runId,
+            agent,
+            stepId: PAY,
+            at: at(3),
+            tool: "payInvoice",
+            guard: "signature",
+            rule: "PROMPT-INJECTION-1",
+            decision: "block",
+            mode: "block",
+            enforced: true,
+            reason: "signature_matched",
+            field: "PROMPT-INJECTION-1",
+        }),
+    ];
+}
+
 // A fetched page the detector scored in observe mode, with the score sent late
 export function scoredFetch(runId: string, agent: string): UploadItem[] {
     const base = { runId, agent, stepId: FETCH, at: at(6) };

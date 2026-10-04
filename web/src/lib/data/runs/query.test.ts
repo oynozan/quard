@@ -3,7 +3,7 @@ import { addWaiter, createProject, ingestBatch, openApprovalRequest } from "@qua
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ASKED_STEP, askInput, waitingRun } from "../../../../test/approvals-overview/live";
-import { attack, scoredFetch } from "../../../../test/runs/events";
+import { attack, scoredFetch, signatureMatch } from "../../../../test/runs/events";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
 vi.mock("@/lib/auth/session", () => ({ requireSession }));
@@ -67,6 +67,23 @@ describe("runs from Postgres", () => {
         expect((await listRuns({ query: "SUPPORT pay" })).map((row) => row.id)).toEqual([OTHER]);
         expect((await listRuns({ query: "bbbb" })).map((row) => row.id)).toEqual([RUN]);
         expect(await listRuns({ limit: 1 })).toHaveLength(1);
+    });
+
+    it("counts a signature from the feed the same in the list and in the run", async () => {
+        const projectId = await createProject(test.db, "Signatures");
+        vi.stubEnv("QUARD_PROJECT_ID", projectId);
+        await ingestBatch(test.db, projectId, [...attack(RUN, "billing"), ...signatureMatch(RUN, "billing")]);
+
+        const [row] = await listRuns();
+        const run = await getRun(RUN);
+        vi.stubEnv("QUARD_PROJECT_ID", "");
+        const blocked = { allowed: 0, asked: 0, blocked: 2 };
+        expect(row).toMatchObject({ steps: 4, decisions: blocked });
+        expect(run?.summary).toMatchObject({ steps: 4, decisions: blocked });
+        expect(run?.steps.find((step) => step.guard?.guard === "signature")).toMatchObject({
+            name: "PROMPT-INJECTION-1",
+            status: "blocked",
+        });
     });
 
     it("says which decisions came late and keeps a detector's score", async () => {

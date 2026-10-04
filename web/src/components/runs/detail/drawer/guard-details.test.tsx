@@ -53,6 +53,13 @@ describe("GuardDetails", () => {
         expect(squareTone(allowed)).toBe("bg-chart-context");
     });
 
+    it("names a signature from the feed as its guard and the signature as its rule", () => {
+        const container = show({ guard: "signature", rule: "PROMPT-INJECTION-1", reason: "signature_matched" });
+        expect(detailValue(container, "Guard")).toBe("Signature feed");
+        expect(detailValue(container, "Rule")).toBe("PROMPT-INJECTION-1");
+        expect(detailValue(container, "Decision")).toBe("Blocked");
+    });
+
     it("says an approval guard always asks and that a late decision was degraded", () => {
         const container = show({ guard: "approval", outcome: "ask", mode: null, degraded: true });
         expect(detailValue(container, "Guard")).toBe("Approval guard");
