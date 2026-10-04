@@ -10,6 +10,7 @@ import { exactOccurrences } from "../labels/value-labels.ts";
 import { vouchedLabel } from "../labels/vouched-label.ts";
 import { uploadsOn } from "../transport/configure.ts";
 import { storeLabels } from "../transport/labels.ts";
+import { activeControl } from "../transport/link/active.ts";
 import { readBaggage } from "./baggage.ts";
 import { newRun } from "./run.ts";
 import { currentScope, narrowTools, runScope, withScope, type Scope } from "./scope.ts";
@@ -99,8 +100,10 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
     );
     // The run now spans processes, so its counters move to control
     startSharing(run);
-    // Without uploads the record lives in this process only
-    if (uploadsOn() && !(await storeLabels([stored]))) {
+    // Without uploads the record lives in this process only. That is a
+    // problem once the control link lets receivers elsewhere look it up.
+    const lookedUpElsewhere = uploadsOn() || activeControl() !== undefined;
+    if (lookedUpElsewhere && !(await storeLabels([stored]))) {
         // A receiver in another process will read the message as untrusted
         warn(run.runId, agent, "label_record_not_stored", stepId);
     }

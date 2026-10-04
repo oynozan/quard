@@ -6,6 +6,7 @@ import { isGuardRefusal } from "../core/refusal.ts";
 import { printOf } from "../labels/content-index.ts";
 import { guard } from "../pipeline/guard.ts";
 import { clearRecords, findRecord, forgetRuns } from "../labels/records.ts";
+import { CONTROL_KEY, startControlServer } from "../test/control-server.ts";
 import { resetAll } from "../test/reset.ts";
 import { startWebhookServer, WEBHOOK_KEY } from "../test/webhook-server.ts";
 import { configureQuard } from "../transport/configure.ts";
@@ -187,6 +188,21 @@ describe("inject", () => {
             code: "label_record_not_stored",
         });
         await webhook.close();
+    });
+
+    it("records a warning when the control link is on but uploads are off", async () => {
+        const control = await startControlServer();
+        configureQuard({ key: CONTROL_KEY, controlUrl: control.url, hashKey: HASH_KEY });
+
+        const carrier = await runScope({ agent: "orchestrator" }, () => inject({ content: "brief" }));
+
+        expect(takeEvents().find((event) => event.type === "warning")).toMatchObject({
+            runId: carrier.runId,
+            agent: "orchestrator",
+            code: "label_record_not_stored",
+        });
+        resetAll();
+        await control.close();
     });
 });
 
