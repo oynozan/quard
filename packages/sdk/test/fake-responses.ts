@@ -3,6 +3,8 @@
 export type Turn = {
     calls?: Array<{ name: string; args: object }>;
     text?: string;
+    // Output items sent as they are, such as hosted tool calls
+    items?: object[];
     // Token counts as the API reports them
     usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens: number } };
 };
@@ -12,6 +14,9 @@ type Body = Record<string, unknown>;
 let counter = 0;
 
 function outputItems(turn: Turn, n: number): object[] {
+    if (turn.items !== undefined) {
+        return turn.items;
+    }
     if (turn.calls !== undefined) {
         return turn.calls.map((call, i) => ({
             type: "function_call",

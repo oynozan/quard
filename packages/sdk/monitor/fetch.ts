@@ -1,34 +1,25 @@
-import { labelFor, newStepId, usageOf, type TokenUsage } from "@quard/shared";
-import { getConfig } from "../core/config.ts";
+import { newStepId, usageOf, type TokenUsage } from "@quard/shared";
 import { now, record } from "../core/recorder.ts";
 import { BLOCKED_ERROR_TYPE, type GuardRefusal } from "../core/refusal.ts";
-import {
-    findCall,
-    findConversation,
-    findResponse,
-    registerConversation,
-    registerResponse,
-} from "../context/registry.ts";
+import { findCall, findConversation, findResponse, registerResponse } from "../context/registry.ts";
 import { currentScope, newScope, type Scope } from "../context/scope.ts";
 import { checkModelCall, countModelCall } from "../guards/limit/model-limits.ts";
 import { isShared } from "../guards/limit/run-counts.ts";
 import { uploadsOn } from "../transport/configure.ts";
 import { addCost, countSharedModelCall } from "../pipeline/count/steps.ts";
 import { activeControl } from "../transport/link/active.ts";
-import { briefLabel } from "./agent-brief.ts";
 import { checkRequestedCalls } from "./check.ts";
-import { unguardedOutputLabel } from "./framework-tools.ts";
+import { seeHostedItem } from "./hosted/items.ts";
+import { shapedRequest } from "./hosted/shape.ts";
+import { labelInput } from "./input-labels.ts";
 import { asRecord, parseJson } from "./json.ts";
 import { readResponsesRequest, type ResponsesRequest } from "./request.ts";
 import { functionCallOf, functionCallsOf, outputTextOf, responseIdOf, type FunctionCall } from "./response.ts";
 import { tapSse } from "./sse.ts";
+import type { Step } from "./step.ts";
 import { rememberVersion, versionOf } from "./versions.ts";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
-type Step = { scope: Scope; stepId: string; request: ResponsesRequest; started: number; version: string };
-
-const UNSEEN_HISTORY = "Earlier conversation history that Quard did not see.";
 
 // A 403 the OpenAI client won't retry, carrying the refusal as its API error
 function refusedResponse(refusal: GuardRefusal): Response {
@@ -69,62 +60,6 @@ function resolveScope(request: ResponsesRequest): Scope {
         current.run.index.absorb(linked.run.index);
     }
     return current;
-}
-
-function recordContent(step: Step, added: { id: string; keys: string[] }, label: ReturnType<typeof labelFor>): void {
-    record({
-        type: "content",
-        runId: step.scope.run.runId,
-        stepId: step.stepId,
-        agent: step.scope.agent,
-        at: now(),
-        contentId: added.id,
-        origin: label.origin,
-        trust: label.trust,
-        sensitivity: label.sensitivity,
-        flags: label.flags,
-        keys: added.keys,
-    });
-}
-
-// Labels what the model is about to read. Content seen before keeps its
-// label, and so do values in it that were seen before. History Quard
-// never saw counts as untrusted.
-function labelInput(step: Step): void {
-    const { scope, request } = step;
-    const overrides = getConfig().origins;
-    const add = (
-        text: string,
-        label: ReturnType<typeof labelFor>,
-        options: Parameters<typeof scope.run.index.add>[3],
-    ) => {
-        const added = scope.run.index.add(text, label, step.stepId, options);
-        if (added !== undefined) {
-            recordContent(step, added, label);
-        }
-    };
-    const chainedUnseen =
-        (request.previousResponseId !== undefined && findResponse(request.previousResponseId) === undefined) ||
-        (request.conversationId !== undefined && findConversation(request.conversationId) === undefined);
-    if (chainedUnseen) {
-        add(UNSEEN_HISTORY, labelFor("unknown", overrides), {});
-    }
-    for (const item of request.texts) {
-        if (item.role === "tool") {
-            const requested = findCall(item.callId);
-            add(item.text, requested?.outputLabel ?? unguardedOutputLabel(requested, overrides), {
-                exclude: requested?.argKeys,
-                keepEarlier: requested?.outputLabel === undefined,
-            });
-        } else {
-            // An agent run as a tool reads its caller's brief as user input
-            const brief = item.role === "user" ? briefLabel(scope, item.text) : undefined;
-            add(item.text, brief ?? labelFor(item.role, overrides), { keepEarlier: true });
-        }
-    }
-    if (request.conversationId !== undefined) {
-        registerConversation(request.conversationId, scope);
-    }
 }
 
 function recordModelCall(
@@ -170,6 +105,8 @@ function finishResponse(
     check: (call: FunctionCall) => void,
     status: "ok" | "error",
 ): void {
+    const output = asRecord(response)?.output;
+    (Array.isArray(output) ? output : []).forEach((item) => seeHostedItem(step, item));
     const calls = functionCallsOf(response);
     calls.forEach(check);
     const responseId = responseIdOf(response);
@@ -201,8 +138,11 @@ function watchStream(step: Step, body: ReadableStream<Uint8Array>): ReadableStre
             if (known !== undefined) {
                 check({ ...known, arguments: String(data.arguments) });
             }
-        } else if (data?.type === "response.output_item.done" && started !== undefined) {
-            check(started);
+        } else if (data?.type === "response.output_item.done") {
+            seeHostedItem(step, data.item);
+            if (started !== undefined) {
+                check(started);
+            }
         } else if (data?.type === "response.completed" || data?.type === "response.incomplete") {
             finishResponse(step, data.response, check, "ok");
         } else if (data?.type === "response.failed") {
@@ -250,7 +190,7 @@ export function createMonitorFetch(inner: Fetch): Fetch {
             return refusedResponse(refused);
         }
         const version = versionOf(request.model, request.instructions, request.tools);
-        const step: Step = { scope, stepId, request, started: Date.now(), version };
+        const step: Step = { scope, stepId, request, started: Date.now(), version, hosted: new Set() };
         scope.lastStepId = step.stepId;
         noteVersion(step);
         labelInput(step);
@@ -258,9 +198,11 @@ export function createMonitorFetch(inner: Fetch): Fetch {
         if (!shared) {
             countModelCall(scope.run);
         }
+        // Hosted tools can't be stopped mid-call, so the request is shaped first
+        const [sentInput, sentInit] = shapedRequest(input, init, request.body);
         let response: Response;
         try {
-            response = await inner(input, init);
+            response = await inner(sentInput, sentInit);
         } catch (error) {
             recordModelCall(step, "error");
             throw error;

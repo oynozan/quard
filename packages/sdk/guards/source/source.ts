@@ -57,7 +57,7 @@ function originHost(origin: string): string | undefined {
 
 // An allowlist with no known host fails closed. A block list with no
 // known host can't decide, so the content is flagged instead.
-function checkDomain(options: SourceOptions, host: string | undefined): "blocked" | "unknown" | "ok" {
+export function checkDomain(options: SourceOptions, host: string | undefined): "blocked" | "unknown" | "ok" {
     if (host === undefined) {
         if (options.allowDomains !== undefined) {
             return "blocked";

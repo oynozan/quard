@@ -31,7 +31,7 @@ function inputOf(args: unknown[]): unknown {
     return args.length === 1 ? args[0] : args;
 }
 
-function buildCall(tool: string, input: unknown, scope: Scope, stepId: string): GuardCall {
+export function buildCall(tool: string, input: unknown, scope: Scope, stepId: string): GuardCall {
     return {
         tool,
         input,

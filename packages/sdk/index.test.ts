@@ -26,6 +26,7 @@ describe("quard", () => {
             "x402",
             "x402Fetch",
             "x402Mcp",
+            "mcpApprovals",
         ]);
     });
 });

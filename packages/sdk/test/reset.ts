@@ -5,6 +5,7 @@ import { clearApprovals } from "../guards/approval/approval.ts";
 import { clearDayCounts } from "../guards/limit/daily.ts";
 import { clearRecords } from "../labels/records.ts";
 import { clearMemory } from "../memory/kept.ts";
+import { clearHostedApprovals } from "../monitor/hosted/mcp.ts";
 import { clearVersions } from "../monitor/versions.ts";
 import { stopLink, stopUploads } from "../transport/configure.ts";
 import { clearChecked } from "../x402/checked.ts";
@@ -24,4 +25,5 @@ export function resetAll(): void {
     clearVersions();
     clearChecked();
     clearPayments();
+    clearHostedApprovals();
 }
