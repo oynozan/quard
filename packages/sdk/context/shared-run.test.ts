@@ -73,6 +73,18 @@ describe("startSharing", () => {
         expect(runCounts(fake.connect())).toEqual([{ runId: run.runId, counter: "steps", add: 1, max: undefined }]);
     });
 
+    it("keeps nothing for a run that counted nothing, so it can't push out other runs' counts", () => {
+        const fake = linked();
+        const run = newRun();
+        run.counters.set("calls:pay", 3);
+        startSharing(run);
+        for (let n = 0; n < 1000; n++) {
+            startSharing(newRun());
+        }
+
+        expect(runCounts(fake.connect())).toEqual([{ runId: run.runId, counter: "calls:pay", add: 3, max: undefined }]);
+    });
+
     it("leaves the run counting here without control, until a later call finds control", () => {
         const run = newRun();
         run.modelCalls = 2;
