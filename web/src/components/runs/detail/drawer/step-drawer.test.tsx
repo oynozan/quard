@@ -191,7 +191,9 @@ describe("StepDrawer", () => {
         expect(detailValue(part, "State")).toBe("Waiting");
         expect(detailValue(part, "Decided by")).toBe("Nobody yet");
         expect(detailValue(part, "Arguments hash")).toBe("args-hash");
-        expect(screen.getByRole("link", { name: "Answer in Approvals" }).getAttribute("href")).toBe("/approvals#req-9");
+        expect(screen.getByRole("link", { name: "Answer in Approvals" }).getAttribute("href")).toBe(
+            "/approvals?request=req-9#req-9",
+        );
     });
 
     it("shows who answered an approval, without a link", () => {

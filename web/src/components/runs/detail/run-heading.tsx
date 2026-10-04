@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { approvalHref } from "@/components/approvals/lib/shown";
 import { Glyph } from "@/components/icons/glyphs";
 import { RunStatusLabel } from "@/components/kit/labels";
 import { TextLink } from "@/components/kit/links";
@@ -44,7 +45,7 @@ export function RunHeading({ run, open, showApproval }: RunHeadingProps) {
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                         {approvalId ? (
                             <Link
-                                href={`/approvals#${approvalId}`}
+                                href={approvalHref(approvalId)}
                                 className={buttonVariants({ variant: "outline", size: "sm" })}
                             >
                                 Open approval

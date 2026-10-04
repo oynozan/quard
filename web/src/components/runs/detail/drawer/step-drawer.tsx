@@ -1,5 +1,6 @@
 "use client";
 
+import { approvalHref } from "@/components/approvals/lib/shown";
 import { Absent, DetailList, DetailRow, StatusValue } from "@/components/kit/detail/detail-list";
 import { DrawerSection, IdentifierRow } from "@/components/kit/detail/drawer-parts";
 import { LabelChip } from "@/components/kit/labels";
@@ -191,7 +192,7 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
                         </DetailRow>
                     </DetailList>
                     {step.approval.state === "waiting" ? (
-                        <ArrowLink href={`/approvals#${step.approval.requestId}`} className="mt-4">
+                        <ArrowLink href={approvalHref(step.approval.requestId)} className="mt-4">
                             Answer in Approvals
                         </ArrowLink>
                     ) : null}

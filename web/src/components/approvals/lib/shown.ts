@@ -20,6 +20,11 @@ export function linkedOf(params: RawParams): string | undefined {
     return value !== undefined && REQUEST_ID.test(value) ? value : undefined;
 }
 
+// A link to one open request, which the page lists wherever it falls in line
+export function approvalHref(id: string): string {
+    return `/approvals?request=${id}#${id}`;
+}
+
 // The address that lists one more step, still with the linked request
 export function moreHref(shown: number, linked?: string): string {
     const query = new URLSearchParams({ shown: String(shown + SHOWN_STEP) });

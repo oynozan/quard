@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { linkedOf, moreHref, SHOWN_STEP, shownOf } from "./shown";
+import { approvalHref, linkedOf, moreHref, SHOWN_STEP, shownOf } from "./shown";
 
 const ID = "apr_7f31c0d2a9b84e15";
 
@@ -28,6 +28,12 @@ describe("linkedOf", () => {
         for (const request of [undefined, "", "apr_7F31C0D2A9B84E15", `${ID}0`, "grt_7f31c0d2a9b84e15"]) {
             expect(linkedOf({ request })).toBeUndefined();
         }
+    });
+});
+
+describe("approvalHref", () => {
+    it("links to one request, which the page lists and scrolls to", () => {
+        expect(approvalHref(ID)).toBe(`/approvals?request=${ID}#${ID}`);
     });
 });
 

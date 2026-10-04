@@ -77,7 +77,9 @@ describe("RunView", () => {
 
     it("links to the approval from the heading when no step is waiting", () => {
         render(<RunView run={makeDetail({ summary: makeRow({ approvalId: "ap-7" }) })} />);
-        expect(screen.getByRole("link", { name: "Open approval" }).getAttribute("href")).toBe("/approvals#ap-7");
+        expect(screen.getByRole("link", { name: "Open approval" }).getAttribute("href")).toBe(
+            "/approvals?request=ap-7#ap-7",
+        );
         expect(screen.queryByRole("link", { name: "Review in Approvals" })).toBeNull();
     });
 
@@ -88,7 +90,9 @@ describe("RunView", () => {
         });
         const { container } = render(<RunView run={run} />);
         expect(screen.queryByRole("link", { name: "Open approval" })).toBeNull();
-        expect(screen.getByRole("link", { name: "Review in Approvals" }).getAttribute("href")).toBe("/approvals#ap-7");
+        expect(screen.getByRole("link", { name: "Review in Approvals" }).getAttribute("href")).toBe(
+            "/approvals?request=ap-7#ap-7",
+        );
         expect(container.textContent).toContain("Running for 1 min 15 s");
     });
 
@@ -115,7 +119,7 @@ describe("RunView", () => {
         expect(container.textContent).toContain("payInvoice by billing is waiting for a human · 1 min 0 s");
         expect(container.textContent).toContain("Running for 1 min 6 s");
         const review = screen.getByRole("link", { name: "Review in Approvals" });
-        expect(review.getAttribute("href")).toBe(`/approvals#${REQUEST}`);
+        expect(review.getAttribute("href")).toBe(`/approvals?request=${REQUEST}#${REQUEST}`);
         expect(screen.queryByRole("link", { name: "Open approval" })).toBeNull();
     });
 
@@ -125,7 +129,7 @@ describe("RunView", () => {
         expect(within(drawer).getByRole("heading", { level: 2, name: "payInvoice" })).toBeTruthy();
         expect(drawer.textContent).toContain("1 min 0 s so far");
         const answer = within(drawer).getByRole("link", { name: "Answer in Approvals" });
-        expect(answer.getAttribute("href")).toBe(`/approvals#${REQUEST}`);
+        expect(answer.getAttribute("href")).toBe(`/approvals?request=${REQUEST}#${REQUEST}`);
     });
 
     it("opens the step named in the link in the drawer", () => {

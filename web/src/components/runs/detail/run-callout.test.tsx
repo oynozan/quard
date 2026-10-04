@@ -37,7 +37,9 @@ describe("RunCallout", () => {
         expect(container.textContent).toBe(
             "payInvoice by billing is waiting for a human · 1 min 35 sReview in Approvals",
         );
-        expect(screen.getByRole("link", { name: "Review in Approvals" }).getAttribute("href")).toBe("/approvals#ap-7");
+        expect(screen.getByRole("link", { name: "Review in Approvals" }).getAttribute("href")).toBe(
+            "/approvals?request=ap-7#ap-7",
+        );
     });
 
     it("links to the approvals page when the run has no approval id", () => {

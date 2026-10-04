@@ -27,7 +27,9 @@ describe("RunHeading", () => {
 
     it("links to the run's approval and incident", () => {
         render(<RunHeading run={makeRow({ approvalId: "ap-7", incidentId: "inc-3" })} open={false} showApproval />);
-        expect(screen.getByRole("link", { name: "Open approval" }).getAttribute("href")).toBe("/approvals#ap-7");
+        expect(screen.getByRole("link", { name: "Open approval" }).getAttribute("href")).toBe(
+            "/approvals?request=ap-7#ap-7",
+        );
         expect(screen.getByRole("link", { name: "Open incident" }).getAttribute("href")).toBe("/incidents/inc-3");
     });
 
