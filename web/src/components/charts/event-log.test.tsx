@@ -58,15 +58,10 @@ describe("EventLog", () => {
         ]);
     });
 
-    it("announces new lines politely and shows a blinking cursor while live", () => {
+    it("announces new lines politely and shows a blinking cursor", () => {
         const { container } = render(<EventLog events={[event("allow", "a")]} />);
         expect(container.firstElementChild?.getAttribute("aria-live")).toBe("polite");
         expect(container.querySelector(".cursor-blink")).toBeTruthy();
-    });
-
-    it("hides the cursor when the feed is not live", () => {
-        const { container } = render(<EventLog events={[event("allow", "a")]} live={false} />);
-        expect(container.querySelector(".cursor-blink")).toBeNull();
     });
 
     it("says why it is empty in one quiet line above the cursor", () => {

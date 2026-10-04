@@ -1,15 +1,11 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
 
-// The 6px green live square, hollow when the feed is offline.
-export function LiveMark({ live = true }: { live?: boolean }) {
+// The 6px green live square.
+export function LiveMark() {
     return (
         <span className="inline-flex items-center gap-[7px] text-[11px] font-light text-ink-muted">
-            <span
-                aria-hidden
-                className={cn("size-[6px]", live ? "bg-signal" : "border border-line-strong bg-transparent")}
-            />
-            {live ? "Live" : "Offline"}
+            <span aria-hidden className="size-[6px] bg-signal" />
+            Live
         </span>
     );
 }

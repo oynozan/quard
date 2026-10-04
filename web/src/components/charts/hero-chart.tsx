@@ -20,11 +20,10 @@ type HeroChartProps = {
     greeting: string;
     values: number[];
     endsAt: number;
-    live?: boolean;
 };
 
 // The greeting over the last 24 hours of model calls as green cell columns
-export function HeroChart({ greeting, values: given, endsAt, live = true }: HeroChartProps) {
+export function HeroChart({ greeting, values: given, endsAt }: HeroChartProps) {
     const [ref, width] = useWidth<HTMLDivElement>(978);
     const [hover, setHover] = useState<number | null>(null);
     const [table, setTable] = useState(false);
@@ -79,7 +78,7 @@ export function HeroChart({ greeting, values: given, endsAt, live = true }: Hero
                 <Greeting text={greeting} />
                 <div className="flex items-center gap-[14px] pb-[5px]">
                     <Readout label={`Model calls per ${per}`} value={empty ? "—" : formatInt(total)} suffix="in 24h" />
-                    <LiveMark live={live} />
+                    <LiveMark />
                     <HeaderDivider />
                     <TableToggle pressed={table} onToggle={() => setTable(!table)} />
                 </div>
@@ -138,7 +137,7 @@ export function HeroChart({ greeting, values: given, endsAt, live = true }: Hero
                                     <path d={overlay.lit} fill="var(--mint)" />
                                 </>
                             ) : null}
-                            {live ? <rect className="cursor-blink" {...layout.cursor} fill="var(--signal)" /> : null}
+                            <rect className="cursor-blink" {...layout.cursor} fill="var(--signal)" />
                         </svg>
 
                         {empty ? (

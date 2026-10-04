@@ -8,8 +8,8 @@ const ENDS_AT = Date.UTC(2026, 4, 1, 12, 0);
 const VALUES = Array.from({ length: 144 }, (_, i) => (i === 50 ? 900 : i === 143 ? 120 : 100));
 const EMPTY = "No model calls in the last 24 hours";
 
-function hero(live?: boolean) {
-    return render(<HeroChart greeting="Good morning, Ada" values={VALUES} endsAt={ENDS_AT} live={live} />);
+function hero() {
+    return render(<HeroChart greeting="Good morning, Ada" values={VALUES} endsAt={ENDS_AT} />);
 }
 
 function chart() {
@@ -64,12 +64,6 @@ describe("HeroChart", () => {
         );
         expect(screen.getByText("Live")).toBeTruthy();
         expect(container.querySelector("rect.cursor-blink")).toBeTruthy();
-    });
-
-    it("drops the cursor and says Offline when the feed is down", () => {
-        const { container } = hero(false);
-        expect(screen.getByText("Offline")).toBeTruthy();
-        expect(container.querySelector("rect.cursor-blink")).toBeNull();
     });
 
     it("labels the y gridlines and the times along the bottom", () => {

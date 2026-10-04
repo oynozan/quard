@@ -10,10 +10,10 @@ const SQUARE: Record<Outcome, string> = {
     block: "bg-danger",
 };
 
-type EventLogProps = { events: DecisionEvent[]; live?: boolean; emptyText?: string };
+type EventLogProps = { events: DecisionEvent[]; emptyText?: string };
 
 // The latest guard decisions, tailed like terminal output
-export function EventLog({ events, live = true, emptyText = "No guard decisions yet" }: EventLogProps) {
+export function EventLog({ events, emptyText = "No guard decisions yet" }: EventLogProps) {
     return (
         <div className="mono overflow-x-auto px-3 py-[10px] text-[11px] leading-[20px]" aria-live="polite">
             {events.length > 0 ? (
@@ -37,7 +37,7 @@ export function EventLog({ events, live = true, emptyText = "No guard decisions 
             ) : (
                 <p className="font-sans font-light text-ink-muted">{emptyText}</p>
             )}
-            {live ? <span aria-hidden className="cursor-blink mt-1 block h-[10px] w-1 bg-signal" /> : null}
+            <span aria-hidden className="cursor-blink mt-1 block h-[10px] w-1 bg-signal" />
         </div>
     );
 }
