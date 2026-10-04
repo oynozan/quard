@@ -39,6 +39,7 @@ export type {
     ApprovalWaiterInput,
     DecidedApprovalItem,
     OnceClaim,
+    OnceTurn,
     OpenApprovalItem,
     RequestDecision,
     RunWaiter,

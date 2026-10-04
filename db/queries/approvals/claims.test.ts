@@ -170,15 +170,15 @@ describe("claimRequest", () => {
         const projectId = await createProject(test.db, "Acme");
         const { id } = await openApprovalRequest(test.db, projectId, requestInput());
         const ask = askId();
-        expect(await claimRequest(test.db, projectId, id, ask)).toBe(false);
+        expect(await claimRequest(test.db, projectId, id, ask)).toBe("used");
         await decideApproval(test.db, projectId, id, "once", "dana@acme.com");
 
-        expect(await claimRequest(test.db, projectId, id, ask)).toBe(true);
+        expect(await claimRequest(test.db, projectId, id, ask)).toBe("runs");
         const usedAt = (await getApprovalRequest(test.db, projectId, id))?.usedAt;
-        expect(await claimRequest(test.db, projectId, id, ask)).toBe(true);
+        expect(await claimRequest(test.db, projectId, id, ask)).toBe("runs");
         expect((await getApprovalRequest(test.db, projectId, id))?.usedAt).toEqual(usedAt);
-        expect(await claimRequest(test.db, projectId, id, askId())).toBe(false);
-        expect(await claimRequest(test.db, await createProject(test.db, "Other"), id, ask)).toBe(false);
+        expect(await claimRequest(test.db, projectId, id, askId())).toBe("used");
+        expect(await claimRequest(test.db, await createProject(test.db, "Other"), id, ask)).toBe("used");
     });
 
     it("never claims a deny or an always", async () => {
@@ -186,8 +186,8 @@ describe("claimRequest", () => {
         const denied = await decided(projectId, "deny");
         const always = await decided(projectId, "always", "e".repeat(32));
 
-        expect(await claimRequest(test.db, projectId, denied, askId())).toBe(false);
-        expect(await claimRequest(test.db, projectId, always, askId())).toBe(false);
+        expect(await claimRequest(test.db, projectId, denied, askId())).toBe("used");
+        expect(await claimRequest(test.db, projectId, always, askId())).toBe("used");
     });
 
     it("lets only one of two calls at the same time claim it", async () => {
@@ -196,6 +196,32 @@ describe("claimRequest", () => {
 
         const claims = await Promise.all([askId(), askId()].map((ask) => claimRequest(many, projectId, id, ask)));
 
-        expect(claims.sort()).toEqual([false, true]);
+        expect(claims.sort()).toEqual(["runs", "used"]);
+    });
+
+    it("gives it to the call that waits longest while it still beats, and makes the others wait", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const { id } = await openApprovalRequest(test.db, projectId, requestInput());
+        const [first, second] = await waitOn(projectId, id, 2);
+        await decideApproval(test.db, projectId, id, "once", "dana@acme.com");
+
+        expect(await claimRequest(test.db, projectId, id, second!)).toBe("waits");
+        expect(await claimRequest(test.db, projectId, id, askId())).toBe("waits");
+        expect(await claimRequest(test.db, projectId, id, first!)).toBe("runs");
+        expect(await claimRequest(test.db, projectId, id, second!)).toBe("used");
+    });
+
+    it("passes over calls ahead that stopped beating or waiting, but not one that asks itself", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const { id } = await openApprovalRequest(test.db, projectId, requestInput());
+        const [gone, done, next, last] = await waitOn(projectId, id, 4);
+        await stopBeating(gone!);
+        await finishWaiters(test.db, projectId, [done!]);
+        await stopBeating(last!);
+        await decideApproval(test.db, projectId, id, "once", "dana@acme.com");
+
+        expect(await claimRequest(test.db, projectId, id, last!)).toBe("waits");
+        expect(await claimRequest(test.db, projectId, id, gone!)).toBe("runs");
+        expect(await claimRequest(test.db, projectId, id, next!)).toBe("used");
     });
 });

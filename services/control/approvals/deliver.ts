@@ -39,20 +39,22 @@ export function createDelivery(ctx: Context): Delivery {
         await settle(ctx, connection, ask, placement);
     }
 
-    // Only one live call runs an approve once, the one that holds it already or else the oldest
+    // Only one call runs an approve once. The claim follows the stored order, not
+    // this registry's: the call that waits longest and still beats goes first,
+    // wherever it is connected. The others keep waiting until it ran, then ask again.
     async function once(waiters: Waiter[], decision: RequestDecision): Promise<void> {
         // A call with no recent beat may be gone, so it waits until it beats again
         const since = ctx.now().getTime() - APPROVAL_STALE_MS;
-        const live = waiters.filter((waiter) => waiter.beatAt >= since);
-        const holder = live.filter((waiter) => waiter.ask.askId === decision.usedBy);
-        let tried = false;
-        for (const waiter of [...holder, ...live.filter((other) => !holder.includes(other))]) {
+        for (const waiter of waiters.filter((waiter) => waiter.beatAt >= since)) {
             if (waiter.done) {
                 continue;
             }
-            const runs = !tried && (await claimRequest(ctx.db, decision.projectId, decision.id, waiter.ask.askId));
-            tried = true;
-            await (runs ? answer([waiter], decision) : reask(waiter));
+            const turn = await claimRequest(ctx.db, decision.projectId, decision.id, waiter.ask.askId);
+            if (turn === "runs") {
+                await answer([waiter], decision);
+            } else if (turn === "used") {
+                await reask(waiter);
+            }
         }
     }
 

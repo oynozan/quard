@@ -2,7 +2,7 @@ import { sql, type ExpressionBuilder } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import type { Database } from "../../schema/database.ts";
 import { STILL_WAITS } from "./live.ts";
-import type { OnceClaim } from "./types.ts";
+import type { OnceClaim, OnceTurn } from "./types.ts";
 
 // No other call that still waits on the request row `approval_requests` is
 // ahead of this one. Calls on a request wait their turn by `since`, and a call
@@ -98,17 +98,28 @@ export async function claimOnce(db: Db, projectId: string, claim: OnceClaim): Pr
     return claimed?.id;
 }
 
-// Claims a decided "approve once" for this call. True when it is this call's
-// to run: unused until now, or already claimed by the same call.
-export async function claimRequest(db: Db, projectId: string, requestId: string, askId: string): Promise<boolean> {
+// Claims a decided "approve once" for this call. It runs when the call
+// already holds it, or when it is unused and the call is first in line.
+export async function claimRequest(db: Db, projectId: string, requestId: string, askId: string): Promise<OnceTurn> {
     const row = await db
         .updateTable("approval_requests")
         .set({ used_by: askId, used_at: sql<Date>`coalesce(used_at, now())` })
         .where("project_id", "=", projectId)
         .where("id", "=", requestId)
         .where("answer", "=", "once")
-        .where((eb) => eb.or([eb("used_by", "is", null), eb("used_by", "=", askId)]))
+        .where((eb) => eb.or([eb("used_by", "=", askId), eb.and([eb("used_by", "is", null), firstInLine(askId)])]))
         .returning("id")
         .executeTakeFirst();
-    return row !== undefined;
+    if (row !== undefined) {
+        return "runs";
+    }
+    const unused = await db
+        .selectFrom("approval_requests")
+        .select("id")
+        .where("project_id", "=", projectId)
+        .where("id", "=", requestId)
+        .where("answer", "=", "once")
+        .where("used_by", "is", null)
+        .executeTakeFirst();
+    return unused === undefined ? "used" : "waits";
 }

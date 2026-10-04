@@ -21,13 +21,15 @@ async function resume(
     if (request === undefined || !sameCall(request, ask)) {
         return undefined;
     }
-    if (request.answer === null) {
+    const turn = request.answer === "once" ? await claimRequest(ctx.db, projectId, request.id, ask.askId) : undefined;
+    // Another call already ran this "approve once"
+    if (turn === "used") {
+        return undefined;
+    }
+    // Still open, or a call ahead of this one still beats and runs it first
+    if (request.answer === null || turn === "waits") {
         await addWaiter(ctx.db, projectId, waiterInput(ask, request.id));
         return { type: "asked", requestId: request.id };
-    }
-    // Another call already ran this "approve once"
-    if (request.answer === "once" && !(await claimRequest(ctx.db, projectId, request.id, ask.askId))) {
-        return undefined;
     }
     return { type: "decided", answer: request.answer, requestId: request.id };
 }

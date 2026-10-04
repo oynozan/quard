@@ -96,3 +96,7 @@ export type RequestDecision = { projectId: string; id: string; answer: ApprovalA
 
 // A call that may use an earlier "approve once" for the same agent, tool and arguments
 export type OnceClaim = { askId: string; agent: string; tool: string; argsHash: string };
+
+// What an "approve once" means for a call: it runs, it waits while a call ahead
+// of it still beats, or another call used it (also said of any other answer)
+export type OnceTurn = "runs" | "waits" | "used";

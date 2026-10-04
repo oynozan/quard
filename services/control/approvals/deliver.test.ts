@@ -1,4 +1,4 @@
-import { claimRequest, decideApproval, decidedRequests, getApprovalRequest } from "@quard/db";
+import { decideApproval, decidedRequests, getApprovalRequest } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { APPROVAL_STALE_MS, type ApprovalAnswer, type AskMessage } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -149,7 +149,7 @@ describe("delivery of approve once", () => {
         const { calls, requestId } = await waitingCalls(ctx, project.projectId, 2);
         const [oldest, holder] = calls;
         await decideApproval(test.db, project.projectId, requestId, "once", DANA);
-        await claimRequest(test.db, project.projectId, requestId, String(holder?.message.askId));
+        await usedBy(requestId, String(holder?.message.askId));
 
         await delivery.check();
 
@@ -208,6 +208,7 @@ describe("delivery of approve once", () => {
         const { calls, requestId } = await waitingCalls(ctx, project.projectId, 3);
         const [gone, alive, late] = calls;
         clock.now += APPROVAL_STALE_MS + 1;
+        await staleRows(gone, late);
         await beatOf(ctx, alive!);
         await decideApproval(test.db, project.projectId, requestId, "once", DANA);
 
