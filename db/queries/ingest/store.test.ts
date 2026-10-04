@@ -10,6 +10,7 @@ import {
     modelCall,
     RUN,
     started,
+    TOOL_STEP,
     toolCall,
     warning,
 } from "../../test/events.ts";
@@ -97,6 +98,26 @@ describe("ingestBatch", () => {
             .where("project_id", "=", projectId)
             .execute();
         expect(events).toHaveLength(3);
+    });
+
+    it("counts model calls an enforced step or cost limit refused as blocked, each step once", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const refused = { tool: "gpt-5.4-mini", guard: "limit", reason: "limit_reached", field: undefined };
+        const limit = (stepId: string, rule: string, more = {}) =>
+            item({ ...decision(), ...refused, stepId, rule, ...more });
+        await ingestBatch(test.db, projectId, [
+            item(started()),
+            item(toolCall("blocked")),
+            // A refused call over both limits, then one more on the blocked tool call's step
+            limit("8".repeat(16), "max-steps"),
+            limit("8".repeat(16), "max-cost"),
+            limit(TOOL_STEP, "max-steps"),
+            // Observed, or not a step or cost limit
+            limit("9".repeat(16), "max-steps", { mode: "observe", enforced: false }),
+            limit("a".repeat(16), "max-depth"),
+        ]);
+
+        expect(await getRun(test.db, projectId, RUN)).toMatchObject({ blocked: 2, toolCalls: 1 });
     });
 
     it("joins later batches to the run, keeping the earliest start", async () => {

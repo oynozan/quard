@@ -46,6 +46,17 @@ async function upsertRuns(trx: Trx, projectId: string, items: RunItem[]): Promis
     }
 }
 
+// Blocked tool calls, and model calls an enforced step or cost limit
+// refused. A step blocked twice counts once.
+const BLOCKED = sql<number>`(SELECT count(*)::int FROM (
+    SELECT s.step_id FROM steps s
+    WHERE s.project_id = runs.project_id AND s.run_id = runs.run_id AND s.kind = 'tool_call' AND s.status = 'blocked'
+    UNION
+    SELECT d.step_id FROM decisions d
+    WHERE d.project_id = runs.project_id AND d.run_id = runs.run_id AND d.guard = 'limit'
+        AND d.rule IN ('max-steps', 'max-cost') AND d.enforced AND d.decision = 'block'
+) b)`;
+
 // Counts the runs list shows, worked out again from the stored rows
 async function refreshRuns(trx: Trx, projectId: string, runIds: string[]): Promise<void> {
     const steps = (filter: string) =>
@@ -55,7 +66,7 @@ async function refreshRuns(trx: Trx, projectId: string, runIds: string[]): Promi
         .set({
             model_calls: steps("s.kind = 'model_call'"),
             tool_calls: steps("s.kind = 'tool_call'"),
-            blocked: steps("s.kind = 'tool_call' AND s.status = 'blocked'"),
+            blocked: BLOCKED,
             cost_usd: sql<number>`coalesce((SELECT sum((s.detail->>'costUsd')::double precision) FROM steps s WHERE s.project_id = runs.project_id AND s.run_id = runs.run_id AND s.kind = 'model_call'), 0)`,
             // A model call that answered but has no price makes the total unknown
             cost_known: sql<boolean>`NOT EXISTS (SELECT 1 FROM steps s WHERE s.project_id = runs.project_id AND s.run_id = runs.run_id AND s.kind = 'model_call' AND s.status = 'ok' AND s.detail->>'costUsd' IS NULL)`,
