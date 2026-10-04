@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { tool, type FunctionTool, type ToolInputParameters, type ToolOptions } from "@openai/agents";
 import { GuardBlockedError } from "../../core/refusal.ts";
 import type { GuardOptions } from "../../guards/options.ts";
-import { guard } from "../../pipeline/guard.ts";
+import { guardWithSignal } from "../../pipeline/guard.ts";
 import { quardGuardrail } from "./guardrail.ts";
 
 export type GuardedToolOptions<TParameters extends ToolInputParameters, Context> = ToolOptions<TParameters, Context> & {
@@ -17,6 +17,13 @@ type Extras = { context: unknown; details: unknown };
 // checks the input only; the tool's own execute still gets them.
 const extras = new AsyncLocalStorage<Extras>();
 
+// The SDK aborts this signal when it gives up on the call: on the tool's
+// timeout, when the app aborts the run, or when a sibling call fails
+function signalOf(details: unknown): AbortSignal | undefined {
+    const signal = (details as { signal?: unknown } | undefined)?.signal;
+    return signal instanceof AbortSignal ? signal : undefined;
+}
+
 // Like the SDK's tool(), with every call run through guard()
 export function guardedTool<TParameters extends ToolInputParameters = undefined, Context = unknown>(
     options: GuardedToolOptions<TParameters, Context>,
@@ -27,7 +34,7 @@ export function guardedTool<TParameters extends ToolInputParameters = undefined,
         ...rest,
         execute: async (input: unknown, context: unknown, details: unknown) => {
             try {
-                return await extras.run({ context, details }, () => guarded(input));
+                return await extras.run({ context, details }, () => guarded(signalOf(details), [input]));
             } catch (error) {
                 // Quard's guardrail stops the run with it
                 if (error instanceof GuardBlockedError) {
@@ -41,7 +48,7 @@ export function guardedTool<TParameters extends ToolInputParameters = undefined,
     } as unknown as ToolOptions<TParameters, Context>);
     // The guards take the name the SDK gave the tool
     const list = Array.isArray(guards) ? guards : [guards];
-    const guarded = guard(
+    const guarded = guardWithSignal(
         (input: unknown) => {
             const call = extras.getStore() as Extras;
             return run(input, call.context, call.details);
