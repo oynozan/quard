@@ -1,6 +1,7 @@
 import { chunkQueue, createAgentKey, createProject } from "@quard/db";
+import { projectKeys } from "@quard/db/server";
 import { startTestDb, type TestDb } from "@quard/db/testing";
-import { createRedactor, parseHashKey } from "@quard/shared";
+import { parseHashKey } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.ts";
 
@@ -12,7 +13,7 @@ let app: ReturnType<typeof createApp>;
 
 beforeAll(async () => {
     test = await startTestDb();
-    app = createApp({ db: test.db, redactor: createRedactor(parseHashKey("ab".repeat(32))) });
+    app = createApp({ db: test.db, keys: projectKeys(parseHashKey("ab".repeat(32))) });
 }, 60_000);
 
 afterAll(async () => {

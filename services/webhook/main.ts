@@ -9,7 +9,7 @@ if (typeof config === "string") {
     console.error(config);
     process.exitCode = 1;
 } else {
-    const app = createApp({ db: connect(config.databaseUrl), redactor: config.redactor });
+    const app = createApp({ db: connect(config.databaseUrl), keys: config.keys });
     serve({ fetch: app.fetch, port: config.port }, (info) => {
         console.log(`webhook listening on port ${info.port}`);
     });

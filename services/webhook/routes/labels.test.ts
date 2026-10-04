@@ -1,9 +1,11 @@
 import { createAgentKey, createProject, findMemoryRecords, findMessageRecord, revokeAgentKey } from "@quard/db";
+import { projectKeys } from "@quard/db/server";
 import { startTestDb, type TestDb } from "@quard/db/testing";
-import { createRedactor, parseHashKey, type MemoryRecord, type MessageRecord, type ValueRecord } from "@quard/shared";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parseHashKey, type MemoryRecord, type MessageRecord, type ValueRecord } from "@quard/shared";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.ts";
 
+const KEYS = projectKeys(parseHashKey("ab".repeat(32)));
 const SECRET = "sk-proj-abcdefghijklmnopqrstuvwx";
 const PRINT = "b".repeat(64);
 const VALUE: ValueRecord = {
@@ -22,7 +24,7 @@ let key: string;
 
 beforeAll(async () => {
     test = await startTestDb();
-    app = createApp({ db: test.db, redactor: createRedactor(parseHashKey("ab".repeat(32))) });
+    app = createApp({ db: test.db, keys: KEYS });
     projectId = await createProject(test.db, "Acme");
     key = (await createAgentKey(test.db, projectId, "orchestrator")).key;
 }, 60_000);
@@ -129,6 +131,15 @@ describe("POST /v1/labels", () => {
         expect(found[0]).toMatchObject({ sender: "agent-sk-proj-…", tools: ["pay-sk-proj-…"] });
         expect(found[1]).toMatchObject({ store: "notes-sk-proj-…", agent: "billing j…@acme.com" });
         expect(found[1]?.values[0]).toMatchObject({ origin: "mcp:crm?token=…", flags: ["token=…", "j…@acme.com"] });
+    });
+
+    it("redacts with the redactor of the key's project", async () => {
+        const redactor = vi.spyOn(KEYS, "redactor");
+
+        expect((await post({ records: [message()] })).status).toBe(201);
+
+        expect(redactor).toHaveBeenCalledWith(projectId);
+        redactor.mockRestore();
     });
 
     it("stores a resent message once", async () => {

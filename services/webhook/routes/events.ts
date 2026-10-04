@@ -1,17 +1,16 @@
-import { ingestBatch, recordConfigErrors, recordDropped, type Db } from "@quard/db";
-import { MAX_BATCH_BYTES, redactEvent, uploadBatch, type Redactor } from "@quard/shared";
+import { ingestBatch, recordConfigErrors, recordDropped } from "@quard/db";
+import { MAX_BATCH_BYTES, redactEvent, uploadBatch } from "@quard/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import type { WebhookDeps } from "../http/deps.ts";
 import { issuesOf, projectFor, readJson } from "../http/request.ts";
-
-export type EventDeps = { db: Db; redactor: Redactor };
 
 // The SDK keeps each batch's events under MAX_BATCH_BYTES; the rest is
 // room for the envelope
 const MAX_BODY = MAX_BATCH_BYTES + 1024 * 1024;
 
 // Events from the SDK, in batches. Agent keys only.
-export function eventRoutes(deps: EventDeps): Hono {
+export function eventRoutes(deps: WebhookDeps): Hono {
     return new Hono().post(
         "/v1/events",
         bodyLimit({ maxSize: MAX_BODY, onError: (c) => c.json({ error: "batch_too_large" }, 413) }),
@@ -30,8 +29,9 @@ export function eventRoutes(deps: EventDeps): Hono {
                         "(a full buffer, or values that could not be sent as JSON)",
                 );
             }
-            // Redacted again here, so an old or broken SDK never stores a raw value
-            const items = batch.data.events.map((item) => ({ ...item, event: redactEvent(deps.redactor, item.event) }));
+            // Redacted again with the project's key, so an old or broken SDK never stores a raw value
+            const redactor = deps.keys.redactor(projectId);
+            const items = batch.data.events.map((item) => ({ ...item, event: redactEvent(redactor, item.event) }));
             const stored = await ingestBatch(deps.db, projectId, items);
             // After the events, so a resend after a failed ingest counts these once.
             // The first event's id names the batch; the schema asks for one at least.

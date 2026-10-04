@@ -1,10 +1,11 @@
 import { createAgentKey, createProject, droppedEvents, getRun, listConfigErrors, revokeAgentKey } from "@quard/db";
+import { projectKeys } from "@quard/db/server";
 import { startTestDb, type TestDb } from "@quard/db/testing";
-import { createRedactor, keyedHash, parseHashKey } from "@quard/shared";
+import { keyedHash, parseHashKey, projectHashKey } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.ts";
 
-const HASH_KEY = parseHashKey("ab".repeat(32));
+const INSTALL_KEY = parseHashKey("ab".repeat(32));
 const IBAN = "DE89370400440532013000";
 const RUN = "1".repeat(32);
 const AT = "2026-10-03T12:00:00.000Z";
@@ -16,7 +17,7 @@ let key: string;
 
 beforeAll(async () => {
     test = await startTestDb();
-    app = createApp({ db: test.db, redactor: createRedactor(HASH_KEY) });
+    app = createApp({ db: test.db, keys: projectKeys(INSTALL_KEY) });
     projectId = await createProject(test.db, "Acme");
     key = (await createAgentKey(test.db, projectId, "billing")).key;
 }, 60_000);
@@ -67,6 +68,11 @@ function rawBatch(runId = RUN) {
     };
 }
 
+// The IBAN's key as the project stores it, hashed with the project's key
+function ibanKey(project: string): string {
+    return `iban:DE89…3000#${keyedHash(projectHashKey(INSTALL_KEY, project), "iban", IBAN)}`;
+}
+
 function post(body: unknown, auth = `Bearer ${key}`, raw = false) {
     return app.request("/v1/events", {
         method: "POST",
@@ -87,8 +93,20 @@ describe("POST /v1/events", () => {
         expect(text).not.toContain("jane@acme.com");
         expect(text).not.toContain("secret-value");
         const run = await getRun(test.db, projectId, RUN);
-        expect(run?.labels[0]?.keys).toEqual([`iban:DE89…3000#${keyedHash(HASH_KEY, "iban", IBAN)}`]);
+        expect(run?.labels[0]?.keys).toEqual([ibanKey(projectId)]);
         expect(run).toMatchObject({ blocked: 1, degraded: true });
+    });
+
+    it("hashes each project's values with that project's own key", async () => {
+        const other = await createProject(test.db, "Other");
+        const otherKey = (await createAgentKey(test.db, other, "billing")).key;
+
+        expect((await post(rawBatch(), `Bearer ${otherKey}`)).status).toBe(202);
+
+        const stored = (await getRun(test.db, other, RUN))?.labels[0]?.keys;
+        expect(stored).toEqual([ibanKey(other)]);
+        expect(stored).not.toEqual([ibanKey(projectId)]);
+        expect(JSON.stringify(stored)).not.toContain(keyedHash(INSTALL_KEY, "iban", IBAN));
     });
 
     it("stores a card number sent as a number masked", async () => {
