@@ -2,9 +2,9 @@ import { RunState, Runner, StreamedRunResult, type Agent } from "@openai/agents"
 import { currentScope, finishRun, newScope, withScope } from "../../context/scope.ts";
 import { unwrapBlocked } from "./blocked.ts";
 import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
-import { carryLabels, notePause, notePauseLater, pausedOf, takePaused, type Paused } from "./paused.ts";
+import { carryLabels, notePause, notePauseLater, noteStream, pausedOf, takePaused } from "./paused.ts";
+import type { Finish, Paused } from "./paused.ts";
 import { noteSdkTools } from "./sdk-tools.ts";
-import { beforeStreamEnd } from "./stream-end.ts";
 
 type Run = (this: Runner, agent: Agent, input: unknown, options?: unknown) => Promise<unknown>;
 
@@ -28,28 +28,21 @@ function startRun<T>(agent: Agent, paused: Paused | undefined, call: () => Promi
     const frame = topFrame(back?.frame ?? root, agent.name);
     carryLabels(paused, root.run);
     noteSdkTools(root.run, agent);
-    const end = (result: unknown) => {
-        if (!notePause(result, { run: root.run, resume: { root, frame } })) {
-            finishRun(root);
-        }
-    };
-    const fail = (error: unknown) => {
-        finishRun(root, { error });
-    };
+    const own: Paused = { run: root.run, resume: { root, frame } };
+    const finish: Finish = (failure) => finishRun(root, failure);
     return withScope(frame, () => unwrapBlocked(call())).then(
         (result) => {
             if (result instanceof StreamedRunResult) {
-                // The caller reads the stream while the run goes on. The
-                // pause is noted before the caller can see the stream end.
-                beforeStreamEnd(result, () => end(result));
-                result.completed.then(undefined, fail);
-            } else {
-                end(result);
+                // The caller reads the stream while the run goes on, and
+                // may resume its state before the stream ends
+                noteStream(result, own, finish);
+            } else if (!notePause(result, own)) {
+                finish();
             }
             return result;
         },
         (error: unknown) => {
-            fail(error);
+            finish({ error });
             throw error;
         },
     );

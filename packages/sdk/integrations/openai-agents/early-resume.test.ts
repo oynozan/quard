@@ -49,10 +49,11 @@ async function streamedMail(held: boolean) {
         state.getInterruptions().forEach((item) => state.approve(item));
         return state;
     };
-    // Resumes with no await before the run
+    // Each resumes with no await before the run
     const resume = (state: State) => mail.runner.run(mail.mail, approve(state), { session });
+    const resumeStream = (state: State) => mail.runner.run(mail.mail, approve(state), { session, stream: true });
     const release = () => session?.release();
-    return { ...mail, first, resume, release, endedAtResume };
+    return { ...mail, first, resume, resumeStream, release, endedAtResume };
 }
 
 type Streamed = Awaited<ReturnType<typeof streamedMail>>;
@@ -70,11 +71,75 @@ async function readToApproval(run: Streamed): Promise<void> {
     }
 }
 
+// The app stops reading on the approval event and resumes at once
+async function breakAndResume(run: Streamed): Promise<unknown> {
+    await readToApproval(run);
+    const second = await run.resume(run.first.state);
+    run.release();
+    return second.finalOutput;
+}
+
+// The app resumes from inside its loop, then reads the stream to its end
+async function resumeInLoop(run: Streamed): Promise<unknown> {
+    let output: unknown;
+    for await (const event of run.first) {
+        if (asksApproval(event)) {
+            output = (await run.resume(run.first.state)).finalOutput;
+            run.release();
+        }
+    }
+    return output;
+}
+
+// The app resumes as a stream from inside its loop
+async function streamInLoop(run: Streamed): Promise<unknown> {
+    let output: unknown;
+    for await (const event of run.first) {
+        if (asksApproval(event)) {
+            const second = await run.resumeStream(run.first.state);
+            await second.completed;
+            run.release();
+            output = second.finalOutput;
+        }
+    }
+    return output;
+}
+
+function ofType(type: RunEvent["type"]): RunEvent[] {
+    return events.filter((event) => event.type === type);
+}
+
 function untrustedBlocks(): RunEvent[] {
     return decisionsOf(events).filter(
         (event) => event.guard === "egress" && event.rule === "untrusted-destination" && event.decision === "block",
     );
 }
+
+describe("a streamed run resumed before its stream ends", () => {
+    it.each([
+        ["after breaking out on the approval event", breakAndResume, false],
+        ["from inside the loop body", resumeInLoop, false],
+        ["as a stream from inside the loop body", streamInLoop, false],
+        ["after breaking out, while the stream is held open", breakAndResume, true],
+        ["from inside the loop body, while the stream is held open", resumeInLoop, true],
+    ])("goes on in the Quard run it stopped in, %s", async (_when, resumeEarly, held) => {
+        const run = await streamedMail(held);
+
+        const output = await resumeEarly(run);
+        await run.first.completed;
+
+        if (held) {
+            expect(run.endedAtResume).toEqual([false]);
+        }
+        expect(output).toBe("I did not send it.");
+        expect(run.sent).not.toHaveBeenCalled();
+        expect(runIds(events).size).toBe(1);
+        expect(ofType("run_started")).toHaveLength(1);
+        expect(ofType("run_finished")).toHaveLength(1);
+        expect(events.at(-1)).toMatchObject({ type: "run_finished", status: "completed" });
+        expect(untrustedBlocks()).toHaveLength(1);
+    });
+});
 
 describe("a streamed run paused inside a quard scope and resumed before its stream ends", () => {
     it.each([
