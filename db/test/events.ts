@@ -1,4 +1,4 @@
-import type { DecisionEvent, ModelCallEvent } from "@quard/shared";
+import type { DecisionEvent, ModelCallEvent, PaymentEvent } from "@quard/shared";
 import type { RunItem } from "../queries/ingest/rows.ts";
 
 // Events that belong to a run
@@ -128,4 +128,23 @@ export const memory = (at = "2026-10-03T12:00:06.000Z"): RunEvent => ({
     verified: 1,
     trust: "untrusted",
     sensitivity: "internal",
+});
+
+// An x402 payment of 0.05 USDC on Base, settled by default
+export const payment = (overrides: Partial<PaymentEvent> = {}): PaymentEvent => ({
+    type: "payment",
+    ...base("2026-10-03T12:00:07.000Z"),
+    stepId: "8".repeat(16),
+    stage: "settled",
+    host: "api.example.com",
+    resource: "https://api.example.com/report",
+    x402Version: 2,
+    scheme: "exact",
+    network: "eip155:8453",
+    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    amount: "50000",
+    usd: 0.05,
+    payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+    transaction: "0x" + "ab".repeat(32),
+    ...overrides,
 });

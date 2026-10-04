@@ -3,6 +3,7 @@ import { sql, type Transaction } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import type { Database } from "../../schema/database.ts";
 import { openIncidents } from "../incidents/open.ts";
+import { paymentRows } from "./payments.ts";
 import {
     agentMessageRows,
     decisionRows,
@@ -60,6 +61,9 @@ async function refreshRuns(trx: Trx, projectId: string, runIds: string[]): Promi
             cost_known: sql<boolean>`NOT EXISTS (SELECT 1 FROM steps s WHERE s.project_id = runs.project_id AND s.run_id = runs.run_id AND s.kind = 'model_call' AND s.status = 'ok' AND s.detail->>'costUsd' IS NULL)`,
             influenced: sql<boolean>`EXISTS (SELECT 1 FROM steps s WHERE s.project_id = runs.project_id AND s.run_id = runs.run_id AND s.influenced)`,
             flagged: sql<boolean>`EXISTS (SELECT 1 FROM labels l WHERE l.project_id = runs.project_id AND l.run_id = runs.run_id AND cardinality(l.flags) > 0)`,
+            spend_usd: sql<number>`coalesce((SELECT sum(p.usd) FROM payments p WHERE p.project_id = runs.project_id AND p.run_id = runs.run_id AND p.stage = 'settled'), 0)`,
+            // A settled payment in a token with no known USD value makes the total unknown
+            spend_known: sql<boolean>`NOT EXISTS (SELECT 1 FROM payments p WHERE p.project_id = runs.project_id AND p.run_id = runs.run_id AND p.stage = 'settled' AND p.usd IS NULL)`,
         })
         .where("project_id", "=", projectId)
         .where("run_id", "in", runIds)
@@ -90,6 +94,7 @@ export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]
         const labels = labelRows(projectId, added);
         const decisions = decisionRows(projectId, added);
         const messages = agentMessageRows(projectId, added);
+        const payments = paymentRows(projectId, added);
         if (steps.length > 0) {
             await trx
                 .insertInto("steps")
@@ -116,6 +121,13 @@ export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]
             await trx
                 .insertInto("agent_messages")
                 .values(messages)
+                .onConflict((c) => c.doNothing())
+                .execute();
+        }
+        if (payments.length > 0) {
+            await trx
+                .insertInto("payments")
+                .values(payments)
                 .onConflict((c) => c.doNothing())
                 .execute();
         }
