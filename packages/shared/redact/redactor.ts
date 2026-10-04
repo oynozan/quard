@@ -30,10 +30,15 @@ type Walk = {
 };
 
 // Hidden characters and look-alike spaces are cleaned first, so they
-// can't split a value past the masks
+// can't split a value past the masks. Secrets are removed again at the
+// end: a masked IBAN after "client_secret=" reads as its value, and a
+// second run must change nothing.
 export function redactText(text: string): string {
     const noSecrets = removeSecrets(plainSpaces(text));
-    return replaceEmails(replaceCards(replaceIbans(noSecrets, maskIban), maskCard), maskEmail);
+    const masked = replaceEmails(replaceCards(replaceIbans(noSecrets, maskIban), maskCard), maskEmail);
+    // A mask can join a secret name to its value, so look again, but only
+    // when a mask went in: most text has none, and the scan is not cheap
+    return masked === noSecrets ? masked : removeSecrets(masked);
 }
 
 export function createRedactor(hashKey: Buffer): Redactor {

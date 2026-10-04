@@ -3,6 +3,17 @@ import type { Span } from "./spans.ts";
 
 export type SecretSpan = Span & { name: string };
 
+// Line breaks inside a private key, real or written as \n in JSON text
+const BREAKS = String.raw`(?:[ \t]*(?:\r?\n|(?:\\r)?\\n))+[ \t]*`;
+// A whole line of base64, or a PEM header such as Proc-Type
+const KEY_LINE = String.raw`(?:[A-Za-z0-9+/=]+(?=[ \t]*(?:[\r\n"'\\]|$))|(?:Proc-Type|DEK-Info):[ \w,-]*)`;
+// A private key needs its END line, or stops where its base64 lines
+// end, so text after a lone BEGIN line stays
+const PRIVATE_KEY = new RegExp(
+    `-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----(?:${BREAKS}${KEY_LINE})*(?:${BREAKS}-----END (?:[A-Z]+ )*PRIVATE KEY-----)?`,
+    "g",
+);
+
 // Gitleaks-style patterns for common keys and tokens. Each starts
 // with a fixed prefix, so the scan stays linear.
 const PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
@@ -20,7 +31,7 @@ const PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
     ["slack-token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/g],
     ["google-api-key", /\bAIza[0-9A-Za-z_-]{35}/g],
     ["stripe-key", /\b(?:sk|rk)_(?:live|test)_[0-9A-Za-z]{16,}/g],
-    ["private-key", /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z]+ )*PRIVATE KEY-----|$)/g],
+    ["private-key", PRIVATE_KEY],
     ["jwt", /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g],
 ];
 
@@ -47,14 +58,37 @@ const BEARER = /\b(Bearer\s+)[\w.~+/-]{12,}=*/gi;
 const ASSIGNED =
     /\b([\w-]{0,40}?(?:password|passwd|pwd|secret|api[_-]?key|token))(["']?\s{0,3}[:=]\s{0,3}["']?)([^\s"'&,;]{6,})/gi;
 
-// Cookie and Authorization values, such as Basic auth, go whole.
+// A Cookie value is name=value pairs, so free text after the word stays
+const PAIR = String.raw`[^\s=;,"'\\]+=[^\s;,"'\\]*`;
+const COOKIE = new RegExp(
+    String.raw`\b((?:set-)?cookie)(["']?\s{0,3}[:=]\s{0,3}\[?["']?)(${PAIR}(?:;[ \t]?${PAIR})*)`,
+    "gi",
+);
+
+// An Authorization value is a scheme and one long token, such as Basic
+// auth, or the token alone, so "authorization: please pay" stays.
 // Bearer tokens keep their "Bearer" word.
-const HEADER =
-    /\b((?:set-)?cookie|(?:proxy-)?authorization)(["']?\s{0,3}[:=]\s{0,3}["']?)(?!\s|bearer\s)([^"'\r\n]{6,})/gi;
+const AUTH =
+    /\b((?:proxy-)?authorization)(["']?\s{0,3}[:=]\s{0,3}["']?)(?!bearer\s)((?:[A-Za-z][\w-]*[ \t]+)?[\w.~+/-]{12,}=*)/gi;
 
 // Fields whose whole value is removed, whatever it holds, such as
-// password, client_secret, sessionToken or x-api-key
-export const SECRET_FIELD = /^[\w-]{0,40}?(password|passwd|pwd|secret|api[_-]?key|token|authorization|cookie)$/i;
+// password, client_secret, x-api-key, cookies or access_token. "token"
+// counts alone, after a _ or -, or after a word such as access or
+// session, so sellToken and input_tokens stay.
+export const SECRET_FIELD =
+    /^(?:[\w-]{0,40}?(?:password|passwd|pwd|secret|api[_-]?key|authorization|cookie)s?|(?:[\w-]{0,40}?(?:access|refresh|auth|session|csrf|xsrf|api|bearer|bot|security)|(?:[\w-]{0,40}?[_-])?id)[_-]?tokens?|(?:[\w-]{0,40}?[_-])?token|tokens)$/i;
+
+// Secrets found by their name, such as password=..., a Bearer token or a
+// Cookie header, from the name to the end of the value
+export function findNamedSecrets(text: string): Span[] {
+    return [BEARER, ASSIGNED, COOKIE, AUTH].flatMap((pattern) =>
+        [...text.matchAll(pattern)].map((match) => ({
+            start: match.index,
+            end: match.index + match[0].length,
+            value: match[0],
+        })),
+    );
+}
 
 // Removes secrets before text is stored. A key keeps only its known
 // prefix ("sk-proj-…"); a private key becomes "[private key]".
@@ -73,5 +107,6 @@ export function removeSecrets(text: string): string {
     return (out + text.slice(last))
         .replace(BEARER, `$1${CUT}`)
         .replace(ASSIGNED, `$1$2${CUT}`)
-        .replace(HEADER, `$1$2${CUT}`);
+        .replace(COOKIE, `$1$2${CUT}`)
+        .replace(AUTH, `$1$2${CUT}`);
 }

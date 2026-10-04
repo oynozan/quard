@@ -65,6 +65,17 @@ describe("redactText", () => {
         const once = redactText(`IBAN ${IBAN}, jane@acme.com, 5555555555554444, redis://u:hunter2@cache.acme.com`);
         expect(redactText(once)).toBe(once);
     });
+
+    it.each([
+        ["client_secret=DE89 3704 0044 0532 0130 00", "client_secret=…"],
+        ['id_token":4111 1111 1111 1111', 'id_token":…'],
+    ])(
+        "removes a spaced IBAN or card under a secret name at once, so a second run changes nothing: %s",
+        (text, expected) => {
+            expect(redactText(text)).toBe(expected);
+            expect(redactText(expected)).toBe(expected);
+        },
+    );
 });
 
 describe("redactor.key", () => {
