@@ -156,6 +156,13 @@ export const configureExtras = z.object({
         .optional(),
     detectorRules: detectorRules.optional(),
     runLimits: runLimitSettings.optional(),
+    // Code rules may hold functions, so only the guard type is checked
+    hostedTools: z
+        .record(
+            z.string().min(1),
+            z.array(z.object({ type: z.enum(["source", "action", "approval", "egress", "limit"]) })),
+        )
+        .optional(),
 });
 
 export type PolicyFile = z.infer<typeof policySchema>;

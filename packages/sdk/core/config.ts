@@ -1,5 +1,6 @@
 import type { OriginOverrides, RunEvent } from "@quard/shared";
 import type { Detector, DetectorRules } from "../detectors/detector.ts";
+import type { GuardOptions } from "../guards/options.ts";
 import type { ArgumentLabel } from "../labels/value-labels.ts";
 import { configureExtras, type RunLimitSettings, type SignaturesConfig } from "../policy/schema.ts";
 import { closeSources, openSources, policyOrigins, policyRunLimits } from "../policy/state.ts";
@@ -61,6 +62,9 @@ export type QuardConfig = {
     detectorRules?: Partial<DetectorRules>;
     // Fields left out use DEFAULT_RUN_LIMITS
     runLimits?: Partial<RunLimits>;
+    // Guard rules for hosted tools, by the name the model uses, such as
+    // "web_search" or a hosted MCP tool's name
+    hostedTools?: Record<string, GuardOptions[]>;
 };
 
 let current: QuardConfig = { origins: {} };

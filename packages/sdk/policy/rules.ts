@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJson, type RuleEntry, type RulesSnapshot } from "@quard/shared";
-import { runLimits, type RunLimits } from "../core/config.ts";
+import { getConfig, runLimits, type RunLimits } from "../core/config.ts";
 import { guardedToolOptions, guardedToolsRevision } from "../context/registry.ts";
 import { ruleName } from "../guards/action/action.ts";
 import { limitRules } from "../guards/limit/limit.ts";
@@ -16,7 +16,14 @@ const RUN_LIMIT_RULES = ["max-depth", "max-fan-out", "max-loops", "max-steps", "
 // Run limits cover the whole run, not one tool
 const WHOLE_RUN = "*";
 
-type Cached = { tools: number; policy: unknown; signatures: string; limits: string; snapshot: RulesSnapshot };
+type Cached = {
+    tools: number;
+    hosted: unknown;
+    policy: unknown;
+    signatures: string;
+    limits: string;
+    snapshot: RulesSnapshot;
+};
 
 let cached: Cached | undefined;
 
@@ -64,8 +71,13 @@ function hashable(options: GuardOptions): unknown {
     return { ...plain, rules: options.rules.map((rule) => ("check" in rule ? { ...rule, check: rule.name } : rule)) };
 }
 
+// Guarded tools, and hosted tools with rules in code
+function codeTools(): Map<string, readonly GuardOptions[]> {
+    return new Map([...Object.entries(getConfig().hostedTools ?? {}), ...guardedToolOptions()]);
+}
+
 function build(limits: RunLimits): RulesSnapshot {
-    const tools = [...guardedToolOptions()]
+    const tools = [...codeTools()]
         .map(([tool, code]) => [tool, policyOptions(tool) ?? code] as const)
         .sort(([a], [b]) => (a < b ? -1 : 1));
     const effective = {
@@ -88,22 +100,24 @@ function build(limits: RunLimits): RulesSnapshot {
 // The active rules, built again only when a guard registers or a setting changes
 export function rulesSnapshot(): RulesSnapshot {
     const tools = guardedToolsRevision();
+    const hosted = getConfig().hostedTools;
     const policy = currentPolicy();
     const signatures = signatureMode();
     const limits = runLimits();
     const limitsId = JSON.stringify(limits);
     if (
         cached?.tools !== tools ||
+        cached.hosted !== hosted ||
         cached.policy !== policy ||
         cached.signatures !== signatures ||
         cached.limits !== limitsId
     ) {
-        cached = { tools, policy, signatures, limits: limitsId, snapshot: build(limits) };
+        cached = { tools, hosted, policy, signatures, limits: limitsId, snapshot: build(limits) };
     }
     return cached.snapshot;
 }
 
 // The hash every decision event carries, once a guarded tool exists
 export function rulesHash(): string | undefined {
-    return guardedToolOptions().size === 0 ? undefined : rulesSnapshot().hash;
+    return codeTools().size === 0 ? undefined : rulesSnapshot().hash;
 }
