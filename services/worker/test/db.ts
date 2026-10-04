@@ -1,11 +1,21 @@
 import { claimIncidentJob, createProject, ingestBatch, type ClaimedJob, type Db } from "@quard/db";
+import type { RunItem } from "../../../db/queries/ingest/rows.ts";
+import { item } from "../../../db/test/events.ts";
 import { incidentId } from "../../../db/test/incidents.ts";
-import { attackItems, RUN, type AttackOptions } from "./attack.ts";
+import { attackItems, RUN, STEP, type AttackOptions } from "./attack.ts";
 
 // Stores the M1 attack in a new project. Its blocked payment opens an incident.
 export async function storeAttack(db: Db, options: AttackOptions = {}): Promise<{ projectId: string; id: string }> {
     const projectId = await createProject(db, "Acme");
     await ingestBatch(db, projectId, attackItems(options));
+    return { projectId, id: incidentId(projectId, RUN) };
+}
+
+// Stores the M1 attack without the payment, plus more events, in a new project
+export async function storeUnpaid(db: Db, more: RunItem["event"][]): Promise<{ projectId: string; id: string }> {
+    const projectId = await createProject(db, "Acme");
+    const unpaid = attackItems().filter(({ event }) => !("stepId" in event) || event.stepId !== STEP.pay);
+    await ingestBatch(db, projectId, [...unpaid, ...more.map((event) => item(event))]);
     return { projectId, id: incidentId(projectId, RUN) };
 }
 

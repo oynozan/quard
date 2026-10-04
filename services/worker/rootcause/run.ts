@@ -29,12 +29,15 @@ export type StoredLabel = {
 
 export type StoredDecision = {
     stepId: string;
+    agent: string;
     tool: string;
     guard: string;
     rule: string;
     decision: string;
     mode: "block" | "observe";
     enforced: boolean;
+    reason: string | null;
+    at: Date;
 };
 
 export type StoredRun = {

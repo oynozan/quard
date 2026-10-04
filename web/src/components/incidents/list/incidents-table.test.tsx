@@ -182,7 +182,7 @@ describe("IncidentsTable", () => {
         expect(columns()).toEqual(COLUMNS);
         expect(titles()).toEqual([]);
         expect(screen.getByRole("heading", { name: "No incidents yet" })).toBeTruthy();
-        expect(screen.getByText("Blocked or flagged harm opens one here.")).toBeTruthy();
+        expect(screen.getByText("A blocked call or flagged content opens one here.")).toBeTruthy();
         expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
     });
 

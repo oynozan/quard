@@ -62,6 +62,7 @@ describe("runReview", () => {
         expect(body?.input).not.toContain("DE89");
         expect(body?.input).toContain('"acrossAgents":null,"handoffFault":null');
         expect(body?.instructions).toContain("handoffFault");
+        expect(body?.instructions).toContain("damage.kind");
     });
 
     it("saves the error of a failed call", async () => {

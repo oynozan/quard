@@ -1,6 +1,6 @@
-import type { HandoffFault, IncidentCategory, MissingGuard, StoredVerdict, VerdictPlace } from "@quard/db";
-import { pickEntry, stepEntry, type Entry } from "./entry.ts";
-import { missingGuard } from "./gap.ts";
+import type { DamageKind, HandoffFault, IncidentCategory, MissingGuard, StoredVerdict, VerdictPlace } from "@quard/db";
+import { contentEntry, pickEntry, stepEntry, type Entry } from "./entry.ts";
+import { detectionGap, missingGuard } from "./gap.ts";
 import { acrossAgentsOf, carrierOf, handoffFaultOf } from "./handoff.ts";
 import { callIdsOf, happenedBy, keysOf, readBy, versionOf, type StoredRun, type StoredStep } from "./run.ts";
 import { traceValues, type TracedValue } from "./trace.ts";
@@ -12,7 +12,7 @@ function placeOf({ stepId, agent, at }: { stepId: string; agent: string; at: Dat
 // The model call that asked for the damaging call, else the agent's last one before it
 function turningPoint(steps: StoredStep[], damage: StoredStep): StoredStep {
     const models = steps
-        .filter((step) => step.kind === "model_call" && step.agent === damage.agent)
+        .filter((step) => step.kind === "model_call" && step.agent === damage.agent && step.stepId !== damage.stepId)
         .filter(happenedBy(damage.at));
     const asked = models.find((step) => damage.callId !== null && callIdsOf(step).includes(damage.callId));
     return asked ?? models.at(-1) ?? damage;
@@ -64,14 +64,10 @@ function storedValues(values: TracedValue[]): StoredVerdict["values"] {
     }));
 }
 
-// The verdict for one damaging tool call. Undefined when the run has no such tool call.
-export function findVerdict(run: StoredRun, damageStepId: string): StoredVerdict | undefined {
-    const damage = run.steps.find((step) => step.stepId === damageStepId && step.kind === "tool_call");
-    if (damage === undefined) {
-        return undefined;
-    }
-    const turning = turningPoint(run.steps, damage);
-    const values = traceValues(keysOf(damage), run.labels, turning);
+type Cause = { category: IncidentCategory; entry: Entry; gap: MissingGuard | null; fault: HandoffFault | null };
+
+// Where the harm came in, traced from the call's values and what the agent read
+function tracedCause(run: StoredRun, values: TracedValue[], damage: StoredStep, turning: StoredStep): Cause {
     const read = run.labels.filter((label) => label.agent === turning.agent).filter(readBy(turning));
     const traced = pickEntry(values, read, turning);
     const trusted = traced.trust === "trusted";
@@ -81,11 +77,62 @@ export function findVerdict(run: StoredRun, damageStepId: string): StoredVerdict
     const broken = trusted && fault === null ? brokenTool(run.steps, turning) : undefined;
     const entry = broken === undefined ? traced : stepEntry(broken, `tool:${broken.name}`);
     const gap = missingGuard(damage, run.decisions, entry);
+    return { category: categoryOf(traced, fault, broken !== undefined, gap), entry, gap, fault };
+}
+
+// The content a guard flagged in what the call returned. Undefined until its label arrives.
+function detectedCause(run: StoredRun, damage: StoredStep): Cause | undefined {
+    const content = run.labels.find((label) => label.stepId === damage.stepId);
+    const gap = detectionGap(damage, run.decisions);
+    return content && { category: "bad input", entry: contentEntry(content, null), gap, fault: null };
+}
+
+// The model call a run limit stopped, from its decision: an enforced stop never sent it
+function stoppedCall(run: StoredRun, stepId: string): StoredStep | undefined {
+    const stop = run.decisions.find((item) => item.stepId === stepId && item.guard === "limit");
+    return (
+        stop && {
+            stepId,
+            kind: "model_call",
+            agent: stop.agent,
+            name: stop.tool,
+            callId: null,
+            status: stop.enforced ? "blocked" : "ok",
+            at: stop.at,
+            durationMs: 0,
+            detail: {},
+        }
+    );
+}
+
+// The verdict for one damaging step: a tool call by default, the call whose
+// content a guard found with "detection", or a stopped model call with "limit".
+// Undefined when the run does not hold it yet.
+export function findVerdict(run: StoredRun, damageStepId: string, kind?: DamageKind): StoredVerdict | undefined {
+    const damage =
+        kind === "limit"
+            ? stoppedCall(run, damageStepId)
+            : run.steps.find((step) => step.stepId === damageStepId && step.kind === "tool_call");
+    if (damage === undefined) {
+        return undefined;
+    }
+    const turning = turningPoint(run.steps, damage);
+    const values = traceValues(keysOf(damage), run.labels, turning);
+    const cause = kind === "detection" ? detectedCause(run, damage) : tracedCause(run, values, damage, turning);
+    if (cause === undefined) {
+        return undefined;
+    }
+    const { category, entry, gap, fault } = cause;
     return {
-        category: categoryOf(traced, fault, broken !== undefined, gap),
+        category,
         entry: { ...entry, at: entry.at.toISOString() },
         turning: placeOf(turning),
-        damage: { ...placeOf(damage), tool: damage.name, ran: damage.status !== "blocked" },
+        damage: {
+            ...placeOf(damage),
+            tool: damage.name,
+            ran: damage.status !== "blocked",
+            ...(kind === undefined ? {} : { kind }),
+        },
         missingGuard: gap,
         values: storedValues(values),
         versions: versionsOf(run.steps, [entry.agent, turning.agent, damage.agent], turning),

@@ -194,3 +194,77 @@ describe("findVerdict", () => {
         });
     });
 });
+
+describe("findVerdict for damage that is not a harmful tool call", () => {
+    const flag = { stepId: STEP.fetch, tool: "fetchPage", guard: "source", rule: "source", decision: "flag" };
+    // The attack run with only the source scan's flag on the fetched page
+    const flagged = (mode: "block" | "observe" = "block") => ({
+        ...attackRun(),
+        decisions: [decision({ ...flag, mode, enforced: mode === "block", reason: "instructions" })],
+    });
+
+    it("names the flagged page as the entry and the call that fetched it as the damage", () => {
+        expect(findVerdict(flagged(), STEP.fetch, "detection")).toMatchObject({
+            category: "bad input",
+            entry: { stepId: STEP.fetch, origin: "web:invoices.evil-pay.com", contentId: "c2", key: null },
+            turning: { stepId: STEP.ask },
+            damage: { stepId: STEP.fetch, tool: "fetchPage", ran: true, kind: "detection" },
+            missingGuard: null,
+            handoffFault: null,
+        });
+    });
+
+    it("names the content rule in observe mode", () => {
+        expect(findVerdict(flagged("observe"), STEP.fetch, "detection")?.missingGuard).toEqual({
+            text: 'The source rule "source" on fetchPage is in observe mode, so it only recorded "would flag"',
+            tool: "fetchPage",
+            guard: "source",
+            rule: "source",
+            observe: true,
+        });
+    });
+
+    it("waits for the flagged content's label", () => {
+        const run = flagged();
+        const unlabeled = { ...run, labels: run.labels.filter((item) => item.stepId !== STEP.fetch) };
+
+        expect(findVerdict(unlabeled, STEP.fetch, "detection")).toBeUndefined();
+    });
+
+    const STOPPED = "cccccccccccccccc";
+    const stop = decision({ stepId: STOPPED, tool: "test-model", guard: "limit", rule: "max-steps", at: at(62) });
+    // The attack run read only trusted content, then went over the step limit
+    const limited = (mode: "block" | "observe") => {
+        const run = attackRun();
+        // Sent in observe mode, and recorded in the same ms as its decision
+        const sent = step({ stepId: STOPPED, kind: "model_call", name: "test-model", at: at(62) });
+        return {
+            ...run,
+            steps: mode === "observe" ? [...run.steps, sent] : run.steps,
+            labels: run.labels.filter((item) => item.trust === "trusted"),
+            decisions: [{ ...stop, decision: "block", mode, enforced: mode === "block" }],
+        };
+    };
+
+    it("takes the model call an enforced run limit stopped as the damage", () => {
+        expect(findVerdict(limited("block"), STOPPED, "limit")).toMatchObject({
+            category: "bad reasoning",
+            turning: { stepId: STEP.end },
+            damage: { stepId: STOPPED, tool: "test-model", at: at(62).toISOString(), ran: false, kind: "limit" },
+            missingGuard: null,
+        });
+    });
+
+    it("names the run limit in observe mode, and never takes the stopped call as its own turning point", () => {
+        expect(findVerdict(limited("observe"), STOPPED, "limit")).toMatchObject({
+            category: "missing guard",
+            turning: { stepId: STEP.end },
+            damage: { ran: true, kind: "limit" },
+            missingGuard: { guard: "limit", rule: "max-steps", observe: true },
+        });
+    });
+
+    it("finds nothing for a step no run limit stopped", () => {
+        expect(findVerdict(limited("block"), STEP.end, "limit")).toBeUndefined();
+    });
+});

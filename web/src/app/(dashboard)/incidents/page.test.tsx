@@ -43,7 +43,7 @@ describe("IncidentsPage", () => {
         ).toEqual(["Incident", "Category", "Entry point", "Damage", "Agents", "Replay", "Opened"]);
         expect(within(table).queryAllByRole("link")).toHaveLength(0);
         expect(screen.getByRole("heading", { level: 3, name: "No incidents yet" })).toBeTruthy();
-        expect(screen.getByText("Blocked or flagged harm opens one here.")).toBeTruthy();
+        expect(screen.getByText("A blocked call or flagged content opens one here.")).toBeTruthy();
     });
 
     it("keeps a category from the address over the empty table, with a way to clear it", async () => {

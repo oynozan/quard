@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { bodies, MODEL, PAGE } from "../test/attack.ts";
 import { attackRun, changeStep, IBAN_KEY, label, STEP } from "../test/runs.ts";
 import { findVerdict } from "../rootcause/verdict.ts";
-import { planReplay } from "./plan.ts";
+import { NOT_A_CALL, planReplay } from "./plan.ts";
 import { NOT_RECORDED } from "./request.ts";
 import { NOT_A_TOOL_RESULT, REMOVED } from "./without.ts";
 
@@ -95,5 +95,12 @@ describe("planReplay", () => {
             base: { removed: { callId: null } },
             ready: NOT_A_TOOL_RESULT,
         });
+    });
+
+    it.each(["detection", "limit"] as const)("is limited when the damage kind is %s", (kind) => {
+        const verdict = verdictOf();
+        const plan = planReplay({ ...verdict, damage: { ...verdict.damage, kind } }, attackRun(), calls());
+
+        expect(plan).toMatchObject({ base: { harmfulCall: { tool: "payInvoice" } }, ready: NOT_A_CALL[kind] });
     });
 });

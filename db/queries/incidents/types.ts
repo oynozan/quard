@@ -47,11 +47,17 @@ export type VerdictHandoff = {
     verified: boolean;
 };
 
+// What the damage was, when not a tool call a guard blocked or would have.
+// detection: a guard flagged or stripped the content the call returned.
+// limit: a run limit stopped the model call; tool is the model.
+export type DamageKind = "detection" | "limit";
+
 export type StoredVerdict = {
     category: IncidentCategory;
     entry: VerdictEntry;
     turning: VerdictPlace;
-    damage: VerdictPlace & { tool: string; ran: boolean };
+    // kind is missing for a blocked tool call, and in verdicts stored before it
+    damage: VerdictPlace & { tool: string; ran: boolean; kind?: DamageKind };
     missingGuard: MissingGuard | null;
     values: TracedValue[];
     versions: { agent: string; version: string }[];

@@ -32,11 +32,14 @@ export function label(change: Partial<StoredLabel> & Pick<StoredLabel, "contentI
 
 export function decision(change: Partial<StoredDecision> & Pick<StoredDecision, "stepId" | "tool">): StoredDecision {
     const plain = {
+        agent: "billing",
         guard: "permission",
         rule: "permission",
         decision: "allow",
         mode: "block",
         enforced: true,
+        reason: null,
+        at: at(0),
     } as const;
     return { ...plain, ...change };
 }

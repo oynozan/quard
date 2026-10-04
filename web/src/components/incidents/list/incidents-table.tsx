@@ -156,7 +156,7 @@ export function IncidentsTable({ incidents, now, initialCategory }: Props) {
                         }
                     />
                 ) : (
-                    <TableState title="No incidents yet" body="Blocked or flagged harm opens one here." />
+                    <TableState title="No incidents yet" body="A blocked call or flagged content opens one here." />
                 )
             ) : null}
         </section>

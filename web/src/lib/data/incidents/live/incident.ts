@@ -1,4 +1,4 @@
-import type { IncidentRow } from "@quard/db";
+import type { IncidentRow, StoredVerdict } from "@quard/db";
 import { originTitle } from "../../approvals/live/influence";
 import type { AgentDetail } from "../../agents/types";
 import type { Incident, IncidentCategory } from "../../types";
@@ -15,6 +15,21 @@ const TITLE: Record<IncidentCategory, (found: Found) => string> = {
     "missing guard": ({ tool }) => `${tool} with no guard to stop it`,
 };
 
+// What happened at the damage. Verdicts stored before kind name a tool call.
+function damageOf({ tool, ran, kind }: StoredVerdict["damage"]): string {
+    if (kind === "detection") return `Content from ${tool} was flagged`;
+    if (kind === "limit") return ran ? `${tool} went over a run limit` : `A run limit stopped ${tool}`;
+    return `${tool} ${ran ? "ran" : "was blocked"}`;
+}
+
+// Content a guard flagged, or a run limit, reads the same in every category
+function titleOf(verdict: StoredVerdict, found: Found): string {
+    const { kind } = verdict.damage;
+    if (kind === "detection") return `${found.tool} returned flagged content from ${found.source}`;
+    if (kind === "limit") return damageOf(verdict.damage);
+    return TITLE[verdict.category](found);
+}
+
 // An incident as the lists show it. Until the verdict is found, the title says where the finder is.
 export function incidentOf(row: IncidentRow): Incident {
     const base = { id: row.id, runId: row.runId, replay: replayStatus(row), openedAt: row.openedAt.getTime() };
@@ -27,10 +42,10 @@ export function incidentOf(row: IncidentRow): Incident {
     const found = { tool: damage.tool, source: originTitle(entry.origin), agent: turning.agent };
     return {
         ...base,
-        title: TITLE[verdict.category](found),
+        title: titleOf(verdict, found),
         category: verdict.category,
         entryPoint: entry.origin,
-        damage: `${damage.tool} ${damage.ran ? "ran" : "was blocked"}`,
+        damage: damageOf(damage),
         entryAgent: entry.agent,
         damageAgent: damage.agent,
     };

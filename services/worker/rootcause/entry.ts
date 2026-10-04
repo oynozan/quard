@@ -28,7 +28,7 @@ function flaggedFirst(a: StoredLabel, b: StoredLabel): number {
     return Number(b.flags.length > 0) - Number(a.flags.length > 0) || byTime(a, b);
 }
 
-function contentEntry(label: Omit<StoredLabel, "keys">, key: string | null): Entry {
+export function contentEntry(label: Omit<StoredLabel, "keys">, key: string | null): Entry {
     const { contentId, stepId, agent, at, origin, trust, sensitivity, flags } = label;
     return { stepId, agent, at, origin, trust, sensitivity, flags, contentId, key };
 }

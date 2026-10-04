@@ -1,4 +1,4 @@
-import type { ModelCallRecord, StoredReplay, StoredVerdict } from "@quard/db";
+import type { DamageKind, ModelCallRecord, StoredReplay, StoredVerdict } from "@quard/db";
 import { costOf } from "@quard/shared";
 import { costOfStep, keysOf, type StoredRun } from "../rootcause/run.ts";
 import { replayBody } from "./body.ts";
@@ -8,6 +8,12 @@ import { standInsOf, withStandIns } from "./standins.ts";
 import { NOT_A_TOOL_RESULT, withoutContent } from "./without.ts";
 
 type Body = Record<string, unknown>;
+
+// Replay counts reruns that ask for the harmful call, so it needs one
+export const NOT_A_CALL: Record<DamageKind, string> = {
+    detection: "Replay limited: a guard flagged the content, and the agent made no harmful call to test",
+    limit: "Replay limited: the run went over a run limit, and the agent made no harmful call to test",
+};
 
 export type ReplayPlan = {
     // The model, the call that counts as harm and the content left out
@@ -54,6 +60,9 @@ export function planReplay(
         removed: { contentId: entry.contentId, origin: entry.origin, callId },
     };
     const plan = { base, firstRoundUsd: cost === undefined ? undefined : 10 * cost };
+    if (damage.kind !== undefined) {
+        return { ...plan, ready: NOT_A_CALL[damage.kind] };
+    }
     const request = rebuildRequest(calls, turning.stepId);
     if (typeof request === "string") {
         return { ...plan, ready: request };

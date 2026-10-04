@@ -103,6 +103,7 @@ export type { ModelCallRecord } from "./queries/incidents/calls.ts";
 export { getAgentMessages } from "./queries/incidents/messages.ts";
 export type { AgentMessageRecord } from "./queries/incidents/messages.ts";
 export { incidentCounts } from "./queries/incidents/counts.ts";
+export { isDetection } from "./queries/incidents/open.ts";
 export type { IncidentCounts } from "./queries/incidents/counts.ts";
 export { claimIncidentJob, deferIncidentJob } from "./queries/incidents/jobs.ts";
 export { getIncident, incidentsForAgent, incidentsForRuns, listIncidents } from "./queries/incidents/list.ts";
@@ -111,6 +112,7 @@ export type { ReplayRequest } from "./queries/incidents/replay.ts";
 export { failFind, saveReplay, saveReview, saveVerdict } from "./queries/incidents/save.ts";
 export type {
     ClaimedJob,
+    DamageKind,
     HandoffFault,
     IncidentCategory,
     IncidentRow,

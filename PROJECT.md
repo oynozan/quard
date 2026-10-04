@@ -555,9 +555,10 @@ Decided by the spec, Q16 and Q17.
 
 Decided on 2026-10-04.
 
-- Quard opens an incident for a run when a guard blocks a tool call, or would have blocked it in observe mode. A run has at most one incident. `webhook` opens it in the same transaction that stores the decision. (**Claude's pick**)
+- Quard opens an incident for a run when a guard blocks a call, or when a guard detects something in content: the source scan (rule `source`), the AI detector (rule `detector:<name>`) or a signature flags or strips what a tool returned. Both count in enforce and observe mode. The detector also flags what it failed to check, so a detector flag whose reason holds `unchecked` but no risky label does not count. Neither does a source flag for an unknown host alone. Egress masking, allow, pass and ask never open one. A run has at most one incident, opened at its earliest such decision. `webhook` opens it in the same transaction that stores the decision. (**Owner**)
+- When no tool call was blocked, the damage is the first tool call whose content a guard flagged, the entry point is that content and the category is bad input. With no flagged content either, a run limit that stopped a model call makes that model call the damage. Replay is limited for both, since there is no harmful call to test. The finder waits for the run to end, at most 5 minutes, before it takes either, so a call blocked later still wins. (**Claude's pick**)
 - The verdict and the AI reviewer's note run on their own when an incident opens. Replay runs only when someone clicks the replay button on the incident page. (**Owner**)
-- When the blocked call's events have not arrived yet, the finder tries again every 5 s. After 5 minutes it stops and says the events never arrived.
+- When the damaging call's events have not arrived yet, the finder tries again every 5 s. After 5 minutes it stops and says the events never arrived.
 
 ### Replay
 
@@ -833,7 +834,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Jev acting in v1 | Yes: enforce by default; a team can switch it to observe | Owner |
 | — | Detector failures | While acting, what the detector could not check is flagged `detector:unchecked` | Owner |
 | — | Text for review | Store redacted public chunks for a review queue | Owner |
-| — | When an incident opens | A guard blocks a tool call, or would have in observe mode; one incident per run | Claude's pick |
+| — | When an incident opens | A guard blocks a call, or flags or strips what it detected in content, in either mode; one incident per run | Owner |
 | — | When replay runs | On a click on the incident page; the verdict and AI note run on their own; past the cap, continue with $5 more | Owner |
 | — | Request for replay | The SDK records each model call's redacted request while uploads are on, up to 512 KiB | Claude's pick |
 | — | Bad handoff | From the messages and handoffs M4 records; a dropped constraint is never named, since message text is not stored | Owner, Claude's pick |

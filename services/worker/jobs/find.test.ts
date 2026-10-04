@@ -2,8 +2,8 @@ import { getIncident } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { insertMessages } from "../../../db/test/messages.ts";
-import { RUN, STEP } from "../test/attack.ts";
-import { claim, storeAttack } from "../test/db.ts";
+import { MODEL, RUN, STEP } from "../test/attack.ts";
+import { claim, storeAttack, storeUnpaid } from "../test/db.ts";
 import { IBAN_KEY } from "../test/runs.ts";
 import { NEVER_ARRIVED, runFind } from "./find.ts";
 
@@ -103,5 +103,77 @@ describe("runFind", () => {
             findState: "failed",
             findError: NEVER_ARRIVED,
         });
+    });
+});
+
+const at = (ms: number) => new Date(Date.UTC(2026, 9, 3, 12, 0, 0, ms)).toISOString();
+const inRun = { runId: RUN, agent: "billing" };
+// The source scan flagged the fetched page
+const FLAG = {
+    type: "decision",
+    ...inRun,
+    at: at(57),
+    stepId: STEP.fetch,
+    tool: "fetchPage",
+    guard: "source",
+    rule: "source",
+    decision: "flag",
+    mode: "block",
+    enforced: true,
+    reason: "instructions",
+} as const;
+// The cost limit stopped a model call before it was sent
+const STOP = {
+    ...FLAG,
+    at: at(85),
+    stepId: "c".repeat(16),
+    tool: MODEL,
+    guard: "limit",
+    rule: "max-cost",
+    decision: "block",
+    reason: "limit_reached",
+} as const;
+const ENDED = { type: "run_finished", ...inRun, at: at(90), status: "completed" } as const;
+
+describe("runFind for a run with no blocked tool call", () => {
+    it("takes the call whose content a guard flagged, once the run ended", async () => {
+        const { projectId, id } = await storeUnpaid(test.db, [FLAG, ENDED]);
+
+        expect(await runFind(deps(), await claim(test.db))).toBe("verdict: bad input");
+
+        expect((await getIncident(test.db, projectId, id))?.verdict).toMatchObject({
+            entry: { stepId: STEP.fetch, origin: "web:invoices.evil-pay.com", contentId: "c2", key: null },
+            turning: { stepId: STEP.ask },
+            damage: { stepId: STEP.fetch, tool: "fetchPage", ran: true, kind: "detection" },
+            missingGuard: null,
+        });
+    });
+
+    it("waits while the run goes on, so a call blocked later wins, then takes the flag", async () => {
+        await storeUnpaid(test.db, [FLAG]);
+        const job = await claim(test.db);
+
+        expect(await runFind(deps(), job)).toBe("waiting for the run's events");
+        expect(await runFind(deps(), { ...job, attempts: 60 })).toBe("verdict: bad input");
+    });
+
+    it("takes the model call a run limit stopped", async () => {
+        const { projectId, id } = await storeUnpaid(test.db, [STOP, ENDED]);
+
+        expect(await runFind(deps(), await claim(test.db))).toBe("verdict: bad input");
+
+        expect((await getIncident(test.db, projectId, id))?.verdict).toMatchObject({
+            turning: { stepId: STEP.decide },
+            damage: { stepId: STOP.stepId, tool: MODEL, ran: false, kind: "limit" },
+            missingGuard: null,
+        });
+    });
+
+    it("gives up on an ended run that holds no damage", async () => {
+        await storeUnpaid(test.db, [{ ...STOP, rule: "max-depth" }, ENDED]);
+        const job = await claim(test.db);
+
+        expect(await runFind(deps(), job)).toBe("waiting for the run's events");
+        expect(await runFind(deps(), { ...job, attempts: 60 })).toBe(`failed: ${NEVER_ARRIVED}`);
     });
 });
