@@ -7,8 +7,8 @@ type EnabledHandoffs = Agent["getEnabledHandoffs"];
 let following = false;
 
 // The Agents SDK writes a handoff's tool output itself. Each handoff it
-// offers a model inside a Quard run is marked, so that output reads as
-// system content, not as an unwrapped tool's.
+// offers an agent inside a Quard run is marked for that agent, so that
+// output reads as system content, not as an unwrapped tool's.
 export function followHandoffs(): void {
     if (following) {
         return;
@@ -20,7 +20,7 @@ export function followHandoffs(): void {
         const scope = currentScope();
         if (scope !== undefined) {
             for (const handoff of handoffs) {
-                markFrameworkTool(scope.run, handoff.toolName);
+                markFrameworkTool(scope.run, this.name, handoff.toolName);
             }
         }
         return handoffs;

@@ -17,6 +17,8 @@ export type RequestedCall = {
     // Value keys in the arguments; a result that echoes them gains no trust
     argKeys: ReadonlySet<string>;
     scope: Scope;
+    // The agent whose model asked; a handoff later changes the scope's agent
+    agent: string;
     stepId: string;
     blocked: BlockedMark | undefined;
     claimed: boolean;
@@ -53,6 +55,7 @@ export function registerCall(input: {
         argsKey: canonicalJson(input.args),
         argKeys: new Set(extractValues(textOf(input.args)).flatMap((value) => value.keys)),
         scope: input.scope,
+        agent: input.scope.agent,
         stepId: input.stepId,
         blocked: input.blocked,
         claimed: false,
