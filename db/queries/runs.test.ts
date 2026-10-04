@@ -41,6 +41,21 @@ describe("listRuns", () => {
         const page = await listRuns(test.db, projectId, { limit: 1, before: new Date("2026-10-03T12:00:00.000Z") });
         expect(page.map((run) => run.runId)).toEqual(["b".repeat(32)]);
     });
+
+    it("shows x402 spend next to the cost", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        await ingestBatch(test.db, projectId, [item(started())]);
+        expect((await listRuns(test.db, projectId))[0]).toMatchObject({ spendUsd: 0, spendKnown: true });
+
+        await test.db
+            .updateTable("runs")
+            .set({ spend_usd: 1.5, spend_known: false })
+            .where("project_id", "=", projectId)
+            .execute();
+
+        expect((await listRuns(test.db, projectId))[0]).toMatchObject({ spendUsd: 1.5, spendKnown: false });
+        expect(await getRun(test.db, projectId, RUN)).toMatchObject({ spendUsd: 1.5, spendKnown: false });
+    });
 });
 
 describe("listRuns details", () => {

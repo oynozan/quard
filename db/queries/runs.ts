@@ -17,6 +17,9 @@ export type RunSummary = {
     costUsd: number;
     // False when some model call has no known price
     costKnown: boolean;
+    // Settled x402 spend, and false when a settled token has no known USD value
+    spendUsd: number;
+    spendKnown: boolean;
     influenced: boolean;
     flagged: boolean;
     degraded: boolean;
@@ -98,6 +101,8 @@ const SUMMARY = [
     "blocked",
     "cost_usd as costUsd",
     "cost_known as costKnown",
+    "spend_usd as spendUsd",
+    "spend_known as spendKnown",
     "influenced",
     "flagged",
     "degraded",
