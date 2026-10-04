@@ -1,10 +1,20 @@
-import { combineLabels, extractValues, hasInvisible, labelFor, newStepId, originKind, type Label } from "@quard/shared";
+import {
+    combineLabels,
+    extractValues,
+    hasInvisible,
+    labelFor,
+    newStepId,
+    originKind,
+    type ExtractedValue,
+    type Label,
+} from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import type { Scope } from "../context/scope.ts";
 import type { AddOptions } from "../labels/content-index.ts";
 import { printOf } from "../labels/print.ts";
 import { textOf } from "../labels/text-of.ts";
+import { unvouchedKeys } from "../labels/unvouched.ts";
 import { lookupLabels } from "../transport/labels.ts";
 import { recordMemory } from "./event.ts";
 import { keptLabels } from "./kept.ts";
@@ -69,8 +79,11 @@ function addContent(
 
 // Values the item's records vouch for come in first with their stored
 // labels, so a web-derived IBAN stays web-derived here. Then the item.
+// In a trusted item, values no record vouched for stay model-generated.
 function indexItem(scope: Scope, stepId: string, text: string, label: Label, labels: MemoryLabels | undefined): void {
     const stored = new Map(labels?.values.map((value) => [value.hash, value]));
+    const vouched = (found: ExtractedValue) => stored.has(localHash(found.type, found.value));
+    const exclude = label.trust === "trusted" ? new Set(unvouchedKeys(text, vouched)) : undefined;
     for (const { type, value } of extractValues(text)) {
         const found = stored.get(localHash(type, value));
         if (found !== undefined) {
@@ -82,7 +95,7 @@ function indexItem(scope: Scope, stepId: string, text: string, label: Label, lab
             addContent(scope, stepId, value, own, { exclude, keepEarlier: true }, true);
         }
     }
-    addContent(scope, stepId, text, label, { keepEarlier: true });
+    addContent(scope, stepId, text, label, { exclude, keepEarlier: true });
 }
 
 // Reads, then labels each item and adds it to the run's content index.

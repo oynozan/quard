@@ -50,7 +50,7 @@ function makeAgents() {
         await receive({ queue: "billing" });
         return pay({ iban: IBAN });
     };
-    return { rawPay, orchestrate, billing, carrier: () => inbox?.carrier };
+    return { rawPay, pay, getOrder, orchestrate, billing, carrier: () => inbox?.carrier };
 }
 
 function neverSeenBlocks() {
@@ -81,5 +81,28 @@ describe("an IBAN the sender's model made up", () => {
         expect(isGuardRefusal(out)).toBe(true);
         expect(agents.rawPay).not.toHaveBeenCalled();
         expect(neverSeenBlocks()).toEqual(["orchestrator", "billing"]);
+    });
+});
+
+describe("an IBAN the model made up and wrote to memory", () => {
+    it("stays never seen when the same run reads it back", async () => {
+        const agents = makeAgents();
+        const items = new Map<string, string>();
+        const kb = quard.memory(
+            { get: (key: string) => items.get(key), put: (key: string, value: string) => void items.set(key, value) },
+            { name: "kb" },
+        );
+
+        const out = await quard.run({ agent: "billing" }, async () => {
+            await agents.getOrder({ order: "114" });
+            await agents.pay({ iban: IBAN });
+            await kb.put("note", BRIEF);
+            await kb.get("note");
+            return agents.pay({ iban: IBAN });
+        });
+
+        expect(isGuardRefusal(out)).toBe(true);
+        expect(agents.rawPay).not.toHaveBeenCalled();
+        expect(neverSeenBlocks()).toEqual(["billing", "billing"]);
     });
 });

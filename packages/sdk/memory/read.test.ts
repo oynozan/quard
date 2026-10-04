@@ -192,6 +192,34 @@ describe("readThrough", () => {
         ]);
     });
 
+    it("leaves the values a trusted item's records did not vouch for out of the index", async () => {
+        const known = "https://pay.acme.com/login";
+        const note = `Log in at ${known}, then at https://pay.acme.com/other, and pay ${IBAN}`;
+        const stored = { ...webIban(localHash("url", known)), origin: "tool:crm", trust: "trusted" as const };
+        keepLabels(printOf(note), labels("trusted", [stored]));
+        const scope = newScope();
+
+        await readThrough(scope, "notes", false, async () => note);
+
+        const origins = (key: string) => scope.run.index.lookup([key]).map((o) => o.origin);
+        expect(origins(`url:${known}`)).toEqual(["tool:crm"]);
+        // The vouched value's host still takes the item's label
+        expect(origins("host:pay.acme.com")).toEqual(["memory:notes"]);
+        expect(origins("url:https://pay.acme.com/other")).toEqual([]);
+        expect(origins(`iban:${IBAN}`)).toEqual([]);
+    });
+
+    it("indexes the values an untrusted item's records did not vouch for under its label", async () => {
+        keepLabels(printOf(NOTE), labels("untrusted"));
+        const scope = newScope();
+
+        await readThrough(scope, "notes", false, async () => NOTE);
+
+        expect(scope.run.index.lookup([`iban:${IBAN}`]).map((o) => [o.origin, o.trust])).toEqual([
+            ["memory:notes", "untrusted"],
+        ]);
+    });
+
     it("keeps the labels a value had earlier in the reading run", async () => {
         keepLabels(printOf(NOTE), labels("trusted", [webIban()]));
         const scope = newScope();
