@@ -58,9 +58,18 @@ describe("handOff", () => {
             agent: "billing",
             parentStepId: "00f067aa0ba902b7",
             lastStepId: undefined,
-            depth: 1,
+            depth: 0,
         });
         expect([...(frame.tools ?? [])]).toEqual(["fetchPage", "payInvoice"]);
+    });
+
+    it("keeps the delegation depth, since a handoff passes control on", () => {
+        const frame = toolFrame(topFrame(scope("orchestrator"), "orchestrator"), "researcher");
+
+        handOff(frame, "billing");
+        handOff(frame, "researcher");
+
+        expect(frame.depth).toBe(1);
     });
 
     it("gives the handoff a step of its own when the agent has none yet", () => {

@@ -47,8 +47,9 @@ export function toolFrame(parent: Scope, agent: string): Scope {
     return frame(childScope(parent, agent));
 }
 
-// A handoff inside one run() call switches the frame's agent in place
+// A handoff inside one run() call switches the frame's agent in place.
+// It passes control on, so the depth stays the same.
 export function handOff(current: Scope, to: string): void {
     recordHandoff(current, to, "handoff");
-    Object.assign(current, childScope(current, to));
+    Object.assign(current, { agent: to, parentStepId: current.lastStepId, lastStepId: undefined });
 }
