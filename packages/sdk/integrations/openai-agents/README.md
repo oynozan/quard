@@ -47,7 +47,7 @@ Returns an SDK `Runner`. It takes the SDK's run config, plus `client`: an OpenAI
 - Each `run()` lands in one Quard run: the run of the current `quard.run()` scope, or a new run named after the first agent.
 - The agent comes from the framework. A handoff switches it. An agent run as a tool, with `agent.asTool()`, runs under its own name.
 - Model calls and guarded tools carry that agent. The new agent's parent step is the step that handed over.
-- A handoff passes control on, so it keeps the delegation depth. An agent run as a tool is one level deeper.
+- A handoff passes control on, so it keeps the delegation depth. An agent run as a tool is one level deeper, below the model call that asked for it.
 - Each switch is recorded as a `handoff` event: from, to, `via: "handoff"` or `"tool"`, and the run's context label.
 - A resumed run, from `result.state`, goes on with the agent it stopped at.
 

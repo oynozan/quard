@@ -1,9 +1,10 @@
 import { labelFor } from "@quard/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { takeEvents } from "../../core/recorder.ts";
+import { registerCall } from "../../context/registry.ts";
 import { newScope, type Scope } from "../../context/scope.ts";
 import { resetAll } from "../../test/reset.ts";
-import { handOff, isFrame, toolFrame, topFrame } from "./frames.ts";
+import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
 
 afterEach(() => {
     resetAll();
@@ -96,5 +97,34 @@ describe("toolFrame", () => {
         expect(handoffs()).toEqual([
             expect.objectContaining({ agent: "orchestrator", to: "researcher", via: "tool", trust: "trusted" }),
         ]);
+    });
+});
+
+describe("startToolCall", () => {
+    // In an async chain of its own, as the SDK runs each tool call
+    async function frameInCall(parent: Scope, toolCall: object): Promise<Scope> {
+        await Promise.resolve();
+        startToolCall(toolCall);
+        return toolFrame(parent, "researcher");
+    }
+
+    it("starts an agent tool's frame below the model step that asked for the call", async () => {
+        const parent = topFrame(scope("orchestrator"), "orchestrator");
+        parent.lastStepId = "00f067aa0ba902b7";
+        registerCall({ callId: "call_1", tool: "research", args: {}, scope: parent, stepId: "1111111111111111" });
+
+        const frame = await frameInCall(parent, { callId: "call_1" });
+
+        expect(frame.parentStepId).toBe("1111111111111111");
+        expect(handoffs()).toEqual([expect.objectContaining({ stepId: "1111111111111111" })]);
+        expect(parent.lastStepId).toBe("00f067aa0ba902b7");
+    });
+
+    it("falls back to the frame's last step for a call the monitor did not see", async () => {
+        const parent = topFrame(scope("orchestrator"), "orchestrator");
+        parent.lastStepId = "00f067aa0ba902b7";
+
+        expect((await frameInCall(parent, { callId: "call_9" })).parentStepId).toBe("00f067aa0ba902b7");
+        expect((await frameInCall(parent, { id: "hosted" })).parentStepId).toBe("00f067aa0ba902b7");
     });
 });

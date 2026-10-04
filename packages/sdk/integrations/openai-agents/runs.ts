@@ -1,7 +1,7 @@
 import { RunState, Runner, StreamedRunResult, ToolCallError, type Agent } from "@openai/agents";
 import { GuardBlockedError } from "../../core/refusal.ts";
 import { currentScope, runScope, withScope, type Scope } from "../../context/scope.ts";
-import { handOff, isFrame, toolFrame, topFrame } from "./frames.ts";
+import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
 
 type Run = (this: Runner, agent: Agent, input: unknown, options?: unknown) => Promise<unknown>;
 
@@ -55,7 +55,8 @@ function inFrame<T>(agent: string, call: () => Promise<T>): Promise<T> {
     return withScope(frame, () => unwrapBlocked(call()));
 }
 
-// A handoff switches the agent of the frame the run loop runs in
+// A handoff switches the agent of the frame the run loop runs in, and a
+// tool call notes the model step that asked for it
 function watch(runner: Runner): void {
     if (watched.has(runner)) {
         return;
@@ -66,6 +67,9 @@ function watch(runner: Runner): void {
         if (current !== undefined && isFrame(current)) {
             handOff(current, to.name);
         }
+    });
+    runner.on("agent_tool_start", (_context, _agent, _tool, { toolCall }) => {
+        startToolCall(toolCall);
     });
 }
 
