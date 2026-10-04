@@ -7,6 +7,8 @@ import { clearRecords } from "../labels/records.ts";
 import { clearMemory } from "../memory/kept.ts";
 import { clearVersions } from "../monitor/versions.ts";
 import { stopLink, stopUploads } from "../transport/configure.ts";
+import { clearChecked } from "../x402/checked.ts";
+import { clearPayments } from "../x402/record/payments.ts";
 
 // Puts every module-level store back to empty between tests
 export function resetAll(): void {
@@ -20,4 +22,6 @@ export function resetAll(): void {
     stopLink();
     clearDayCounts();
     clearVersions();
+    clearChecked();
+    clearPayments();
 }
