@@ -14,7 +14,8 @@ export type AgentMessageRow = {
     delegated: number;
     // The messages that are delegations, each one counted
     delegatedMessages: number;
-    // Ones with untrusted content, or that no record vouched for
+    // Ones with untrusted content, or that no record vouched for. A
+    // delegation counts once, as in `delegated`.
     untrusted: number;
     lastAt: Date;
 };
@@ -22,6 +23,9 @@ export type AgentMessageRow = {
 // A message that names a step another agent took in the same run came
 // through quard.resume(), so it is also a delegation, as in agentLinks
 const DELEGATION = sql<boolean>`(m.kind = 'message' AND coalesce(p.agent <> m.to_agent, false))`;
+
+// The run and step that make one delegation, however many messages name it
+const NAMED = sql`(t.run_id, t.parent_step_id)`;
 
 // Messages and handoffs between agents from `since` on, per sender and
 // receiver. A delegation is from the agent of the step it names, as in
@@ -57,11 +61,10 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
             sql<number>`(count(*) FILTER (WHERE t.kind <> 'message'))::int`.as("handoffs"),
             sql<number>`(count(*) FILTER (WHERE t.kind = 'message'))::int`.as("messages"),
             // Once per run and step, like a delegation made in one process
-            sql<number>`(count(DISTINCT (t.run_id, t.parent_step_id)) FILTER (WHERE t.delegation))::int`.as(
-                "delegated",
-            ),
+            sql<number>`(count(DISTINCT ${NAMED}) FILTER (WHERE t.delegation))::int`.as("delegated"),
             sql<number>`(count(*) FILTER (WHERE t.delegation))::int`.as("delegatedMessages"),
-            sql<number>`(count(*) FILTER (WHERE t.untrusted))::int`.as("untrusted"),
+            sql<number>`(count(*) FILTER (WHERE t.untrusted AND NOT t.delegation)
+                + count(DISTINCT ${NAMED}) FILTER (WHERE t.untrusted AND t.delegation))::int`.as("untrusted"),
             sql<Date>`max(t.at)`.as("lastAt"),
         ])
         .whereRef("t.sender", "<>", "t.receiver")

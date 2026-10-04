@@ -219,6 +219,32 @@ describe("agentMessageLinks", () => {
         ]);
     });
 
+    it("counts an untrusted delegation once, however many of its messages are untrusted", async () => {
+        const projectId = await projectWith(
+            [...runs(), tool(r1, "orchestrator", s1, "2026-10-03T12:00:01.000Z")],
+            [
+                row(r1, "message", "orchestrator", "billing", "12:00:02", { parentStepId: s1, trust: "untrusted" }),
+                row(r1, "message", "orchestrator", "billing", "12:00:03", { parentStepId: s1, verified: false }),
+                row(r1, "message", "orchestrator", "billing", "12:00:04", { trust: "untrusted" }),
+                row(r1, "handoff", "orchestrator", "billing", "12:00:05", { trust: "untrusted" }),
+            ],
+        );
+
+        // One delegation, one other message and one handoff, all untrusted
+        expect(await agentMessageLinks(test.db, projectId, { since })).toEqual([
+            {
+                from: "orchestrator",
+                to: "billing",
+                handoffs: 1,
+                messages: 3,
+                delegated: 1,
+                delegatedMessages: 2,
+                untrusted: 3,
+                lastAt: new Date("2026-10-03T12:00:05.000Z"),
+            },
+        ]);
+    });
+
     it("counts rows from since on", async () => {
         const projectId = await projectWith(runs(), [
             { ...row(r1, "handoff", "triage", "billing", "12:00:01"), at: "2026-09-03T18:39:59.999Z" },
