@@ -139,6 +139,18 @@ export const countMessage = z.object({
     counts: z.array(dayCount).min(1).max(MAX_DAY_COUNTS),
 });
 
+// Takes back the per-day counts of a call refused after it was counted
+export const uncountMessage = z.object({
+    type: z.literal("uncount"),
+    id,
+    tool: name,
+    day,
+    counts: z
+        .array(dayCount.omit({ max: true }))
+        .min(1)
+        .max(MAX_DAY_COUNTS),
+});
+
 // A call used watched values. Blocked attempts are sent too.
 export const fleetMessage = z.object({
     type: z.literal("fleet"),
@@ -158,6 +170,7 @@ export const clientMessage = z.discriminatedUnion("type", [
     beatMessage,
     cancelMessage,
     countMessage,
+    uncountMessage,
     fleetMessage,
     lookupMessage,
     runCountMessage,
@@ -241,6 +254,7 @@ export type HelloMessage = z.infer<typeof helloMessage>;
 export type AskMessage = z.infer<typeof askMessage>;
 export type CountMessage = z.infer<typeof countMessage>;
 export type CountedMessage = z.infer<typeof countedMessage>;
+export type UncountMessage = z.infer<typeof uncountMessage>;
 export type FleetMessage = z.infer<typeof fleetMessage>;
 export type ReadyMessage = z.infer<typeof readyMessage>;
 export type DecidedMessage = z.infer<typeof decidedMessage>;

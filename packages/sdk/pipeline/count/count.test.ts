@@ -2,6 +2,7 @@ import { parseHashKey } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dayUsed, utcDay } from "../../guards/limit/daily.ts";
 import { markShared } from "../../guards/limit/run-counts.ts";
+import type { FailResult } from "../../guards/call.ts";
 import { makeAskableCall } from "../../test/call.ts";
 import { fakeSockets, sentOf } from "../../test/fake-socket.ts";
 import { resetAll } from "../../test/reset.ts";
@@ -51,6 +52,23 @@ describe("countCall", () => {
         expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(1);
     });
 
+    it("takes every count back when a check after the counts refuses the call", async () => {
+        const call = makeAskableCall({});
+        const list = [{ type: "limit" as const, maxCallsPerRun: 1, maxCallsPerDay: 1 }];
+        const stop: FailResult = {
+            guard: "abort",
+            rule: "aborted",
+            decision: "block",
+            mode: "block",
+            reason: "call_aborted",
+        };
+
+        expect(await countCall(call, list, [], () => stop)).toBe(stop);
+
+        expect([call.run.counters.get("calls:payInvoice"), dayUsed(utcDay(), "payInvoice", "calls")]).toEqual([0, 0]);
+        expect(await countCall(call, list, [])).toBeUndefined();
+    });
+
     it("reports watched values to control after the per-day counts", async () => {
         const fake = fakeSockets();
         const control = createControl({
@@ -87,6 +105,56 @@ function sharedCall(input: object) {
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
+
+describe("countCall when the fleet check refuses the call", () => {
+    const evil = [{ key: "domain:evil-pay.com", observe: false }];
+
+    it("takes the per-day counts back from control, and the per-run ones here", async () => {
+        const { control, socket } = linkedControl();
+        const call = makeAskableCall({ url: "https://evil-pay.com", amount: 80 });
+        const daily = { maxCallsPerDay: 5, maxAmountPerDay: { field: "amount", max: 1000 } };
+        const list = [{ type: "limit" as const, maxCallsPerRun: 5, fleetCheck: ["url"], ...daily }];
+
+        const counted = countCall(call, list, []);
+        await settle();
+        socket.reply({ type: "counted", id: sentOf(socket, "count")[0]?.id as string, ok: true, used: [3, 480] });
+        await settle();
+        const [fleet] = sentOf(socket, "fleet");
+        socket.reply({ type: "fleet_result", id: fleet?.id as string, quarantined: evil, fleetObserveUntil: null });
+
+        expect(await counted).toMatchObject({ rule: "fleet-check" });
+        expect(sentOf(socket, "uncount").map(({ counts }) => counts)).toEqual([
+            [
+                { counter: "calls", add: 1 },
+                { counter: "amount:amount", add: 80 },
+            ],
+        ]);
+        const days = [dayUsed(utcDay(), "payInvoice", "calls"), dayUsed(utcDay(), "payInvoice", "amount:amount")];
+        expect(days).toEqual([2, 400]);
+        expect(call.run.counters.get("calls:payInvoice")).toBe(0);
+        control.stop();
+    });
+
+    it("keeps a shared run's per-run count in control, and takes the per-day one back", async () => {
+        const { control, socket } = linkedControl();
+        const call = sharedCall({ url: "https://evil-pay.com" });
+        const list = [{ type: "limit" as const, maxCallsPerRun: 3, maxCallsPerDay: 9, fleetCheck: ["url"] }];
+
+        const counted = countCall(call, list, []);
+        await settle();
+        socket.reply({ type: "run_counted", id: sentOf(socket, "run_count")[0]?.id as string, ok: true, used: [1] });
+        await settle();
+        socket.reply({ type: "counted", id: sentOf(socket, "count")[0]?.id as string, ok: true, used: [1] });
+        await settle();
+        const [fleet] = sentOf(socket, "fleet");
+        socket.reply({ type: "fleet_result", id: fleet?.id as string, quarantined: evil, fleetObserveUntil: null });
+
+        expect(await counted).toMatchObject({ rule: "fleet-check" });
+        expect(socket.sent.map((message) => message.type).slice(1)).toEqual(["run_count", "count", "fleet", "uncount"]);
+        expect(call.run.counters.get("calls:payInvoice")).toBe(1);
+        control.stop();
+    });
+});
 
 describe("countCall for a run that spans processes", () => {
     it("counts per-run limits through control and delegation here", async () => {

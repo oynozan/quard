@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeCall } from "../../test/call.ts";
-import { addDayUsed, checkDaily, clearDayCounts, dayCounts, dayUsed, noteDayUsed, utcDay } from "./daily.ts";
+import {
+    addDayUsed,
+    checkDaily,
+    clearDayCounts,
+    dayCounts,
+    dayUsed,
+    noteDayUsed,
+    takeDayUsed,
+    utcDay,
+} from "./daily.ts";
 
 const NOW = Date.parse("2026-10-03T23:30:00.000Z");
 
@@ -28,6 +37,17 @@ describe("per-day counts", () => {
         expect(dayUsed("2026-10-03", "pay", "calls")).toBe(7);
         expect(dayUsed("2026-10-03", "pay", "amount:amount")).toBe(40);
         expect(dayUsed("2026-10-03", "other", "calls")).toBe(0);
+    });
+
+    it("takes counts back, never below zero", () => {
+        addDayUsed("2026-10-03", "pay", "calls", 3);
+
+        takeDayUsed("2026-10-03", "pay", "calls", 2);
+        expect(dayUsed("2026-10-03", "pay", "calls")).toBe(1);
+        takeDayUsed("2026-10-03", "pay", "calls", 2);
+        takeDayUsed("2026-10-03", "pay", "amount:amount", 5);
+        expect(dayUsed("2026-10-03", "pay", "calls")).toBe(0);
+        expect(dayUsed("2026-10-03", "pay", "amount:amount")).toBe(0);
     });
 
     it("keeps only today and yesterday", () => {

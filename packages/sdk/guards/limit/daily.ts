@@ -58,6 +58,13 @@ export function addDayUsed(day: string, tool: string, counter: string, add: numb
     counts.set(key, (counts.get(key) ?? 0) + add);
 }
 
+// Takes back the counts of a call refused after it was counted
+export function takeDayUsed(day: string, tool: string, counter: string, add: number): void {
+    const counts = countsOf(day);
+    const key = counterKey(tool, counter);
+    counts.set(key, Math.max(0, (counts.get(key) ?? 0) - add));
+}
+
 export function clearDayCounts(): void {
     days.clear();
 }

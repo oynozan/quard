@@ -160,11 +160,8 @@ async function runPipeline(code: Spec, args: unknown[], signal: AbortSignal | un
 
     // 7. Count, then run inside the scope so calls made by the tool join
     // this run. A call its caller gave up on is not counted.
-    const stop =
-        callAborted(call, signal) ??
-        (await countCall(call, spec.list, checked)) ??
-        changed(call, approvedArgs) ??
-        callAborted(call, signal);
+    const after = () => changed(call, approvedArgs) ?? callAborted(call, signal);
+    const stop = callAborted(call, signal) ?? (await countCall(call, spec.list, checked, after));
     if (stop !== undefined) {
         return refuse(spec, call, requested, stop);
     }

@@ -112,19 +112,4 @@ describe("countDays while control is away or slow", () => {
 
         expect(sentDays(await reconnect(fake))).toHaveLength(1);
     });
-
-    it("keeps nothing for later when it refuses a slow call itself", async () => {
-        const { fake, control } = setup();
-        const socket = fake.connect();
-        const call = makeAskableCall({});
-        await countDays(call, [CALLS], undefined, []);
-
-        const result = countDays(call, [CALLS], control, []);
-        vi.advanceTimersByTime(5000);
-        expect(await result).toMatchObject({ mode: "block" });
-        const [late] = sentOf(socket, "count");
-        socket.reply(counted(late?.id, true, [2]));
-
-        expect(sentDays(await reconnect(fake))).toEqual([]);
-    });
 });

@@ -128,4 +128,19 @@ describe("a call aborted before it ran", () => {
         expect(isGuardRefusal(refused) && refused.reason).toBe("call_aborted");
         expect(raw).not.toHaveBeenCalled();
     });
+
+    it("gives back its counts when the abort lands while the call is counted", async () => {
+        const controller = new AbortController();
+        abortOnLimit(controller, true);
+        const { raw, pay } = payWith({ type: "limit", maxCallsPerRun: 1, maxCallsPerDay: 1 });
+
+        const [refused, next] = await quard.run({ agent: "billing" }, async () => [
+            await pay(controller.signal, [{ amount: 1 }]),
+            await pay(new AbortController().signal, [{ amount: 2 }]),
+        ]);
+
+        expect(isGuardRefusal(refused) && refused.reason).toBe("call_aborted");
+        expect(next).toBe("paid");
+        expect(raw).toHaveBeenCalledExactlyOnceWith({ amount: 2 });
+    });
 });

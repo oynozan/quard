@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { connect, type Db } from "../../connect/connect.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
-import { addDayCounts, dayCounts, type DayCountInput } from "./counters.ts";
+import { addDayCounts, dayCounts, takeDayCounts, type DayCountInput } from "./counters.ts";
 
 let test: TestDb;
 // A pool with several connections, for calls that race
@@ -146,6 +146,72 @@ describe("addDayCounts with several counts", () => {
             { ...amount, used: 50 },
             { ...calls, used: 5 },
         ]);
+    });
+});
+
+describe("takeDayCounts", () => {
+    const pay = { day: DAY, tool: "payInvoice" };
+
+    it("takes a call's counts back, and never below zero", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        await addDayCounts(test.db, projectId, pay, [
+            { counter: "calls", add: 3 },
+            { counter: "amount:amount", add: 900 },
+        ]);
+
+        await takeDayCounts(test.db, projectId, pay, [
+            { counter: "calls", add: 1 },
+            { counter: "amount:amount", add: 400 },
+        ]);
+        expect(await dayCounts(test.db, projectId, DAY)).toEqual([
+            { ...amount, used: 500 },
+            { ...calls, used: 2 },
+        ]);
+
+        await takeDayCounts(test.db, projectId, pay, [{ counter: "calls", add: 5 }]);
+        expect(await dayCounts(test.db, projectId, DAY)).toEqual([
+            { ...amount, used: 500 },
+            { ...calls, used: 0 },
+        ]);
+    });
+
+    it("takes a counter sent twice twice", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        await addDayCounts(test.db, projectId, pay, [{ counter: "calls", add: 5 }]);
+
+        await takeDayCounts(test.db, projectId, pay, [
+            { counter: "calls", add: 1 },
+            { counter: "calls", add: 2 },
+        ]);
+
+        expect(await dayCounts(test.db, projectId, DAY)).toEqual([{ ...calls, used: 2 }]);
+    });
+
+    it("leaves other days, tools and projects alone, and makes no counter it lacks", async () => {
+        const one = await createProject(test.db, "One");
+        const two = await createProject(test.db, "Two");
+        const later = { ...pay, day: "2026-10-04" };
+        const refund = { ...pay, tool: "refund" };
+        for (const [projectId, key] of [
+            [one, pay],
+            [one, later],
+            [one, refund],
+            [two, pay],
+        ] as const) {
+            await addDayCounts(test.db, projectId, key, [{ counter: "calls", add: 2 }]);
+        }
+
+        await takeDayCounts(test.db, one, pay, [
+            { counter: "calls", add: 1 },
+            { counter: "amount:amount", add: 5 },
+        ]);
+
+        expect(await dayCounts(test.db, one, DAY)).toEqual([
+            { ...calls, used: 1 },
+            { ...calls, tool: "refund", used: 2 },
+        ]);
+        expect(await dayCounts(test.db, one, later.day)).toEqual([{ ...calls, day: later.day, used: 2 }]);
+        expect(await dayCounts(test.db, two, DAY)).toEqual([{ ...calls, used: 2 }]);
     });
 });
 

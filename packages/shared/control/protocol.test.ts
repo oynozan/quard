@@ -78,6 +78,16 @@ describe("clientMessage", () => {
             ],
         },
         {
+            type: "uncount",
+            id: ASK,
+            tool: "payInvoice",
+            day: DAY,
+            counts: [
+                { counter: "calls", add: 1 },
+                { counter: "amount:amount", add: 10 },
+            ],
+        },
+        {
             type: "fleet",
             id: ASK,
             runId: RUN,
@@ -98,6 +108,8 @@ describe("clientMessage", () => {
         ["an ask with a bad run id", { ...ask, runId: "nope" }],
         ["a counter with an unknown name", count([{ counter: "x", add: 1 }])],
         ["a negative count", count([{ counter: "calls", add: -1 }])],
+        ["a negative uncount", { ...count([{ counter: "calls", add: -1 }]), type: "uncount" }],
+        ["an uncount with nothing to take back", { ...count([]), type: "uncount" }],
         ["an unknown type", { type: "nope" }],
     ])("refuses %s", (_, message) => {
         expect(clientMessage.safeParse(message).success).toBe(false);

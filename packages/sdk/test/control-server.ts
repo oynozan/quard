@@ -70,6 +70,11 @@ export async function startControlServer(key = CONTROL_KEY, labels: LabelRecord[
                 (counter) => `${message.day}/${message.tool}/${counter}`,
             );
             send(socket, { type: "counted", id: message.id, ok, used });
+        } else if (message.type === "uncount") {
+            for (const { counter, add } of message.counts) {
+                const id = `${message.day}/${message.tool}/${counter}`;
+                counters.set(id, Math.max(0, (counters.get(id) ?? 0) - add));
+            }
         } else if (message.type === "lookup" && state.answerLookups) {
             send(socket, { type: "labels", id: message.id, records: lookupIn(labels, message) });
         } else if (message.type === "run_count") {

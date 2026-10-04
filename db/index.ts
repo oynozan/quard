@@ -53,7 +53,7 @@ export { agentVersions } from "./queries/control/connect/versions.ts";
 export type { AgentVersionItem } from "./queries/control/connect/versions.ts";
 export { closeConnection, openConnection, saveAgentVersion, saveRules } from "./queries/control/connections.ts";
 export type { AgentVersionInput, ConnectionInput } from "./queries/control/connections.ts";
-export { addDayCounts, dayCounts } from "./queries/control/counters.ts";
+export { addDayCounts, dayCounts, takeDayCounts } from "./queries/control/counters.ts";
 export type { DayCount, DayCountInput, DayCountsResult, DayKey } from "./queries/control/counters.ts";
 export { addRunCounts } from "./queries/control/run-counters.ts";
 export type { RunCountInput, RunCountsResult } from "./queries/control/run-counters.ts";

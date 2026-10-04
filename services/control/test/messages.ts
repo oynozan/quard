@@ -11,6 +11,7 @@ import {
     type RulesSnapshot,
     type RunCount,
     type RunCountMessage,
+    type UncountMessage,
 } from "@quard/shared";
 
 export const REDACTOR = createRedactor(parseHashKey("ab".repeat(32)));
@@ -74,6 +75,18 @@ export function askMessage(fields: Partial<AskMessage> = {}): AskMessage {
 export function countMessage(fields: Partial<CountMessage> = {}): CountMessage {
     return {
         type: "count",
+        id: newEventId(),
+        tool: "payInvoice",
+        day: new Date().toISOString().slice(0, 10),
+        counts: [{ counter: "calls", add: 1 }],
+        ...fields,
+    };
+}
+
+// Takes back one payInvoice call of today, its call count when no counts are given
+export function uncountMessage(fields: Partial<UncountMessage> = {}): UncountMessage {
+    return {
+        type: "uncount",
         id: newEventId(),
         tool: "payInvoice",
         day: new Date().toISOString().slice(0, 10),

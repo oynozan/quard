@@ -59,6 +59,7 @@ export {
     rulesSnapshot,
     serverMessage,
     askedMessage,
+    uncountMessage,
 } from "./control/protocol.ts";
 export type {
     ApprovalAnswer,
@@ -77,6 +78,7 @@ export type {
     RuleEntry,
     RulesSnapshot,
     ServerMessage,
+    UncountMessage,
 } from "./control/protocol.ts";
 export {
     labelsMessage,

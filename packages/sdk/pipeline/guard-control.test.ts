@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { isGuardRefusal } from "../core/refusal.ts";
 import { runScope } from "../context/scope.ts";
+import { dayUsed, utcDay } from "../guards/limit/daily.ts";
 import { rulesSnapshot } from "../policy/rules.ts";
 import { decisionsOf } from "../test/events.ts";
 import { fakeSockets, READY, sentOf, type FakeSocket } from "../test/fake-socket.ts";
@@ -88,6 +89,10 @@ describe("approvals through control", () => {
         expect(isGuardRefusal(refused) && refused.reason).toBe("approval_required");
         expect(raw).not.toHaveBeenCalled();
         expect(decisionsOf(events).at(-1)).toMatchObject({ rule: "arguments-changed", decision: "block" });
+        expect(sentOf(socket, "uncount").map(({ tool, counts }) => ({ tool, counts }))).toEqual([
+            { tool: "payInvoice", counts: [{ counter: "calls", add: 1 }] },
+        ]);
+        expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(0);
     });
 
     it("refuses a denied call, and the tool never runs", async () => {

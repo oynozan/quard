@@ -120,6 +120,7 @@ describe("@quard/shared", () => {
             "stripSecrets",
             "tooDeepToStrip",
             "toolCallEvent",
+            "uncountMessage",
             "uploadBatch",
             "uploadItem",
             "urlHost",

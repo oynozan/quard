@@ -19,6 +19,13 @@ export function sentDays(socket: FakeSocket) {
     return sentOf(socket, "count").flatMap(({ tool, day, counts }) => counts.map((count) => ({ tool, day, ...count })));
 }
 
+// Each per-day count a socket took back, with its tool and day
+export function takenDays(socket: FakeSocket) {
+    return sentOf(socket, "uncount").flatMap(({ tool, day, counts }) =>
+        counts.map((count) => ({ tool, day, ...count })),
+    );
+}
+
 export function counted(id: string | undefined, ok: boolean, used: number[]) {
     return { type: "counted", id: id as string, ok, used } as const;
 }

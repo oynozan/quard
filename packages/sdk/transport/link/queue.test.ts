@@ -26,6 +26,10 @@ const settle = () => vi.advanceTimersByTimeAsync(0);
 const replayed = (socket: FakeSocket) =>
     sentOf(socket, "count").flatMap(({ tool, day, counts }) => counts.map((count) => ({ tool, day, ...count })));
 
+// Each count taken back, with its tool and day
+const takenBack = (socket: FakeSocket) =>
+    sentOf(socket, "uncount").flatMap(({ tool, day, counts }) => counts.map((count) => ({ tool, day, ...count })));
+
 beforeEach(() => {
     vi.useFakeTimers({ now: Date.parse(`${DAY}T12:00:00.000Z`) });
 });
@@ -65,7 +69,7 @@ describe("replays for control", () => {
         expect(replayed(again).map(({ add }) => add)).toEqual([1]);
     });
 
-    it("takes back counts control turned out to have", () => {
+    it("forgets counts control turned out to have, and takes back what it got twice", () => {
         const { fake, replays } = setup();
         const count = { day: DAY, tool: "pay", counter: "calls", add: 2 };
         replays.keepCount(count);
@@ -77,7 +81,51 @@ describe("replays for control", () => {
 
         const socket = fake.connect();
 
-        expect(replayed(socket).map(({ tool, add }) => [tool, add])).toEqual([["pay", 2]]);
+        expect(replayed(socket).map(({ tool, counter, add }) => [tool, counter, add])).toEqual([["pay", "calls", 2]]);
+        expect(takenBack(socket).map(({ tool, counter, add }) => [tool, counter, add])).toEqual([
+            ["pay", "amount:amount", 2],
+            ["other", "calls", 3],
+        ]);
+    });
+
+    it("takes counts back from control at once while it is there", async () => {
+        const { fake, replays } = setup();
+        const socket = fake.connect();
+
+        replays.takeBack(DAY, "pay", [
+            { counter: "calls", add: 1 },
+            { counter: "amount:amount", add: 50 },
+        ]);
+
+        expect(sentOf(socket, "uncount").map(({ tool, day, counts }) => ({ tool, day, counts }))).toEqual([
+            {
+                tool: "pay",
+                day: DAY,
+                counts: [
+                    { counter: "calls", add: 1 },
+                    { counter: "amount:amount", add: 50 },
+                ],
+            },
+        ]);
+        socket.drop();
+        await settle();
+        vi.advanceTimersByTime(1000);
+        expect(takenBack(fake.connect())).toEqual([]);
+    });
+
+    it("keeps counts to take back while control is away, net of the counts kept for it", () => {
+        const { fake, replays } = setup();
+        replays.keepCount({ day: DAY, tool: "pay", counter: "calls", add: 1 });
+        replays.takeBack(DAY, "pay", [
+            { counter: "calls", add: 3 },
+            { counter: "amount:amount", add: 50 },
+        ]);
+        replays.keepCount({ day: DAY, tool: "pay", counter: "amount:amount", add: 50 });
+
+        const socket = fake.connect();
+
+        expect(replayed(socket)).toEqual([]);
+        expect(takenBack(socket)).toEqual([{ tool: "pay", day: DAY, counter: "calls", add: 2 }]);
     });
 
     it("sends a fleet report at once while control is there", async () => {

@@ -2,8 +2,8 @@ import { dayCounts } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { newProject, readyConnection, testContext } from "../test/context.ts";
-import { countMessage } from "../test/messages.ts";
-import { count } from "./count.ts";
+import { countMessage, uncountMessage } from "../test/messages.ts";
+import { count, uncount } from "./count.ts";
 
 let test: TestDb;
 
@@ -79,5 +79,37 @@ describe("count", () => {
             { tool: "payInvoice", counter: "amount:amount", day: message.day, used: 900 },
             { tool: "payInvoice", counter: "calls", day: message.day, used: 1 },
         ]);
+    });
+});
+
+describe("uncount", () => {
+    it("takes back the counts of a call refused after they went in, never below zero", async () => {
+        const project = await newProject(test.db);
+        const ctx = testContext(test.db);
+        const { connection, socket } = await readyConnection(ctx, project);
+        const message = countMessage({
+            counts: [
+                { counter: "calls", add: 2 },
+                { counter: "amount:amount", add: 900 },
+            ],
+        });
+        await count(ctx, connection, message);
+
+        await uncount(
+            ctx,
+            connection,
+            uncountMessage({
+                counts: [
+                    { counter: "calls", add: 1 },
+                    { counter: "amount:amount", add: 1000 },
+                ],
+            }),
+        );
+
+        expect(await dayCounts(test.db, project.projectId, message.day)).toEqual([
+            { tool: "payInvoice", counter: "amount:amount", day: message.day, used: 0 },
+            { tool: "payInvoice", counter: "calls", day: message.day, used: 1 },
+        ]);
+        expect(socket.sent.map(({ type }) => type)).toEqual(["ready", "counted"]);
     });
 });

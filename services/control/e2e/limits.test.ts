@@ -55,10 +55,19 @@ async function linkSdk(): Promise<void> {
 }
 
 // A payInvoice that watches its IBAN, called once per new run
-function payTool() {
+function payTool(limits: object = {}) {
     const rawPay = vi.fn(async (_input: typeof INVOICE) => "paid");
-    const payInvoice = guard(rawPay, { type: "limit", name: "payInvoice", fleetCheck: ["iban"] });
+    const payInvoice = guard(rawPay, { type: "limit", name: "payInvoice", fleetCheck: ["iban"], ...limits });
     return { rawPay, pay: () => quard.run({ agent: "billing" }, () => payInvoice({ ...INVOICE })) };
+}
+
+// The fleet check is past its 7 observe-only days, so it enforces
+async function fleetEnforces(): Promise<void> {
+    await test.db
+        .updateTable("projects")
+        .set({ fleet_started_at: new Date(Date.now() - 8 * DAY_MS) })
+        .where("id", "=", project.projectId)
+        .execute();
 }
 
 async function payInRuns(pay: () => Promise<unknown>, runs: number): Promise<unknown[]> {
@@ -155,13 +164,7 @@ describe("the fleet check through control", { timeout: 30_000 }, () => {
     });
 
     it("blocks a new IBAN used in five runs, and lets it through once someone marks it as known", async () => {
-        // Past its 7 observe-only days, so the check enforces
-        const started = new Date(Date.now() - 8 * DAY_MS);
-        await test.db
-            .updateTable("projects")
-            .set({ fleet_started_at: started })
-            .where("id", "=", project.projectId)
-            .execute();
+        await fleetEnforces();
         await linkSdk();
         const { rawPay, pay } = payTool();
 
@@ -179,6 +182,28 @@ describe("the fleet check through control", { timeout: 30_000 }, () => {
 
         expect(await pay()).toBe("paid");
         expect(rawPay).toHaveBeenCalledTimes(5);
+    });
+
+    it("gives back the per-day counts of a call it refuses after they went in", async () => {
+        await fleetEnforces();
+        await linkSdk();
+        const { rawPay, pay } = payTool({ maxCallsPerDay: 100, maxAmountPerDay: { field: "amount", max: 10_000 } });
+
+        // The fifth run's own report quarantines the IBAN
+        const results = await payInRuns(pay, 5);
+
+        expect(results.map(reasonOf)).toEqual([undefined, undefined, undefined, undefined, "value_quarantined"]);
+        expect(rawPay).toHaveBeenCalledTimes(4);
+        const today = utcDay(new Date());
+        await vi.waitFor(
+            async () =>
+                expect(await dayCounts(test.db, project.projectId, today)).toEqual([
+                    { tool: "payInvoice", counter: "amount:amount", day: today, used: 480 },
+                    { tool: "payInvoice", counter: "calls", day: today, used: 4 },
+                ]),
+            WAIT,
+        );
+        expect(dayUsed(today, "payInvoice", "amount:amount")).toBe(480);
     });
 });
 

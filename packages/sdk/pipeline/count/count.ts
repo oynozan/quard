@@ -12,6 +12,8 @@ export async function countCall(
     call: GuardCall,
     list: readonly GuardOptions[],
     checked: readonly RuleResult[],
+    // Checks that must still pass once the call is counted
+    after: () => FailResult | undefined = () => undefined,
 ): Promise<FailResult | undefined> {
     const limits = list.filter((options): options is LimitOptions => options.type === "limit");
     // A shared run's counters live in control; delegation stays here
@@ -19,11 +21,12 @@ export async function countCall(
     const undo = limits.map((options) => countLimit(call, options, !shared));
     const control = activeControl();
     let stop = shared ? await countRuns(call, limits, control, checked) : undefined;
-    stop ??= await countDays(call, limits, control, checked);
+    stop ??= await countDays(call, limits, control, checked, undo);
     for (const options of limits) {
         stop ??= await reportUse(call, options, control, checked);
     }
-    // A later refusal takes back local counts, but control only adds to a shared run's
+    stop ??= after();
+    // A refusal takes back the per-day counts and local ones, but control keeps a shared run's
     if (stop !== undefined) {
         undo.forEach((takeBack) => takeBack());
     }

@@ -97,6 +97,32 @@ export async function addDayCounts(
     }
 }
 
+// Takes back the counts of a call refused after they were added, never below zero
+export async function takeDayCounts(
+    db: Db,
+    projectId: string,
+    key: DayKey,
+    counts: ReadonlyArray<{ counter: string; add: number }>,
+): Promise<void> {
+    const adds = new Map<string, number>();
+    for (const { counter, add } of counts) {
+        adds.set(counter, (adds.get(counter) ?? 0) + add);
+    }
+    await db.transaction().execute(async (trx) => {
+        // In counter order, as adds lock them, so the two can't deadlock
+        for (const counter of [...adds.keys()].sort()) {
+            await trx
+                .updateTable("day_counters")
+                .set({ used: sql<number>`greatest(used - ${adds.get(counter) as number}::float8, 0)` })
+                .where("project_id", "=", projectId)
+                .where("day", "=", dateOf(key.day))
+                .where("tool", "=", key.tool)
+                .where("counter", "=", counter)
+                .execute();
+        }
+    });
+}
+
 // Every counter of one UTC day in the project
 export async function dayCounts(db: Db, projectId: string, day: string): Promise<DayCount[]> {
     return db

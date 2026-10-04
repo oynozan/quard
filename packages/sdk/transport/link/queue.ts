@@ -1,10 +1,17 @@
-import { newEventId, type CountedMessage, type CountMessage, type FleetMessage } from "@quard/shared";
+import {
+    newEventId,
+    type CountedMessage,
+    type CountMessage,
+    type FleetMessage,
+    type UncountMessage,
+} from "@quard/shared";
 import { noteDayUsed } from "../../guards/limit/daily.ts";
 import type { Link } from "./link.ts";
 import type { Reply, Requests } from "./requests.ts";
 
 export type FleetUse = Omit<FleetMessage, "type" | "id">;
 export type QueuedCount = { day: string; tool: string; counter: string; add: number };
+export type TakenCount = { counter: string; add: number };
 
 // What control missed while it was away, sent when it is back
 export type Replays = {
@@ -14,6 +21,8 @@ export type Replays = {
     dropUse(use: FleetUse): void;
     keepCount(count: QueuedCount): void;
     dropCount(count: QueuedCount): void;
+    // Takes counts of one tool and day back from control, now or once it is back
+    takeBack(day: string, tool: string, counts: readonly TakenCount[]): void;
 };
 
 const MAX_USES = 1000;
@@ -26,7 +35,7 @@ export function dayCounted(reply: Reply | undefined, count: number): CountedMess
 }
 
 export function createReplays(link: Link, requests: Requests, replyMs: number): Replays {
-    // Counts for the same day, tool and counter add up into one
+    // What control misses on each counter, below zero when it has counts to give back
     const counts = new Map<string, number>();
     const uses: FleetUse[] = [];
     let retry: NodeJS.Timeout | undefined;
@@ -41,17 +50,29 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
         }
     }
 
+    function owe(count: QueuedCount): void {
+        const left = (counts.get(keyOf(count)) ?? 0) + count.add;
+        if (left === 0) {
+            counts.delete(keyOf(count));
+        } else {
+            counts.set(keyOf(count), left);
+            later();
+        }
+    }
+
     function keepCount(count: QueuedCount): void {
-        counts.set(keyOf(count), (counts.get(keyOf(count)) ?? 0) + count.add);
-        later();
+        owe(count);
     }
 
     function dropCount(count: QueuedCount): void {
-        const left = (counts.get(keyOf(count)) ?? 0) - count.add;
-        if (left > 0) {
-            counts.set(keyOf(count), left);
-        } else {
-            counts.delete(keyOf(count));
+        owe({ ...count, add: -count.add });
+    }
+
+    function takeBack(day: string, tool: string, taken: readonly TakenCount[]): void {
+        const back = taken.map(({ counter, add }) => ({ counter, add }));
+        const message: UncountMessage = { type: "uncount", id: newEventId(), tool, day, counts: back };
+        if (!link.send(message)) {
+            taken.forEach(({ counter, add }) => dropCount({ day, tool, counter, add }));
         }
     }
 
@@ -118,12 +139,23 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
         counts.clear();
         for (const [key, add] of queued) {
             const [day, tool, counter] = JSON.parse(key) as [string, string, string];
-            sendCount({ day, tool, counter, add });
+            if (add > 0) {
+                sendCount({ day, tool, counter, add });
+            } else {
+                takeBack(day, tool, [{ counter, add: -add }]);
+            }
         }
         uses.splice(0).forEach(sendUse);
     }
 
     link.listen({ ready: flush });
 
-    return { use: (use) => (link.ready() ? sendUse(use) : keepUse(use)), keepUse, dropUse, keepCount, dropCount };
+    return {
+        use: (use) => (link.ready() ? sendUse(use) : keepUse(use)),
+        keepUse,
+        dropUse,
+        keepCount,
+        dropCount,
+        takeBack,
+    };
 }

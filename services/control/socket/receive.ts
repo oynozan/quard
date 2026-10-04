@@ -3,7 +3,7 @@ import { WebSocket } from "ws";
 import { ask, beat, cancel } from "../approvals/ask.ts";
 import { hello } from "../connect/hello.ts";
 import { agent, rules } from "../connect/rules.ts";
-import { count } from "../counters/count.ts";
+import { count, uncount } from "../counters/count.ts";
 import { runCount } from "../counters/run-count.ts";
 import { fleet } from "../fleet/record.ts";
 import { lookup } from "../labels/lookup.ts";
@@ -28,6 +28,8 @@ function route(ctx: Context, connection: Connection, message: SessionMessage): P
             return cancel(ctx, connection, message);
         case "count":
             return count(ctx, connection, message);
+        case "uncount":
+            return uncount(ctx, connection, message);
         case "fleet":
             return fleet(ctx, connection, message);
         case "lookup":

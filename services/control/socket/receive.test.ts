@@ -1,3 +1,4 @@
+import { dayCounts } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { brokenDb, newConnection, newProject, readyConnection, testContext } from "../test/context.ts";
@@ -10,6 +11,7 @@ import {
     lookupMessage,
     RULES,
     runCountMessage,
+    uncountMessage,
 } from "../test/messages.ts";
 import { receive } from "./receive.ts";
 
@@ -41,6 +43,7 @@ describe("receive", () => {
         await receive(ctx, connection, text({ type: "beat", askIds: [ask.askId] }));
         await receive(ctx, connection, text({ type: "cancel", askId: ask.askId }));
         await receive(ctx, connection, text(count));
+        await receive(ctx, connection, text(uncountMessage()));
         await receive(ctx, connection, text(fleet));
         await receive(ctx, connection, text(lookupMessage()));
         await receive(ctx, connection, text(runCountMessage()));
@@ -60,6 +63,9 @@ describe("receive", () => {
             .executeTakeFirstOrThrow();
         expect(stored.rules_hash).toBe("e".repeat(16));
         expect(ctx.registry.requestIds()).toEqual([]);
+        expect(await dayCounts(test.db, project.projectId, count.day)).toEqual([
+            { tool: "payInvoice", counter: "calls", day: count.day, used: 0 },
+        ]);
     });
 
     it("takes hello once", async () => {
