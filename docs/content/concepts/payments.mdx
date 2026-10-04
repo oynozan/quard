@@ -119,6 +119,12 @@ A signed payment that no x402 guard checked never leaves your app. The request g
 Blocked by Quard: no x402 guard checked this payment. The x402 payment did NOT happen. Do not retry it.
 ```
 
+The same goes for a payment sent to another host than the one the guard checked it for. The guard decides on the host your app asked, not the one the paid server names.
+
+### Amounts the guard can't read
+
+An amount that isn't whole atomic units, written as a number or in hex, is always refused before signing, even in observe mode. A cap can't hold if the amount can't be read.
+
 ## x402 over MCP
 
 A paid MCP tool answers with its price as an error result, and the payment travels in `_meta["x402/payment"]`. Wrap the MCP client with `quard.x402Mcp()` and pay through a guarded x402 client:
