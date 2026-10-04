@@ -70,4 +70,18 @@ describe("extractValues", () => {
     it("returns nothing for plain words, dates and amounts", () => {
         expect(extractValues("Accounts Payable, 2026-10-03, 4950.00")).toEqual([]);
     });
+
+    it("finds EVM wallet addresses in lower case, not again as IDs", () => {
+        const address = "0x209693Bc6afc0C5328bA36FaF03C514EF312287C";
+
+        expect(extractValues(`pay ${address} now`)).toEqual([
+            { type: "wallet", value: address.toLowerCase(), keys: [`wallet:${address.toLowerCase()}`] },
+        ]);
+    });
+
+    it("skips hex runs that are too long to be an address", () => {
+        const values = extractValues(`0x${"a1".repeat(21)}`);
+
+        expect(values.map((value) => value.type)).toEqual(["id"]);
+    });
 });

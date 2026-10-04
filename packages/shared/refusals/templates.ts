@@ -22,7 +22,15 @@ export type ReasonCode =
     | "approval_timed_out"
     | "daily_limit_reached"
     | "value_quarantined"
-    | "call_aborted";
+    | "call_aborted"
+    | "x402_over_payment_limit"
+    | "x402_over_run_limit"
+    | "x402_over_day_limit"
+    | "x402_too_many_payments"
+    | "x402_host_blocked"
+    | "x402_untrusted_payee"
+    | "x402_payee_quarantined"
+    | "x402_unknown_value_over_cap";
 
 const REASONS: Record<ReasonCode, (field: string) => string> = {
     permission_denied: () => "this agent is not allowed to use this tool",
@@ -49,6 +57,14 @@ const REASONS: Record<ReasonCode, (field: string) => string> = {
     value_quarantined: (field) =>
         `the ${field} value is new and many runs used it at once, so it is blocked everywhere`,
     call_aborted: () => "the call was cancelled before it ran",
+    x402_over_payment_limit: () => "the payment is over the limit for one payment",
+    x402_over_run_limit: () => "the payment is over the run limit",
+    x402_over_day_limit: () => "the payment is over the daily limit",
+    x402_too_many_payments: () => "this run made too many payments",
+    x402_host_blocked: () => "this host may not be paid",
+    x402_untrusted_payee: () => "the host or payee first appeared in untrusted content",
+    x402_payee_quarantined: () => "the payee is new and many runs paid it at once, so it is blocked everywhere",
+    x402_unknown_value_over_cap: () => "the amount is over the cap for this token",
 };
 
 export type RefusalInput = {
@@ -60,6 +76,9 @@ export type RefusalInput = {
 
 export function refusalText(input: RefusalInput): string {
     const why = REASONS[input.reason](input.field ?? "argument");
+    if (input.guard === "x402" || input.reason.startsWith("x402_")) {
+        return `Blocked by the ${input.guard} guard: ${why}. The x402 payment did NOT happen. Do not retry it.`;
+    }
     if (input.reason === "content_blocked") {
         return `Blocked by the ${input.guard} guard: ${why}. The ${input.tool} result was withheld. Do not retry it; tell the user what was blocked.`;
     }

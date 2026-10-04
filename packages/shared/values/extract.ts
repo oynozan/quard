@@ -7,7 +7,7 @@ import { cleanText } from "../normalize/text.ts";
 import { findUrls, urlHost } from "../normalize/url.ts";
 import { removeSecrets } from "../redact/secrets.ts";
 
-export type ValueType = "iban" | "email" | "url" | "host" | "path" | "id";
+export type ValueType = "iban" | "email" | "url" | "host" | "path" | "id" | "wallet";
 
 // A traceable value and the index keys it can match on
 export type ExtractedValue = {
@@ -15,6 +15,9 @@ export type ExtractedValue = {
     value: string;
     keys: string[];
 };
+
+// An EVM address: 0x and 40 hex digits. Public on chain, so kept in clear.
+const EVM_ADDRESS = /(?<![\w])0x[0-9a-fA-F]{40}(?![\w])/g;
 
 function hostKeys(host: string): string[] {
     const domain = mainDomain(host);
@@ -47,6 +50,11 @@ export function extractValues(text: string): ExtractedValue[] {
     }
     for (const host of findHosts(clean).filter((host) => !covered.has(host))) add("host", host, hostKeys(host));
     for (const path of findPaths(clean)) add("path", path, [`path:${path}`]);
+    for (const [match] of clean.matchAll(EVM_ADDRESS)) {
+        const wallet = match.toLowerCase();
+        add("wallet", wallet, [`wallet:${wallet}`]);
+        covered.add(wallet);
+    }
     // A secret is no ID: its key would carry it past redaction
     for (const id of findIds(removeSecrets(clean)).filter((id) => !covered.has(id))) add("id", id, [`id:${id}`]);
     return [...found.values()];

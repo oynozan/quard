@@ -25,6 +25,17 @@ const ALL: ReasonCode[] = [
     "call_aborted",
 ];
 
+const X402: ReasonCode[] = [
+    "x402_over_payment_limit",
+    "x402_over_run_limit",
+    "x402_over_day_limit",
+    "x402_too_many_payments",
+    "x402_host_blocked",
+    "x402_untrusted_payee",
+    "x402_payee_quarantined",
+    "x402_unknown_value_over_cap",
+];
+
 describe("refusalText", () => {
     it("names the guard, the field and the tool", () => {
         expect(
@@ -64,6 +75,24 @@ describe("refusalText", () => {
     it("says a cancelled call did not run", () => {
         expect(refusalText({ guard: "abort", tool: "payInvoice", reason: "call_aborted" })).toBe(
             "Blocked by the abort guard: the call was cancelled before it ran. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.",
+        );
+    });
+
+    it.each(X402)("says the x402 payment did not happen for %s", (reason) => {
+        const text = refusalText({ guard: "x402", tool: "x402", reason });
+
+        expect(text).toMatch(/^Blocked by the x402 guard: .+\. The x402 payment did NOT happen\. Do not retry it\.$/);
+    });
+
+    it("reads like the spec for a payment over the run limit", () => {
+        expect(refusalText({ guard: "x402", tool: "x402", reason: "x402_over_run_limit" })).toBe(
+            "Blocked by the x402 guard: the payment is over the run limit. The x402 payment did NOT happen. Do not retry it.",
+        );
+    });
+
+    it("uses the payment wording for an approval refused by the x402 guard", () => {
+        expect(refusalText({ guard: "x402", tool: "x402", reason: "approval_denied" })).toBe(
+            "Blocked by the x402 guard: a human denied it. The x402 payment did NOT happen. Do not retry it.",
         );
     });
 });
