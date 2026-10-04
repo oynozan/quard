@@ -2,8 +2,8 @@
 //
 // One script that fills the dashboard: every guard type, several agents,
 // a call that waits for your click, and runs that complete, fail and get
-// blocked. Start webhook and control first (see the README), open
-// http://localhost:3100, then run this and watch the runs come in.
+// blocked. Start webhook, control and the worker first (see README.md), open
+// the dashboard at http://localhost:3100, then run this and watch the runs come in.
 //
 //   1  A clean payment: model calls, tool calls, labels, masked values.
 //   2  Bank details from a web page with hidden instructions. The source

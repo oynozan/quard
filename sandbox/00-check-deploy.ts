@@ -7,6 +7,7 @@
 //   docs        the docs site loads (only with QUARD_DOCS_URL)
 //   webhook     answers /health as webhook
 //   control     answers /health as control
+//   worker      control's /health saw it in the last 30 s
 //   live link   control opens the WebSocket for the agent key
 //   model call  one wrapped model call (only with OPENAI_API_KEY)
 //   run         one real run reaches webhook and every event is stored
@@ -52,6 +53,8 @@ const CONTROL = trimmed(env.QUARD_CONTROL_URL || "http://localhost:4200");
 const MODEL = env.OPENAI_MODEL || "gpt-5.4-mini";
 const TIMEOUT = 5_000;
 const UPLOAD_WAIT = 10_000;
+// A worker that checked in within this long is running
+const WORKER_SEEN = 30_000;
 
 let checks = 0;
 let failed = 0;
@@ -100,6 +103,20 @@ async function health(url: string, service: string): Promise<string | undefined>
     } catch (error) {
         return `${url}: ${reason(error)}`;
     }
+}
+
+// The worker answers no requests, so control's /health says when it last checked in
+async function checkWorker(): Promise<void> {
+    let seenAt: string | null | undefined;
+    try {
+        const res = await fetch(`${CONTROL}/health`, { signal: AbortSignal.timeout(TIMEOUT) });
+        seenAt = ((await res.json()) as { workerSeenAt?: string | null }).workerSeenAt;
+    } catch (error) {
+        return report("Worker", `${CONTROL}: ${reason(error)}`, "");
+    }
+    const ago = seenAt ? Math.max(0, Date.now() - Date.parse(seenAt)) : Infinity;
+    const problem = ago <= WORKER_SEEN ? undefined : "no worker seen; start it as sandbox/README.md shows";
+    report("Worker", problem, `seen ${Math.round(ago / 1000)} s ago`);
 }
 
 // Opens the control WebSocket the way the SDK does and closes it again
@@ -157,6 +174,8 @@ if (DOCS === undefined) skip("Docs", "not checked: set QUARD_DOCS_URL");
 else report("Docs", docs, `${DOCS} loads`);
 report("Webhook", webhook, WEBHOOK);
 report("Control", control, CONTROL);
+if (control === undefined) await checkWorker();
+else skip("Worker", "not checked: control did not answer");
 
 if (settings === undefined) {
     report("Live link", await liveLink(), "control accepts the agent key");

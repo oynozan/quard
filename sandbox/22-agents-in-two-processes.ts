@@ -101,7 +101,7 @@ async function orchestratorProcess(): Promise<void> {
     quard.configure({
         onEvent: (event) => {
             if (event.type === "run_started") {
-                console.log(`  Dashboard: http://localhost:3000/runs/${event.runId}`);
+                console.log(`  Dashboard: http://localhost:3100/runs/${event.runId}`);
             }
             showEvents(event);
         },

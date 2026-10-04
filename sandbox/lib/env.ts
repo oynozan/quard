@@ -32,7 +32,7 @@ if (DASHBOARD) {
         () => true,
         () => {
             console.warn(
-                `The Quard backend at ${webhookUrl} isn't answering. Start webhook and control as sandbox/README.md shows.`,
+                `The Quard backend at ${webhookUrl} isn't answering. Start webhook, control and the worker as sandbox/README.md shows.`,
             );
             return false;
         },
@@ -46,7 +46,7 @@ export const RECORDED = answered;
 export function needsDashboard(): void {
     if (!DASHBOARD) {
         console.error(
-            "This example needs the local Quard backend. Start webhook and control as sandbox/README.md shows, then add QUARD_AGENT_KEY and QUARD_HASH_KEY to sandbox/.env.",
+            "This example needs the local Quard backend. Start webhook, control and the worker as sandbox/README.md shows, then add QUARD_AGENT_KEY and QUARD_HASH_KEY to sandbox/.env.",
         );
         process.exit(1);
     }
