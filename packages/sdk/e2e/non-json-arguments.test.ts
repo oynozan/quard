@@ -102,6 +102,20 @@ describe("a guarded tool called with values JSON can't hold", () => {
         expect(JSON.stringify(webhook.events)).not.toContain("4111111111111111");
     });
 
+    it("masks a card number in what an argument's toJSON gives", async () => {
+        connect();
+        const pay = guard(async (_input: unknown) => "paid", { type: "limit", name: "pay" });
+        const payee = { name: "Jo", toJSON: () => ({ name: "Jo", card: "4111111111111111" }) };
+
+        await quard.run({}, () => pay({ amount: 10, payee }));
+        expect(await flushUploads()).toBe(true);
+
+        expect(toolCalls().map((event) => event.arguments)).toEqual([
+            { amount: 10, payee: { name: "Jo", card: "4111…1111" } },
+        ]);
+        expect(JSON.stringify(webhook.events)).not.toContain("4111111111111111");
+    });
+
     it("cuts a circular argument where it repeats, and uploads every event after it", async () => {
         connect();
         const save = guard(async (_input: unknown) => "saved", { type: "limit", name: "save" });

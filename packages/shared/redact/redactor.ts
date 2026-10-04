@@ -65,6 +65,10 @@ export function createRedactor(hashKey: Buffer): Redactor {
         if (typeof input === "bigint") {
             return redactText(String(input));
         }
+        // JSON leaves functions out, so no toJSON is left to run when the copy is sent
+        if (typeof input === "function") {
+            return undefined;
+        }
         if (input === null || typeof input !== "object") {
             return input;
         }
@@ -79,16 +83,27 @@ export function createRedactor(hashKey: Buffer): Redactor {
         }
         walk.parents.add(input);
         walk.copied.add(input);
-        const clean = Array.isArray(input)
-            ? input.map((item: unknown) => value(item, walk))
-            : Object.fromEntries(
-                  Object.entries(input).map(([name, item]) => [
-                      redactText(name),
-                      SECRET_FIELD.test(name) ? CUT : value(item, walk),
-                  ]),
-              );
+        const clean = copy(input, walk);
         walk.parents.delete(input);
         return clean;
+    };
+
+    // What JSON writes for an object, so a Date leaves as the ISO text its toJSON gives
+    const copy = (input: object, walk: Walk): unknown => {
+        const toJSON = (input as { toJSON?: unknown }).toJSON;
+        const plain: unknown = typeof toJSON === "function" ? toJSON.call(input) : input;
+        if (plain === null || typeof plain !== "object") {
+            return value(plain, walk);
+        }
+        if (Array.isArray(plain)) {
+            return plain.map((item: unknown) => value(item, walk));
+        }
+        return Object.fromEntries(
+            Object.entries(plain).map(([name, item]) => [
+                redactText(name),
+                SECRET_FIELD.test(name) ? CUT : value(item, walk),
+            ]),
+        );
     };
 
     return {

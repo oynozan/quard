@@ -179,6 +179,44 @@ describe("redactor.value", () => {
         expect(json.match(/"id":\d/g)).toHaveLength(10);
     });
 
+    it("redacts what a value's toJSON gives, as JSON would send it", () => {
+        const payee = { name: "Jo", toJSON: () => ({ name: "Jo", card: "4111111111111111" }) };
+        const at = new Date("2026-10-04T12:00:00.000Z");
+
+        const masked = redactor.value({ payee, amount: { toJSON: () => 10n }, at });
+
+        expect(masked).toEqual({
+            payee: { name: "Jo", card: "4111…1111" },
+            amount: "10",
+            at: "2026-10-04T12:00:00.000Z",
+        });
+        expect(JSON.stringify(masked)).not.toContain("4111111111111111");
+    });
+
+    it("leaves functions out as JSON does, so none runs when the copy is sent", () => {
+        const card = () => "4111111111111111";
+        const value = { pay: card, list: [card], inner: { toJSON: () => ({ toJSON: card }) } };
+
+        expect(JSON.stringify(redactor.value(value))).toBe('{"list":[null],"inner":{}}');
+    });
+
+    it("cuts a value where what its toJSON gives holds it again", () => {
+        const self = {
+            id: 1,
+            toJSON(): unknown {
+                return this;
+            },
+        };
+        const wrapped = {
+            id: 2,
+            toJSON(): unknown {
+                return { wrapped: this };
+            },
+        };
+
+        expect(JSON.stringify(redactor.value([self, wrapped]))).toBe('[{"id":1},{"wrapped":"…"}]');
+    });
+
     it("removes whatever a secret-named field holds", () => {
         expect(redactor.value({ password: "hunter2", token: { value: "x" }, name: "Jo" })).toEqual({
             password: "…",

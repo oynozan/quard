@@ -22,9 +22,14 @@ function toolCall(at = new Date().toISOString()): Extract<RunEvent, { type: "too
     };
 }
 
-// Arguments JSON can't hold even once redacted
+// Arguments that throw when read, so they can't be turned into JSON
 function unsendable(): RunEvent {
-    return { ...toolCall(), arguments: { amount: { toJSON: () => 10n } } };
+    const args = {
+        get amount(): number {
+            throw new Error("closed");
+        },
+    };
+    return { ...toolCall(), arguments: args };
 }
 
 type Sent = {
@@ -47,8 +52,8 @@ function webhook(...statuses: Array<number | "down">) {
     return { sent, send };
 }
 
-function uploader(send: Send, warn = vi.fn()) {
-    return createUploader({ webhookUrl: "http://webhook.test/", key: "qk_live_abc", redactor, send, warn });
+function uploader(send: Send, warn = vi.fn(), redactWith = redactor) {
+    return createUploader({ webhookUrl: "http://webhook.test/", key: "qk_live_abc", redactor: redactWith, send, warn });
 }
 
 beforeEach(() => {
@@ -162,7 +167,8 @@ describe("uploader", () => {
     it("drops a batch that stops turning into JSON instead of resending it forever", async () => {
         const hook = webhook("down", 202);
         const warn = vi.fn();
-        const up = uploader(hook.send, warn);
+        // A redactor that keeps values as they are lets a live handle into the batch
+        const up = uploader(hook.send, warn, { ...redactor, value: (input) => input });
         let open = true;
         const handle = {
             toJSON: () => {
