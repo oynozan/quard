@@ -44,7 +44,8 @@ export function createRedactor(hashKey: Buffer): Redactor {
         return `${kind}:${mask}#${keyedHash(hashKey, kind, raw)}`;
     };
 
-    const value = (input: unknown, depth = 0): unknown => {
+    // parents holds the objects input sits in, so its size is the depth
+    const value = (input: unknown, parents: Set<object>): unknown => {
         if (typeof input === "string") {
             return redactText(input);
         }
@@ -59,20 +60,22 @@ export function createRedactor(hashKey: Buffer): Redactor {
         if (input === null || typeof input !== "object") {
             return input;
         }
-        // Too deep to check, so nothing in it is kept
-        if (depth >= MAX_DEPTH) {
+        // Too deep to check, or inside itself, so nothing in it is kept
+        if (parents.size >= MAX_DEPTH || parents.has(input)) {
             return CUT;
         }
-        if (Array.isArray(input)) {
-            return input.map((item: unknown) => value(item, depth + 1));
-        }
-        return Object.fromEntries(
-            Object.entries(input).map(([name, item]) => [
-                redactText(name),
-                SECRET_FIELD.test(name) ? CUT : value(item, depth + 1),
-            ]),
-        );
+        parents.add(input);
+        const clean = Array.isArray(input)
+            ? input.map((item: unknown) => value(item, parents))
+            : Object.fromEntries(
+                  Object.entries(input).map(([name, item]) => [
+                      redactText(name),
+                      SECRET_FIELD.test(name) ? CUT : value(item, parents),
+                  ]),
+              );
+        parents.delete(input);
+        return clean;
     };
 
-    return { text: redactText, key, value: (input) => value(input) };
+    return { text: redactText, key, value: (input) => value(input, new Set()) };
 }

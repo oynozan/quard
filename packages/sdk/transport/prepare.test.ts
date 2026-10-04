@@ -62,6 +62,26 @@ describe("prepareEvent", () => {
         expect(JSON.stringify(prepared)).not.toContain("4111111111111111");
     });
 
+    it("cuts circular arguments where they repeat", () => {
+        const invoice: Record<string, unknown> = { iban: IBAN };
+        invoice.self = invoice;
+        const event: RunEvent = {
+            type: "tool_call",
+            ...base,
+            tool: "payInvoice",
+            arguments: invoice,
+            status: "ok",
+            influenced: false,
+            flagged: false,
+            durationMs: 1,
+        };
+
+        expect(prepareEvent(event, redactor)).toMatchObject({
+            arguments: { iban: "DE89…3000", self: "…" },
+            keys: [`iban:DE89…3000#${keyedHash(KEY, "iban", IBAN)}`],
+        });
+    });
+
     it("redacts other events as they are", () => {
         const event: RunEvent = { type: "warning", ...base, code: "unwrapped_tool", tool: "mail jane@acme.com" };
 

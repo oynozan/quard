@@ -108,6 +108,28 @@ describe("redactor.value", () => {
         expect(masked).toEqual(redactor.value({ amount: "10", card: "4111111111111111", list: ["5555555555554444"] }));
     });
 
+    it("cuts a value where it sits inside itself, however often it does", () => {
+        const node: Record<string, unknown> = { iban: IBAN };
+        node.left = node;
+        node.right = node;
+        const list: unknown[] = ["x"];
+        list.push(list);
+
+        expect(redactor.value({ node, list })).toEqual({
+            node: { iban: "DE89…3000", left: "…", right: "…" },
+            list: ["x", "…"],
+        });
+    });
+
+    it("keeps in full a value used twice without being inside itself", () => {
+        const payee = { iban: IBAN };
+
+        expect(redactor.value({ from: payee, to: [payee] })).toEqual({
+            from: { iban: "DE89…3000" },
+            to: [{ iban: "DE89…3000" }],
+        });
+    });
+
     it("removes whatever a secret-named field holds", () => {
         expect(redactor.value({ password: "hunter2", token: { value: "x" }, name: "Jo" })).toEqual({
             password: "…",
