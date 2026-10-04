@@ -58,7 +58,7 @@ const traffic = (): MessageRow[] => [
 ];
 
 const triageToBilling = {
-    delegations: 0,
+    delegated: 0,
     from: "triage",
     to: "billing",
     handoffs: 3,
@@ -68,7 +68,7 @@ const triageToBilling = {
 };
 
 const billingToTriage = {
-    delegations: 0,
+    delegated: 0,
     from: "billing",
     to: "triage",
     handoffs: 0,
@@ -78,7 +78,7 @@ const billingToTriage = {
 };
 
 const triageToResearch = {
-    delegations: 0,
+    delegated: 0,
     from: "triage",
     to: "research",
     handoffs: 1,
@@ -135,16 +135,15 @@ describe("agentMessageLinks", () => {
                 ...billingToTriage,
                 from: "unknown",
                 to: "billing",
-                delegations: 1,
-                messages: 1,
+                delegated: 1,
                 lastAt: new Date("2026-10-03T12:00:04.000Z"),
             },
             {
                 ...billingToTriage,
                 from: "orchestrator",
                 to: "billing",
-                delegations: 1,
-                messages: 0,
+                messages: 1,
+                delegated: 1,
                 untrusted: 1,
                 lastAt: new Date("2026-10-03T12:00:02.000Z"),
             },
@@ -152,15 +151,15 @@ describe("agentMessageLinks", () => {
                 ...billingToTriage,
                 from: "planner",
                 to: "billing",
-                delegations: 1,
-                messages: 0,
+                messages: 1,
+                delegated: 1,
                 untrusted: 0,
                 lastAt: new Date("2026-10-03T13:00:02.000Z"),
             },
         ]);
     });
 
-    it("counts a message that names the sender's step as a delegation across processes", async () => {
+    it("counts the messages that name the sender's step as delegated across processes", async () => {
         const projectId = await projectWith(runs(), [
             row(r1, "message", "orchestrator", "billing", "12:00:02", { parentStepId: s1 }),
             row(r2, "message", "orchestrator", "billing", "13:00:02", { parentStepId: s2, trust: "untrusted" }),
@@ -173,9 +172,9 @@ describe("agentMessageLinks", () => {
             {
                 from: "orchestrator",
                 to: "billing",
-                delegations: 2,
                 handoffs: 1,
-                messages: 1,
+                messages: 3,
+                delegated: 2,
                 untrusted: 1,
                 lastAt: new Date("2026-10-03T13:00:03.000Z"),
             },

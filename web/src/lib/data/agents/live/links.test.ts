@@ -17,9 +17,9 @@ const delegation = (from: string, to: string, delegations: number, untrusted: nu
 const talk = (from: string, to: string, handoffs: number, messages: number, untrusted: number, secondsAgo: number) => ({
     from,
     to,
-    delegations: 0,
     handoffs,
     messages,
+    delegated: 0,
     untrusted,
     lastAt: at(secondsAgo),
 });
@@ -49,8 +49,8 @@ describe("linksOf", () => {
         const links = linksOf(
             [delegation("orchestrator", "billing", 2, 1, 5)],
             [
-                { ...talk("orchestrator", "billing", 1, 1, 1, 9), delegations: 3 },
-                { ...talk("orchestrator", "support", 0, 0, 0, 2), delegations: 1 },
+                { ...talk("orchestrator", "billing", 1, 4, 1, 9), delegated: 3 },
+                { ...talk("orchestrator", "support", 0, 1, 0, 2), delegated: 1 },
             ],
         );
 
