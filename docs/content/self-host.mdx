@@ -1,6 +1,6 @@
 # Self-host Quard
 
-Quard runs in your own cloud, from one Docker Compose file. It starts Postgres and four services:
+You can run Quard in your own cloud instead of using the hosted service, from one Docker Compose file. It starts Postgres and four services:
 
 - **web**: the dashboard, on port 3000.
 - **webhook**: receives events from your agents, on port 4100.
@@ -49,7 +49,7 @@ Then fill in these lines in `.env`:
 | `PRIVY_APP_SECRET`         | The Privy App secret.                                                      |
 | `QUARD_SESSION_SECRET`     | Signs the dashboard's session cookie. Make it with `openssl rand -hex 32`. |
 
-The hash key turns IBANs, card numbers and emails into hashes, so they are never stored in clear. It stays on your server. Each project hashes with its own key, made from this one, and the SDK gets its project's key from Quard with the agent key. So your agents never need `QUARD_HASH_KEY`. Keep it with your other secrets. If it changes, [hashes made before no longer match](#when-the-hash-key-changes).
+The hash key turns IBANs and emails into hashes, so they are never stored in clear. It stays on your server. Each project hashes with its own key, made from this one, and the SDK gets its project's key from Quard with the agent key. So your agents never need `QUARD_HASH_KEY`. Keep it with your other secrets. If it changes, [hashes made before no longer match](#when-the-hash-key-changes).
 
 These are optional:
 
