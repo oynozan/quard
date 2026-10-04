@@ -28,7 +28,7 @@ if (DASHBOARD) {
     });
     // Only a warning: example 13 runs with the backend down on purpose
     await fetch(`${webhookUrl}/health`, { signal: AbortSignal.timeout(1000) }).catch(() => {
-        console.warn(`The Quard backend at ${webhookUrl} isn't answering. Start it with: node sandbox/dashboard.ts`);
+        console.warn(`The Quard backend at ${webhookUrl} isn't answering. Start webhook and control as sandbox/README.md shows.`);
     });
 }
 
@@ -36,7 +36,7 @@ if (DASHBOARD) {
 export function needsDashboard(): void {
     if (!DASHBOARD) {
         console.error(
-            "This example needs the local Quard backend. Start it with node sandbox/dashboard.ts, then add QUARD_AGENT_KEY and QUARD_HASH_KEY to sandbox/.env.",
+            "This example needs the local Quard backend. Start webhook and control as sandbox/README.md shows, then add QUARD_AGENT_KEY and QUARD_HASH_KEY to sandbox/.env.",
         );
         process.exit(1);
     }

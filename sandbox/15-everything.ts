@@ -2,7 +2,7 @@
 //
 // One script that fills the dashboard: every guard type, several agents,
 // a call that waits for your click, and runs that complete, fail and get
-// blocked. Start the backend first with node sandbox/dashboard.ts, open
+// blocked. Start webhook and control first (see the README), open
 // http://localhost:3100, then run this and watch the runs come in.
 //
 //   1  A clean payment: model calls, tool calls, labels, masked values.

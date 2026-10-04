@@ -42,15 +42,16 @@ pnpm --filter @quard/sandbox typecheck
     QUARD_HASH_KEY=<64 hex characters>
     ```
 
-2. Start the local backend and the dashboard:
+    Put the same key in `web/.env`.
+
+2. Start webhook and control, each in its own terminal:
 
     ```sh
-    node sandbox/dashboard.ts
+    node --env-file=web/.env services/webhook/main.ts    # port 4100
+    node --env-file=web/.env services/control/main.ts    # port 4200
     ```
 
-    It uses the database in `web/.env` (`DATABASE_URL`), applies migrations, and runs webhook (port 4100), control (4200) and the web app (3100). Ctrl-C stops it all.
-
-3. Open http://localhost:3100, sign in, then go to Settings and create an agent key. Add it to `sandbox/.env`:
+3. Open the dashboard at http://localhost:3100, sign in, then go to Settings and create an agent key. Add it to `sandbox/.env`:
 
     ```sh
     QUARD_AGENT_KEY=qk_live_...
@@ -62,7 +63,7 @@ pnpm --filter @quard/sandbox typecheck
     node sandbox/15-everything.ts
     ```
 
-No Postgres? Run `pnpm --filter @quard/db dev:db` and set `DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres` in `web/.env`. Only one Next dev server can run in `web/` at a time, so stop any other one first.
+No Postgres? Run `pnpm --filter @quard/db dev:db` and set `DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres` in `web/.env`.
 
 With `QUARD_AGENT_KEY` set, every example sends its runs to the dashboard, and `05-human-approval.ts` waits for your answer at http://localhost:3100/approvals instead of asking in the terminal. Comment the line out to keep runs in the terminal only.
 
@@ -111,5 +112,4 @@ These run with or without it:
 - `import { guard, quard } from "quard"` is the same line an app would use. `pnpm install` links `node_modules/quard` to `lib/quard`, which re-exports the SDK source in `packages/sdk`, so SDK changes show up right away. `quard/openai-agents` works the same way.
 - The sandbox is a workspace package (`@quard/sandbox`), so CI type-checks the examples.
 - `lib/agent.ts` is a plain agent loop on the Responses API, and `lib/tools.ts` holds the tool definitions the model sees.
-- `dashboard.ts` and `lib/backend/` start the local backend.
 - `lib/env.ts` loads `.env`, `lib/terminal.ts` asks for approvals, and `lib/show.ts` prints events.
