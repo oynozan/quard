@@ -5,9 +5,11 @@ import type { LinksOptions } from "./links.ts";
 export type AgentMessageRow = {
     from: string;
     to: string;
+    // Messages that name the sender's step: work handed to another process
+    delegations: number;
     // Handoffs and agents run as tools, from the OpenAI Agents SDK
     handoffs: number;
-    // Messages a receive guard took in
+    // Other messages a receive guard took in
     messages: number;
     // Ones with untrusted content, or that no record vouched for
     untrusted: number;
@@ -18,8 +20,9 @@ export type AgentMessageRow = {
 const UNKNOWN = "unknown";
 
 // Messages and handoffs between agents from `since` on, per sender and
-// receiver. When no record vouched for a message but it names a step of its
-// run, that step's agent sent it, as for delegations.
+// receiver. A message that names the sender's step came through
+// quard.resume(), so it counts as a delegation. When no record vouched for
+// a message but it names a step of its run, that step's agent sent it.
 export async function agentMessageLinks(db: Db, projectId: string, options: LinksOptions): Promise<AgentMessageRow[]> {
     const rows = db
         .selectFrom("agent_messages as m")
@@ -35,6 +38,7 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
             ),
             "m.to_agent as receiver",
             "m.kind",
+            sql<boolean>`(m.parent_step_id IS NOT NULL)`.as("delegated"),
             sql<boolean>`(m.trust = 'untrusted' OR NOT m.verified)`.as("untrusted"),
             "m.at",
         ])
@@ -46,8 +50,9 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
         .select([
             "t.sender as from",
             "t.receiver as to",
+            sql<number>`(count(*) FILTER (WHERE t.kind = 'message' AND t.delegated))::int`.as("delegations"),
             sql<number>`(count(*) FILTER (WHERE t.kind <> 'message'))::int`.as("handoffs"),
-            sql<number>`(count(*) FILTER (WHERE t.kind = 'message'))::int`.as("messages"),
+            sql<number>`(count(*) FILTER (WHERE t.kind = 'message' AND NOT t.delegated))::int`.as("messages"),
             sql<number>`(count(*) FILTER (WHERE t.untrusted))::int`.as("untrusted"),
             sql<Date>`max(t.at)`.as("lastAt"),
         ])

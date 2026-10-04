@@ -58,6 +58,7 @@ const traffic = (): MessageRow[] => [
 ];
 
 const triageToBilling = {
+    delegations: 0,
     from: "triage",
     to: "billing",
     handoffs: 3,
@@ -67,6 +68,7 @@ const triageToBilling = {
 };
 
 const billingToTriage = {
+    delegations: 0,
     from: "billing",
     to: "triage",
     handoffs: 0,
@@ -76,6 +78,7 @@ const billingToTriage = {
 };
 
 const triageToResearch = {
+    delegations: 0,
     from: "triage",
     to: "research",
     handoffs: 1,
@@ -128,12 +131,20 @@ describe("agentMessageLinks", () => {
         );
 
         expect(await agentMessageLinks(test.db, projectId, { since })).toEqual([
-            { ...billingToTriage, from: "unknown", to: "billing", lastAt: new Date("2026-10-03T12:00:04.000Z") },
+            {
+                ...billingToTriage,
+                from: "unknown",
+                to: "billing",
+                delegations: 1,
+                messages: 1,
+                lastAt: new Date("2026-10-03T12:00:04.000Z"),
+            },
             {
                 ...billingToTriage,
                 from: "orchestrator",
                 to: "billing",
-                messages: 1,
+                delegations: 1,
+                messages: 0,
                 untrusted: 1,
                 lastAt: new Date("2026-10-03T12:00:02.000Z"),
             },
@@ -141,9 +152,32 @@ describe("agentMessageLinks", () => {
                 ...billingToTriage,
                 from: "planner",
                 to: "billing",
-                messages: 1,
+                delegations: 1,
+                messages: 0,
                 untrusted: 0,
                 lastAt: new Date("2026-10-03T13:00:02.000Z"),
+            },
+        ]);
+    });
+
+    it("counts a message that names the sender's step as a delegation across processes", async () => {
+        const projectId = await projectWith(runs(), [
+            row(r1, "message", "orchestrator", "billing", "12:00:02", { parentStepId: s1 }),
+            row(r2, "message", "orchestrator", "billing", "13:00:02", { parentStepId: s2, trust: "untrusted" }),
+            // A reply with no carrier stays a message
+            row(r2, "message", "orchestrator", "billing", "13:00:03"),
+            row(r1, "handoff", "orchestrator", "billing", "12:00:04"),
+        ]);
+
+        expect(await agentMessageLinks(test.db, projectId, { since })).toEqual([
+            {
+                from: "orchestrator",
+                to: "billing",
+                delegations: 2,
+                handoffs: 1,
+                messages: 1,
+                untrusted: 1,
+                lastAt: new Date("2026-10-03T13:00:03.000Z"),
             },
         ]);
     });
