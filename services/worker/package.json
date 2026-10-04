@@ -9,6 +9,10 @@
         "test": "vitest run --coverage",
         "typecheck": "tsc --noEmit"
     },
+    "dependencies": {
+        "@quard/db": "workspace:*",
+        "@quard/shared": "workspace:*"
+    },
     "devDependencies": {
         "@types/node": "catalog:",
         "@vitest/coverage-v8": "catalog:",

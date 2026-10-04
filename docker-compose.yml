@@ -63,6 +63,7 @@ services:
                 SERVICE: worker
         environment:
             DATABASE_URL: postgres://quard:quard@postgres:5432/quard
+            OPENAI_API_KEY: ${OPENAI_API_KEY:-}
         depends_on:
             migrate:
                 condition: service_completed_successfully

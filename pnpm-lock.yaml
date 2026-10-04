@@ -512,6 +512,13 @@ importers:
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.1(@noble/hashes@1.8.0))(vite@8.3.2(@types/node@24.19.1)(jiti@2.7.0)(yaml@2.9.1))
 
   services/worker:
+    dependencies:
+      '@quard/db':
+        specifier: workspace:*
+        version: link:../../db
+      '@quard/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
