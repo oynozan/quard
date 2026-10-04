@@ -5,10 +5,11 @@ import { memory } from "./memory/wrap.ts";
 import { wrap } from "./monitor/wrap.ts";
 import { configureQuard } from "./transport/configure.ts";
 import { createX402Fetch } from "./x402/fetch/fetch.ts";
+import { x402Mcp } from "./x402/mcp/mcp.ts";
 
 // The SDK's main object. inject, resume and toBaggage carry a run between
 // agents; memory labels what goes into a shared store and back out;
-// x402Fetch records x402 payments.
+// x402Fetch and x402Mcp record x402 payments.
 export const quard = {
     wrap,
     run: runScope,
@@ -19,6 +20,7 @@ export const quard = {
     configure: configureQuard,
     memory,
     x402Fetch: createX402Fetch,
+    x402Mcp,
 };
 
 export { GuardBlockedError, GuardRefusal, isGuardRefusal } from "./core/refusal.ts";
@@ -47,3 +49,4 @@ export type {
 export type { GuardType } from "./guards/types.ts";
 export type { MemoryOptions, MemoryStore } from "./memory/wrap.ts";
 export type { SignaturesConfig } from "./policy/schema.ts";
+export type { McpToolClient } from "./x402/mcp/mcp.ts";

@@ -24,6 +24,7 @@ describe("quard", () => {
             "configure",
             "memory",
             "x402Fetch",
+            "x402Mcp",
         ]);
     });
 });
