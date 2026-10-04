@@ -16,6 +16,8 @@ export type ResponsesRequest = {
     callIds: string[];
     // The body cut to what a replay resends
     replayBody: Record<string, unknown>;
+    // The whole body, which hosted tool rules may reshape
+    body: Record<string, unknown>;
 };
 
 // Never stream, store, metadata, user, include and the like
@@ -102,6 +104,7 @@ export function parseRequest(body: Record<string, unknown>): ResponsesRequest {
         texts: [],
         callIds: [],
         replayBody: Object.fromEntries(Object.entries(body).filter(([name]) => REPLAY_FIELDS.has(name))),
+        body,
     };
     if (request.instructions !== undefined) {
         request.texts.push({ role: "system", text: request.instructions });

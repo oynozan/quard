@@ -6,16 +6,15 @@ const URL_RESPONSES = "https://api.openai.com/v1/responses";
 describe("parseRequest", () => {
     it("reads a plain text input and the settings", () => {
         const tools = [{ type: "function", name: "fetchPage" }, { type: "web_search" }, { name: 5 }, null];
-        expect(
-            parseRequest({
-                model: "gpt",
-                input: "hi",
-                stream: true,
-                previous_response_id: "resp_1",
-                instructions: "Be brief",
-                tools,
-            }),
-        ).toEqual({
+        const body = {
+            model: "gpt",
+            input: "hi",
+            stream: true,
+            previous_response_id: "resp_1",
+            instructions: "Be brief",
+            tools,
+        };
+        expect(parseRequest(body)).toEqual({
             model: "gpt",
             instructions: "Be brief",
             tools: ["fetchPage", "web_search"],
@@ -28,6 +27,7 @@ describe("parseRequest", () => {
             ],
             callIds: [],
             replayBody: { model: "gpt", input: "hi", previous_response_id: "resp_1", instructions: "Be brief", tools },
+            body,
         });
     });
 
