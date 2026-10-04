@@ -116,36 +116,71 @@ describe("a run that spans processes", () => {
     });
 });
 
-// A refused call leaves the run's counters in control as they were
+// Control can only add to a run's counters, so per-run counts come first
 describe("a refused call in a run that spans processes", () => {
+    const today = () => new Date().toISOString().slice(0, 10);
+
     function payTool(options: object) {
         const pay = vi.fn(async (input: { url?: string; amount?: number }) => `paid ${input.url ?? input.amount}`);
         return { pay, payInvoice: guard(pay, { type: "limit", name: "payInvoice", ...options }) };
     }
 
-    it("is not counted when the fleet check refuses it", async () => {
-        const evil = ["evil-1.com", "evil-2.com", "evil-3.com"];
-        server.state.quarantined = evil.map((host) => ({ key: `domain:${host}`, observe: false }));
+    it("uses no per-day slot when a per-run limit refuses it", async () => {
         const runId = newRunId();
-        const { pay, payInvoice } = payTool({ maxCallsPerRun: 2, fleetCheck: ["url"] });
+        const { pay, payInvoice } = payTool({ maxCallsPerRun: 2, maxCallsPerDay: 100 });
 
         const outs = await quard.run({ agent: "billing", runId }, async () => {
             shareHere();
-            const tries = [];
-            for (const host of evil) {
-                tries.push(await payInvoice({ url: `https://${host}/inv` }));
-            }
-            return [...tries, await payInvoice({ url: "https://acme.com/inv" })];
+            return Promise.all(Array.from({ length: 6 }, (_, n) => payInvoice({ amount: n })));
         });
 
-        expect(blocked()).toEqual(["fleet-check", "fleet-check", "fleet-check"]);
-        expect(outs[3]).toBe("paid https://acme.com/inv");
-        expect(pay).toHaveBeenCalledTimes(1);
-        expect(server.counters.get(`run/${runId}/calls:payInvoice`)).toBe(1);
+        expect(outs.filter((out) => isGuardRefusal(out))).toHaveLength(4);
+        expect(pay).toHaveBeenCalledTimes(2);
+        expect(server.counters.get(`run/${runId}/calls:payInvoice`)).toBe(2);
+        expect(server.counters.get(`${today()}/payInvoice/calls`)).toBe(2);
     });
 
-    it("is not counted when a per-day limit refuses it", async () => {
-        server.counters.set(`${new Date().toISOString().slice(0, 10)}/payInvoice/calls`, 1);
+    it("reports its watched values once, as blocked, when a per-run limit refuses it", async () => {
+        const runId = newRunId();
+        const { payInvoice } = payTool({ maxCallsPerRun: 1, fleetCheck: ["url"] });
+
+        await quard.run({ agent: "billing", runId }, async () => {
+            await payInvoice({ url: "https://acme.com/a" });
+            shareHere();
+        });
+        // The second process has not seen the first call yet
+        await quard.run({ agent: "billing", runId }, async () => {
+            shareHere();
+            await payInvoice({ url: "https://acme.com/b" });
+        });
+        await server.waitFor("fleet", (message) => message.blocked);
+
+        const fleet = server.received.flatMap((message) => (message.type === "fleet" ? [message.blocked] : []));
+        expect(fleet).toEqual([false, true]);
+        expect(blocked()).toEqual(["max-calls-per-run"]);
+    });
+
+    it("keeps its per-run count in control when the fleet check refuses it", async () => {
+        server.state.quarantined = [{ key: "domain:evil.com", observe: false }];
+        const runId = newRunId();
+        const { pay, payInvoice } = payTool({ maxCallsPerRun: 5, fleetCheck: ["url"] });
+
+        const outs = await quard.run({ agent: "billing", runId }, async () => {
+            shareHere();
+            return [
+                await payInvoice({ url: "https://evil.com/inv" }),
+                await payInvoice({ url: "https://acme.com/inv" }),
+            ];
+        });
+
+        expect(blocked()).toEqual(["fleet-check"]);
+        expect(outs[1]).toBe("paid https://acme.com/inv");
+        expect(pay).toHaveBeenCalledTimes(1);
+        expect(server.counters.get(`run/${runId}/calls:payInvoice`)).toBe(2);
+    });
+
+    it("keeps its per-run count in control when a per-day limit refuses it", async () => {
+        server.counters.set(`${today()}/payInvoice/calls`, 1);
         const runId = newRunId();
         const { pay, payInvoice } = payTool({ maxCallsPerRun: 5, maxCallsPerDay: 1 });
 
@@ -157,7 +192,7 @@ describe("a refused call in a run that spans processes", () => {
         expect(isGuardRefusal(out)).toBe(true);
         expect(blocked()).toEqual(["max-calls-per-day"]);
         expect(pay).not.toHaveBeenCalled();
-        expect(server.counters.get(`run/${runId}/calls:payInvoice`)).toBeUndefined();
+        expect(server.counters.get(`run/${runId}/calls:payInvoice`)).toBe(1);
     });
 
     it("keeps its call count out when its amount is over the run's cap", async () => {

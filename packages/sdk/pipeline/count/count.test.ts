@@ -105,60 +105,81 @@ describe("countCall for a run that spans processes", () => {
         control.stop();
     });
 
-    it("counts per-run limits last, after the per-day counts and the fleet check", async () => {
+    it("counts per-run limits first, then the per-day counts and the fleet check", async () => {
         const { control, socket } = linkedControl();
         const call = sharedCall({ url: "https://acme.com" });
         const list = [{ type: "limit" as const, maxCallsPerRun: 3, maxCallsPerDay: 3, fleetCheck: ["url"] }];
 
         const counted = countCall(call, list, []);
         await settle();
+        const [runCount] = sentOf(socket, "run_count");
+        socket.reply({ type: "run_counted", id: runCount?.id as string, ok: true, used: [1] });
+        await settle();
         const [count] = sentOf(socket, "count");
         socket.reply({ type: "counted", id: count?.id as string, ok: true, used: 1 });
         await settle();
         const [fleet] = sentOf(socket, "fleet");
         socket.reply({ type: "fleet_result", id: fleet?.id as string, quarantined: [], fleetObserveUntil: null });
-        await settle();
-        const [runCount] = sentOf(socket, "run_count");
-        socket.reply({ type: "run_counted", id: runCount?.id as string, ok: true, used: [1] });
 
         expect(await counted).toBeUndefined();
-        expect(socket.sent.map((message) => message.type).slice(1)).toEqual(["count", "fleet", "run_count"]);
+        expect(socket.sent.map((message) => message.type).slice(1)).toEqual(["run_count", "count", "fleet"]);
         control.stop();
     });
 
-    it("sends no per-run count when the fleet check refuses the call, and takes back the delegation", async () => {
+    it("sends no per-day count and no fleet report when a per-run limit refuses the call", async () => {
+        const { control, socket } = linkedControl();
+        const call = sharedCall({ url: "https://acme.com", to: "helper" });
+        const list = [
+            { type: "limit" as const, maxCallsPerRun: 3, maxCallsPerDay: 9, fleetCheck: ["url"], delegateTo: "to" },
+        ];
+
+        const counted = countCall(call, list, []);
+        await settle();
+        const [runCount] = sentOf(socket, "run_count");
+        socket.reply({ type: "run_counted", id: runCount?.id as string, ok: false, used: [3] });
+
+        expect(await counted).toMatchObject({ rule: "max-calls-per-run" });
+        expect(socket.sent.map((message) => message.type).slice(1)).toEqual(["run_count"]);
+        expect([...(call.run.helpers.get("billing") ?? [])]).toEqual([]);
+        control.stop();
+    });
+
+    it("uses no per-day slot for parallel calls a per-run limit refuses", async () => {
+        const call = sharedCall({});
+        const list = [{ type: "limit" as const, maxCallsPerRun: 2, maxCallsPerDay: 100 }];
+
+        const outs = await Promise.all(Array.from({ length: 6 }, () => countCall(call, list, [])));
+
+        expect(outs.filter((out) => out === undefined)).toHaveLength(2);
+        expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(2);
+    });
+
+    it("keeps the per-run count but takes back the delegation when the fleet check refuses the call", async () => {
         const { control, socket } = linkedControl();
         const call = sharedCall({ url: "https://evil-pay.com", to: "helper" });
         const list = [{ type: "limit" as const, maxCallsPerRun: 3, fleetCheck: ["url"], delegateTo: "to" }];
 
         const counted = countCall(call, list, []);
         await settle();
+        const [runCount] = sentOf(socket, "run_count");
+        socket.reply({ type: "run_counted", id: runCount?.id as string, ok: true, used: [1] });
+        await settle();
         const [fleet] = sentOf(socket, "fleet");
         const quarantined = [{ key: "domain:evil-pay.com", observe: false }];
         socket.reply({ type: "fleet_result", id: fleet?.id as string, quarantined, fleetObserveUntil: null });
 
         expect(await counted).toMatchObject({ rule: "fleet-check" });
-        expect(sentOf(socket, "run_count")).toEqual([]);
+        expect(call.run.counters.get("calls:payInvoice")).toBe(1);
         expect([...(call.run.helpers.get("billing") ?? [])]).toEqual([]);
         control.stop();
     });
 
-    it("adds nothing per run when a per-day limit refuses the call", async () => {
+    it("keeps the per-run count when a per-day limit refuses the call", async () => {
         const call = sharedCall({});
         const list = [{ type: "limit" as const, maxCallsPerRun: 5, maxCallsPerDay: 1 }];
         await countCall(call, list, []);
 
         expect(await countCall(call, list, [])).toMatchObject({ rule: "max-calls-per-day" });
-        expect(call.run.counters.get("calls:payInvoice")).toBe(1);
-    });
-
-    it("leaves the per-day count when the per-run limit refuses the call last", async () => {
-        const call = sharedCall({});
-        const list = [{ type: "limit" as const, maxCallsPerRun: 1, maxCallsPerDay: 5 }];
-        await countCall(call, list, []);
-
-        expect(await countCall(call, list, [])).toMatchObject({ rule: "max-calls-per-run" });
-        expect(call.run.counters.get("calls:payInvoice")).toBe(1);
-        expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(2);
+        expect(call.run.counters.get("calls:payInvoice")).toBe(2);
     });
 });
