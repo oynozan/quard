@@ -70,7 +70,9 @@ export function timelineLayout(steps: Step[], lanes: string[], available: number
             list.push(...(mark.startsWith("would") ? outline(box) : [box]));
             marks.set(mark, list);
         }
-        const target = step.link ? lanes.indexOf(step.link.to) : -1;
+        // A received message sits in the receiver's lane, so its line goes to the sender
+        const peer = step.link?.to === step.agent ? step.link.from : step.link?.to;
+        const target = peer ? lanes.indexOf(peer) : -1;
         if (step.link && target >= 0 && target !== laneOf[i]) {
             const x = r.x + Math.floor(cell / 2);
             const from = Math.min(laneTop(laneOf[i]), laneTop(target)) + cell;

@@ -153,6 +153,13 @@ describe("timelineLayout links", () => {
         ]);
     });
 
+    it("draws a received message from the receiver's lane up to the sender's", () => {
+        const steps = [makeStep({ agent: "researcher", link: makeLink({ from: "billing", to: "researcher" }) })];
+        expect(timelineLayout(steps, LANES, 300).links).toEqual([
+            { d: pathFor([{ x: 16, y: 33, w: 1, h: 16 }]), untrusted: false },
+        ]);
+    });
+
     it("skips links to the same lane or to an agent with no lane", () => {
         const steps = [
             makeStep({ agent: "billing", link: makeLink({ to: "billing" }) }),
