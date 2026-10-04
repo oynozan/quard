@@ -149,6 +149,18 @@ export { canonicalJson, plainJson } from "./values/canonical.ts";
 export { extractValues } from "./values/extract.ts";
 export { paymentOption, paymentRequired, paymentResponse, X402_HEADERS } from "./x402/schema.ts";
 export type { PaymentOption, PaymentRequired, PaymentResponse } from "./x402/schema.ts";
+export {
+    decodeX402,
+    hasPayment,
+    paidOption,
+    priceFrom,
+    readPayment,
+    readPrice,
+    readSettlement,
+    settlementFrom,
+    x402VersionOf,
+} from "./x402/read.ts";
+export type { HeaderGetter } from "./x402/read.ts";
 export { usdValue } from "./x402/stablecoins.ts";
 export type { ExtractedValue, ValueType } from "./values/extract.ts";
 export { flattenArgs, valueAtPath } from "./values/flatten.ts";
