@@ -9,41 +9,41 @@ You need Node 24 and an OpenAI API key.
 ```sh
 npm install -g pnpm@12.6.0
 pnpm install
-cp sandbox/.env.example sandbox/.env    # then put your OpenAI key in it
+cp sandbox/.env.example sandbox/.env    # put your OpenAI key in it
 node sandbox/playground/run.ts
 ```
 
-It tells a short story and asks what the agent should do. Type anything: a real agent, guarded by Quard, runs it and prints each step, what Quard detected and how long its checks took.
+Tell the agent what to do. Quard guards it and prints each step and what it caught.
 
-Its settings are three files in [sandbox/playground/](sandbox/playground). Change them and run again:
+To change the run, edit the files in [sandbox/playground/](sandbox/playground):
 
-- `scenario.json`: the prompt, the system prompt, the email and web page the agent reads, the model and its tools
-- `policy.json`: the rules. Remove a guard, switch one to observe mode, change a limit or a threshold.
-- `signatures.json`: the feed of known-bad patterns
+- `scenario.json`: what the agent sees and which tools it has
+- `policy.json`: the guard rules
+- `signatures.json`: known-bad patterns
 
-A change to `policy.json` or `signatures.json` applies from the next guarded tool call, even during a run. `git checkout sandbox/playground` puts the defaults back.
+`git checkout sandbox/playground` puts the defaults back.
 
-### See runs and incidents in the dashboard
+### Add the dashboard
 
-Make one hash key for every process:
-
-```sh
-KEY=$(openssl rand -hex 32)
-printf 'DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres\nQUARD_HASH_KEY=%s\nQUARD_SKIP_SIGN_IN=1\n' "$KEY" > web/.env.local
-printf 'QUARD_HASH_KEY=%s\n' "$KEY" >> sandbox/.env
-```
-
-Then start each of these in its own terminal:
+Make a hash key with `openssl rand -hex 32`. Create `web/.env.local` with it:
 
 ```sh
-pnpm --filter @quard/db dev:db                                                  # Postgres, port 5432
-pnpm --filter web dev                                                           # dashboard, http://localhost:3100
-node --env-file=web/.env.local services/webhook/main.ts                         # port 4100
-node --env-file=web/.env.local services/control/main.ts                         # port 4200
-node --env-file=web/.env.local --env-file=sandbox/.env services/worker/main.ts  # finds each incident's cause
+DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres
+QUARD_HASH_KEY=<your hash key>
+QUARD_SKIP_SIGN_IN=1
 ```
 
-In the dashboard, open **Settings**, create an agent key and add it to `sandbox/.env` as `QUARD_AGENT_KEY=qk_live_...`. Run the sandbox again: the run shows under **Runs**, and anything Quard blocked or flagged opens an incident under **Incidents**.
+Add the same `QUARD_HASH_KEY` line to `sandbox/.env`. Then start each of these in its own terminal:
+
+```sh
+pnpm --filter @quard/db dev:db
+pnpm --filter web dev
+node --env-file=web/.env.local services/webhook/main.ts
+node --env-file=web/.env.local services/control/main.ts
+node --env-file=web/.env.local --env-file=sandbox/.env services/worker/main.ts
+```
+
+Open http://localhost:3100, create an agent key in **Settings** and add it to `sandbox/.env` as `QUARD_AGENT_KEY=qk_live_...`. Run the sandbox again. The run shows under **Runs** and anything Quard caught under **Incidents**.
 
 ## Run the tests
 
