@@ -13,10 +13,13 @@ import { asksFor, type Ask } from "./asks.ts";
 import { createLimit } from "./limit.ts";
 
 const DETECTOR_TIMEOUT_MS = 5000;
-// Requests to the detector in flight at once, in one process
+// Requests to the detector in flight at once, in one process. Calls
+// take turns, so a long page can't keep a short read waiting.
 const limit = createLimit(8);
 // Content the detector could not check while acting
 const UNCHECKED = "detector:unchecked";
+// The longest reason a warning event holds
+const MAX_REASON = 200;
 
 // What came back for one request: its label, or why there is none
 type Answered = { ask: Ask; sent: string; answer: DetectorAnswer };
@@ -27,6 +30,15 @@ type Result = Answered | Failed;
 // or the detector's own yes or no answer when it gives one, whichever is higher
 const injection = ({ answer }: Answered): number =>
     Math.max(answer.probabilities.prompt_injection ?? 0, answer.injection ?? 0);
+
+// True when the request holds text a strip can't take out, such as a key
+function unstrippable({ ask }: Answered): boolean {
+    const rest = ask.parts.reduce(
+        (left, { text, span }) => left.replace(text.slice(span.start, span.end), ""),
+        ask.raw,
+    );
+    return rest.trim() !== "";
+}
 
 // Fails once the signal fires, so a detector that ignores the signal
 // still gives up its place in the queue
@@ -51,8 +63,8 @@ function stripped(answered: Answered[], stripAt: number): Map<string, string> {
 // the labels without waiting. Enforce mode waits up to 5 s, drops
 // chunks likely to be a prompt injection and flags content whose risky
 // labels reach flagAt. Requests that fail or answer late leave their
-// part unchecked: enforce mode flags it, so its values can't pay or
-// send anything without a person.
+// part unchecked: enforce mode flags it detector:unchecked, which action
+// rules with from and never-seen rules read.
 export async function detectContent(call: GuardCall, shown: Shown, enforced: boolean): Promise<Shown> {
     const { detector, detectorRules } = getConfig();
     // Internal content is never sent to a detector
@@ -73,7 +85,7 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
     const one = async (ask: Ask): Promise<Result> => {
         const sent = wellFormed(redactText(ask.raw));
         try {
-            const answer = await limit(() =>
+            const answer = await limit(stop, () =>
                 // A request still waiting for its turn at the deadline is not sent
                 stop.signal.aborted
                     ? Promise.reject(new DetectorError("timeout"))
@@ -81,7 +93,7 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
             );
             return { ask, sent, answer: checkAnswer(answer) };
         } catch (error) {
-            return { ask, failed: error instanceof DetectorError ? error.reason : "error" };
+            return { ask, failed: error instanceof DetectorError ? error.reason.slice(0, MAX_REASON) : "error" };
         }
     };
     const labeling = Promise.all(
@@ -96,9 +108,11 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
         const answered = results.filter((result): result is Answered => "answer" in result);
         const failed = results.filter((result): result is Failed => "failed" in result);
         const answers = answered.map((item) => item.answer);
-        const risky = answers.filter((answer) => riskOf(answer) >= rules.flagAt);
+        const risky = answers.filter((answer) => riskOf(answer) >= rules.flagAt).map(topRisk);
+        // A key can't be stripped, so a key that holds an injection flags the content
+        const injected = answered.some((item) => injection(item) >= rules.stripAt && unstrippable(item));
         const flags = [
-            ...new Set(risky.map((answer) => `detector:${topRisk(answer)}`)),
+            ...new Set([...risky, ...(injected ? ["prompt_injection"] : [])].map((label) => `detector:${label}`)),
             ...(failed.length > 0 ? [UNCHECKED] : []),
         ];
         const kept = stripped(answered, rules.stripAt);

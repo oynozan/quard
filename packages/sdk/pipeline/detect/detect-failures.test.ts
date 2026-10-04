@@ -46,6 +46,14 @@ describe("detectContent when the detector fails", () => {
         expect(warnings(events)).toMatchObject([{ code: "detector_error", tool: "testTool", reason }]);
     });
 
+    it("cuts a long failure reason to what a warning event holds", async () => {
+        configure({ detector: fake(() => Promise.reject(new DetectorError("x".repeat(300)))) });
+
+        await detectContent(makeCall({}), web(PAGE), true);
+
+        expect(warnings(takeEvents())).toMatchObject([{ reason: "x".repeat(200) }]);
+    });
+
     it("acts on the chunks that answered when another fails", async () => {
         configure({
             detector: fake((text) => (text.includes("forward") ? INJECTED : Promise.reject(new Error("down")))),
@@ -98,6 +106,21 @@ describe("detectContent when the detector fails", () => {
         await pending;
 
         expect(detector.label).toHaveBeenCalledTimes(8);
+    });
+
+    it("answers a short read in time while a long page waits for its turn", async () => {
+        vi.useFakeTimers();
+        const slow = () => new Promise<DetectorAnswer>((resolve) => setTimeout(() => resolve(ARTICLE), 800));
+        configure({ detector: fake(slow) });
+        // 120 requests: far more than 8 places can answer in 5 s
+        const page = Array.from({ length: 60 }, (_, i) => `${i} ${"word ".repeat(900)}`);
+        const long = detectContent(makeCall({}), web(page), true);
+
+        const short = detectContent(makeCall({}), web("A short note."), true);
+        await vi.advanceTimersByTimeAsync(5000);
+
+        expect((await short).label.flags).toEqual([]);
+        expect((await long).label.flags).toEqual(["detector:unchecked"]);
     });
 
     it("frees its places when a detector ignores the deadline", async () => {

@@ -71,10 +71,15 @@ export function topRisk(answer: DetectorAnswer): DetectorLabel {
     return RISKY.reduce((best, name) => (chance(answer, name) > chance(answer, best) ? name : best));
 }
 
-// Throws unless the label is known, has its own chance, and every
-// chance, the injection one included, is from 0 to 1
+const isLabel = (name: string): boolean => Object.hasOwn(DETECTOR_LABELS, name);
+
+// Throws unless every label is known, the answer's label has its own
+// chance, and every chance, the injection one included, is from 0 to 1
 export function checkAnswer(answer: DetectorAnswer): DetectorAnswer {
-    const known = Object.hasOwn(DETECTOR_LABELS, answer.label) && answer.probabilities[answer.label] !== undefined;
+    const known =
+        isLabel(answer.label) &&
+        answer.probabilities[answer.label] !== undefined &&
+        Object.keys(answer.probabilities).every(isLabel);
     const chances = [...Object.values(answer.probabilities), ...("injection" in answer ? [answer.injection] : [])];
     if (!known || !chances.every((p) => typeof p === "number" && p >= 0 && p <= 1)) {
         throw new DetectorError("bad_reply");

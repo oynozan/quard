@@ -47,6 +47,11 @@ describe("checkAnswer", () => {
 
     it.each([
         ["an unknown label", { label: "spam", probabilities: { article: 1 } }],
+        ["a chance for an unknown label", { label: "article", probabilities: { article: 0.9, spam: 0.1 } }],
+        [
+            "a chance for a label name events can't hold",
+            { label: "article", probabilities: { article: 0.9, "Prompt-Injection": 0.1 } },
+        ],
         ["a chance above 1", { label: "article", probabilities: { article: 1.5 } }],
         ["a negative chance", { label: "article", probabilities: { article: -0.1 } }],
         ["a chance that is not a number", { label: "article", probabilities: { article: Number.NaN } }],
