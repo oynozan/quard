@@ -25,6 +25,14 @@ describe("redactText", () => {
         );
     });
 
+    it.each([
+        ["smtp://jane@acme.com:hunter2@smtp.acme.com:587", "smtp://…@smtp.acme.com:587"],
+        ["imaps://me.x@gmail.com:hunter2@imap.gmail.com", "imaps://…@imap.gmail.com"],
+        ["postgres://u:it's@db.acme.com/main", "postgres://…@db.acme.com/main"],
+    ])("removes the whole user and password of %s, with no part left in clear", (text, expected) => {
+        expect(redactText(text)).toBe(expected);
+    });
+
     it("changes nothing the second time", () => {
         const once = redactText(`IBAN ${IBAN}, jane@acme.com, 5555555555554444, redis://u:hunter2@cache.acme.com`);
         expect(redactText(once)).toBe(once);

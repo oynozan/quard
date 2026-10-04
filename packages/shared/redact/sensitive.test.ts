@@ -67,6 +67,13 @@ describe("maskSensitive", () => {
         );
     });
 
+    it("masks a URL's user and password when the user is an email", () => {
+        const text = "send via smtp://jane@acme.com:hunter2@smtp.acme.com:587";
+
+        expect(findSensitive(text).map((found) => found.kind)).toEqual(["secrets"]);
+        expect(maskSensitive(text, all)).toBe("send via smtp://[secret removed by Quard]@smtp.acme.com:587");
+    });
+
     it("masks a whole token even when a card number sits inside it", () => {
         const token = ["eyJhbGciOiJI", "eyJzdWIiOiIx", "4242424242424242"].join(".");
 

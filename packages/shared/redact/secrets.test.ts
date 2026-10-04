@@ -31,6 +31,7 @@ describe("findSecrets", () => {
         ["a URL with a port and a path", "https://acme.com:8443/a:b@c"],
         ["a URL with a user and no password", "ssh://git@github.com/acme/app"],
         ["a user and password with no scheme", "user:hunter2@cache.acme.com"],
+        ["an email as a URL's user, with a port and no password", "smtp://jane@acme.com:587 or bob@acme.com"],
     ])("skips %s", (_, text) => {
         expect(findSecrets(text)).toEqual([]);
     });
@@ -39,6 +40,17 @@ describe("findSecrets", () => {
         expect(findSecrets("at redis://user:hunter2@cache.acme.com:6379/0")).toEqual([
             { name: "url-credentials", start: 11, end: 23, value: "user:hunter2" },
         ]);
+    });
+
+    // URL parsers take the host after the last @ and the password after the first :
+    it.each([
+        ["smtp://jane@acme.com:hunter2@smtp.acme.com:587", "jane@acme.com:hunter2"],
+        ["imaps://me.x@gmail.com:hunter2@imap.gmail.com", "me.x@gmail.com:hunter2"],
+        ["postgres://u:it's@db.acme.com/main", "u:it's"],
+    ])("finds the user and password in %s", (text, value) => {
+        const start = text.indexOf(value);
+
+        expect(findSecrets(text)).toEqual([{ name: "url-credentials", start, end: start + value.length, value }]);
     });
 
     it("covers the whole private key block, not just the header", () => {
@@ -120,6 +132,19 @@ describe("removeSecrets", () => {
         [
             '{"url":"amqp://u:s3cret@mq.acme.com","to":"jane@acme.com"}',
             '{"url":"amqp://…@mq.acme.com","to":"jane@acme.com"}',
+        ],
+        ["smtp://jane@acme.com:hunter2@smtp.acme.com:587", "smtp://…@smtp.acme.com:587"],
+        ["imaps://me.x@gmail.com:hunter2@imap.gmail.com", "imaps://…@imap.gmail.com"],
+        ["postgres://u:it's@db.acme.com/main", "postgres://…@db.acme.com/main"],
+        [
+            "it's at redis://o'brien:it's@cache.acme.com, ask jane@acme.com",
+            "it's at redis://…@cache.acme.com, ask jane@acme.com",
+        ],
+        // A URL that opens right after a quote ends at the next quote
+        ["['amqp://u:s3cret@mq.acme.com','jane@acme.com']", "['amqp://…@mq.acme.com','jane@acme.com']"],
+        [
+            "{'url':'smtp://jane@acme.com:pw@smtp.acme.com','cc':'bob@acme.com'}",
+            "{'url':'smtp://…@smtp.acme.com','cc':'bob@acme.com'}",
         ],
     ])("removes the user and password in %s", (text, expected) => {
         expect(removeSecrets(text)).toBe(expected);
