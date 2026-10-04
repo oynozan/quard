@@ -43,7 +43,8 @@ describe("setupFromArgs", () => {
         );
         const projectId = await projectForKey(test.db, key);
         expect(await findProject(test.db, String(projectId))).toMatchObject({ name: "Acme" });
-        expect(lines.some((line) => /QUARD_HASH_KEY=[0-9a-f]{64}$/.test(line))).toBe(true);
+        const hint = lines.find((line) => /QUARD_HASH_KEY=[0-9a-f]{64}$/.test(line));
+        expect(hint).toMatch(/^Set this for webhook, control and the dashboard \(agents never need it\): /);
     });
 
     it("names the project Default and skips the hash key hint when one is set", async () => {

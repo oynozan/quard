@@ -42,7 +42,8 @@ export async function setupFromArgs(
         log("The agent key is shown once. Only its hash is stored.");
         if (!env.QUARD_HASH_KEY) {
             log(
-                `Set this in every agent process, webhook and control: QUARD_HASH_KEY=${randomBytes(32).toString("hex")}`,
+                "Set this for webhook, control and the dashboard (agents never need it): " +
+                    `QUARD_HASH_KEY=${randomBytes(32).toString("hex")}`,
             );
         }
         return 0;
