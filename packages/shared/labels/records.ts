@@ -13,7 +13,7 @@ export const LABELS_PATH = "/v1/labels";
 
 // The reference a message carries to its record
 export const labelRef = hex(16);
-// A sha-256 of the content's normalized text
+// An HMAC-SHA-256 of the whole content, keyed with the install's hash key
 export const contentPrint = hex(64);
 
 export const contextLabelRecord = z.object({

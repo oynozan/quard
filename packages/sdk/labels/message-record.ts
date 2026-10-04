@@ -9,7 +9,7 @@ export type SentMessage = {
     stepId: string | undefined;
     sender: string;
     depth: number;
-    // A hash of the content's normalized text
+    // A keyed hash of the whole content, from printOf
     print: string;
     // The sender run's context label when the message left
     label: ContextLabel;
