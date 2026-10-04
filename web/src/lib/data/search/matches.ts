@@ -11,6 +11,7 @@ export const KIND_OF: Record<ValueKind, SearchKind> = {
     host: "domain",
     path: "path",
     id: "id",
+    wallet: "wallet",
 };
 
 // The run's first step by that agent, or its first call of that tool

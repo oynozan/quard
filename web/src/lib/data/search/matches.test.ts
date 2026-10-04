@@ -96,5 +96,6 @@ describe("KIND_OF", () => {
     it("searches a host as a domain", () => {
         expect(KIND_OF.host).toBe("domain");
         expect(KIND_OF.iban).toBe("iban");
+        expect(KIND_OF.wallet).toBe("wallet");
     });
 });

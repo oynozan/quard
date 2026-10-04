@@ -7,7 +7,17 @@ describe("KIND_WORD", () => {
     it("names each kind of query", () => {
         expect(KIND_WORD.iban).toBe("IBAN");
         expect(KIND_WORD.path).toBe("File path");
-        expect(Object.keys(KIND_WORD)).toEqual(["iban", "email", "url", "domain", "path", "id", "agent", "tool"]);
+        expect(Object.keys(KIND_WORD)).toEqual([
+            "iban",
+            "email",
+            "url",
+            "domain",
+            "path",
+            "id",
+            "wallet",
+            "agent",
+            "tool",
+        ]);
     });
 });
 

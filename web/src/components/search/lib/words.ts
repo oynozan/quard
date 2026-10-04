@@ -8,6 +8,7 @@ export const KIND_WORD: Record<SearchKind, string> = {
     domain: "Domain",
     path: "File path",
     id: "ID",
+    wallet: "Wallet address",
     agent: "Agent",
     tool: "Tool",
 };

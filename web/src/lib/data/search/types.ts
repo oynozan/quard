@@ -2,7 +2,7 @@ import type { RunRow } from "../runs/types";
 import type { Label } from "../types";
 
 // What a query was searched as, where a host counts as a domain
-export type SearchKind = "iban" | "email" | "url" | "domain" | "path" | "id" | "agent" | "tool";
+export type SearchKind = "iban" | "email" | "url" | "domain" | "path" | "id" | "wallet" | "agent" | "tool";
 
 export type SearchMatchKind = "exact" | "inside" | "host" | "domain" | "name";
 
