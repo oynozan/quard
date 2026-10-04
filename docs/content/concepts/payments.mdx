@@ -1,0 +1,138 @@
+# Payments (x402)
+
+[x402](https://docs.x402.org) lets an agent pay for an HTTP request on the spot:
+
+1. The server answers `402` with a price and the payee.
+2. The agent's wallet signs a payment, and the request is sent again with it.
+3. The server settles the payment and sends the paid response.
+
+The x402 spec leaves budgets on the paying side to you. The `x402` guard covers them. It stops a poisoned page that sends the agent to an attacker's endpoint, a server that asks too much, a retry loop that pays the same endpoint hundreds of times, and a new payee that many runs suddenly pay.
+
+## Set it up
+
+The x402 guard wraps an x402 client, the way `guard()` wraps a tool. `quard.x402Fetch()` goes under the client and records every payment:
+
+```ts
+import { x402Client } from "@x402/core/client";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { quard } from "quard";
+
+const client = quard.x402(new x402Client() /* your schemes and signer */, {
+    type: "x402",
+    maxPerRun: 2,
+    maxPerDay: 20,
+});
+const paidFetch = wrapFetchWithPayment(quard.x402Fetch(fetch), client);
+```
+
+## Before the payment is signed
+
+The guard runs in the client's `onBeforePaymentCreation` hook, after the server names its price and before the wallet signs. A refused payment is never signed, so nothing can be sent or settled.
+
+A person is asked only above `approveAbove`. The approval waits before signing, because a signed payment expires within the server's `maxTimeoutSeconds`.
+
+## Options
+
+| Option              | Default         | What it does                                                                                              |
+| ------------------- | --------------- | --------------------------------------------------------------------------------------------------------- |
+| `maxPerPayment`     | $1, observed    | Caps one payment, in USD. An amount that can't be read counts as over                                     |
+| `maxPerRun`         | $5, observed    | Caps what one run spends, in USD                                                                          |
+| `maxPerDay`         | $50, observed   | Caps what the project spends in a UTC day, in USD, across every process                                   |
+| `maxPaymentsPerRun` | Off             | Caps how many payments one run makes, whatever the token. It catches loops                                |
+| `allowHosts`        | Off             | Only these hosts may be paid. `*.acme.com` also matches subdomains                                        |
+| `blockHosts`        | Off             | These hosts are never paid                                                                                |
+| `untrusted`         | Block, observed | Refuses a host or payee first seen in untrusted content. `"allow"` turns the check off                    |
+| `assetCaps`         | Off             | Caps tokens with no known USD value, in atomic units: `{ "<asset address>": "1000000" }`                  |
+| `fleetCheck`        | On, observed    | Quarantines a payee that a 5th separate run pays within 24 hours of first seeing it. `false` turns it off |
+| `approveAbove`      | Off             | Asks a person for payments above this many USD                                                            |
+| `name`              | `x402`          | The name decisions, records and the policy file use                                                       |
+| `mode`, `onBlock`   | Block, return   | Work as on [every guard](/concepts/guards#block-mode-and-observe-mode)                                    |
+
+Options you set follow the guard's mode, which blocks by default. Options you leave out keep Quard's defaults, and those start in observe mode, like the other product defaults: they record "would block" and let the payment through. They never ask a person. Set an option, even to its default value, to make it block.
+
+The [policy file](/concepts/run-limits#changing-the-limits) can set the options too, under `guards` and the guard's name. A guard listed there ignores its code options. The file is read again before each payment:
+
+```json
+{
+    "version": "2026-10-04.1",
+    "guards": { "x402": [{ "type": "x402", "maxPerRun": 1, "untrusted": "block" }] }
+}
+```
+
+## When a payment is refused
+
+The refusal says what was stopped and not to retry:
+
+```text
+Blocked by the x402 guard: the payment is over the run limit. The x402 payment did NOT happen. Do not retry it.
+```
+
+How the model gets it depends on where the paid call runs:
+
+- **Inside a guarded tool.** The tool returns the refusal, as for any other guard, and the model reads it. With `onBlock: "throw"`, the tool throws `GuardBlockedError` instead.
+- **Outside one.** The x402 client throws an error, and its message holds the refusal. Catch it and pass the message to the model as the tool's result:
+
+```ts
+try {
+    output = await (await paidFetch(url)).text();
+} catch (error) {
+    output = (error as Error).message;
+}
+```
+
+| Rule                         | The refusal says                                                            |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `max-per-payment`            | the payment is over the limit for one payment                               |
+| `max-per-run`                | the payment is over the run limit                                           |
+| `max-per-day`                | the payment is over the daily limit                                         |
+| `max-payments-per-run`       | this run made too many payments                                             |
+| `allow-hosts`, `block-hosts` | this host may not be paid                                                   |
+| `untrusted`                  | the host or payee first appeared in untrusted content                       |
+| `asset-caps`                 | the amount is over the cap for this token                                   |
+| `fleet-check`                | the payee is new and many runs paid it at once, so it is blocked everywhere |
+
+## What Quard records
+
+`quard.x402Fetch(fetch)` sits under the x402 client and records each step of a payment:
+
+| Step         | When                                                                   |
+| ------------ | ---------------------------------------------------------------------- |
+| `challenged` | The server named a price, including prices the guard went on to refuse |
+| `refused`    | The guard refused the payment before it was signed                     |
+| `signed`     | The wallet signed the payment and it was sent                          |
+| `settled`    | The server settled it, with the transaction hash                       |
+| `failed`     | Settling failed, or the server turned the payment down                 |
+
+Each step carries the run, step, agent, host, paid URL with secrets removed, network, asset, amount, USD value when known, payee, scheme and transaction hash. The [run view](/guides/runs#read-a-run) shows the payment steps, the [runs list](/guides/runs) and the [overview](/guides/overview) show spend next to cost, and the [Summary page](/guides/summary) shows spend by day, agent, host and payee.
+
+Quard reads both x402 versions: v2 headers, and v1's `X-PAYMENT` headers with the price in the body.
+
+### Paid, not delivered
+
+A payment can settle while the paid response is an error. Quard then marks it **paid, not delivered**, and the run view shows it as a warning.
+
+### Unguarded payments are not sent
+
+A signed payment that no x402 guard checked never leaves your app. The request gets a `403` with this text, which the model can read, and Quard warns once, as it does for an unguarded tool:
+
+```text
+Blocked by Quard: no x402 guard checked this payment. The x402 payment did NOT happen. Do not retry it.
+```
+
+## x402 over MCP
+
+A paid MCP tool answers with its price as an error result, and the payment travels in `_meta["x402/payment"]`. Wrap the MCP client with `quard.x402Mcp()` and pay through a guarded x402 client:
+
+```ts
+import { x402MCPClient } from "@x402/mcp";
+
+const tools = new x402MCPClient(quard.x402Mcp(mcpClient), quard.x402(new x402Client(), { type: "x402" }));
+```
+
+The same records, refusals and rules apply. The host is the MCP server's name.
+
+## Wallets, chains and tokens
+
+- **Wallet addresses stay in clear.** They are public on chain, so Quard doesn't hash them. They are still a value kind, so labels, search and the [fleet check](/guides/summary#quarantine) find them.
+- **The chain doesn't matter.** The network is recorded, but no rule depends on it. Any scheme and network your x402 client supports works.
+- **USD values come from stablecoins.** Quard knows USDC on Base, Ethereum, Polygon, Avalanche and Solana, and on their test networks. Other tokens are recorded as "value unknown". The USD caps skip them, while `maxPaymentsPerRun`, the host and payee checks and `assetCaps` still apply. No token is blocked for what it is.
