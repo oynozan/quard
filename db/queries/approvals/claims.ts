@@ -4,9 +4,14 @@ import type { Database } from "../../schema/database.ts";
 import { STILL_WAITS } from "./live.ts";
 import type { OnceClaim, OnceTurn } from "./types.ts";
 
-// No other call that still waits on the request row `approval_requests` is
-// ahead of this one. Calls on a request wait their turn by `since`, and a call
-// that does not wait on it comes after all of them.
+// A waiter's place in line, the request's own call (its run and step) first, then the longest wait
+function placeOf(waiter: "w" | "me") {
+    const column = (name: string) => sql.ref(`${waiter}.${name}`);
+    return sql`((${column("run_id")}, ${column("step_id")}) <> (approval_requests.run_id, approval_requests.step_id),
+        ${column("since")}, ${column("ask_id")})`;
+}
+
+// No call ahead of this one still waits on the request row `approval_requests`, and a call not on it comes last
 function firstInLine(askId: string) {
     return sql<boolean>`NOT EXISTS (
         SELECT 1 FROM approval_waiters w
@@ -15,7 +20,7 @@ function firstInLine(askId: string) {
             AND NOT EXISTS (
                 SELECT 1 FROM approval_waiters me
                 WHERE me.project_id = w.project_id AND me.request_id = w.request_id AND me.ask_id = ${askId}
-                    AND (me.since, me.ask_id) < (w.since, w.ask_id)
+                    AND ${placeOf("me")} < ${placeOf("w")}
             )
     )`;
 }

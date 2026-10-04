@@ -47,6 +47,11 @@ async function stopBeating(askId: string): Promise<void> {
     await test.db.updateTable("approval_waiters").set({ last_beat_at: LONG_AGO }).where("ask_id", "=", askId).execute();
 }
 
+// The call comes from another run than the request's own call
+async function fromRun(askId: string, runId: string): Promise<void> {
+    await test.db.updateTable("approval_waiters").set({ run_id: runId }).where("ask_id", "=", askId).execute();
+}
+
 // Opens a request for the payInvoice call and answers it
 async function decided(projectId: string, answer: "once" | "always" | "deny", argsHash = HASH): Promise<string> {
     const { id } = await openApprovalRequest(test.db, projectId, requestInput({ argsHash }));
@@ -223,5 +228,33 @@ describe("claimRequest", () => {
         expect(await claimRequest(test.db, projectId, id, last!)).toBe("waits");
         expect(await claimRequest(test.db, projectId, id, gone!)).toBe("runs");
         expect(await claimRequest(test.db, projectId, id, next!)).toBe("used");
+    });
+
+    it("gives it to the request's own call while it beats, before a call that waits longer", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const { id } = await openApprovalRequest(test.db, projectId, requestInput());
+        // The first call came over from an earlier request and kept its wait
+        const [moved, own] = await waitOn(projectId, id, 2);
+        await fromRun(moved!, "e".repeat(32));
+        await decideApproval(test.db, projectId, id, "once", "dana@acme.com");
+
+        expect(await claimRequest(test.db, projectId, id, moved!)).toBe("waits");
+        expect(await claimRequest(test.db, projectId, id, own!)).toBe("runs");
+        expect(await claimRequest(test.db, projectId, id, moved!)).toBe("used");
+    });
+
+    it("goes by the longest wait once the request's own call stopped beating", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const { id } = await openApprovalRequest(test.db, projectId, requestInput());
+        const [moved, own, joined] = await waitOn(projectId, id, 3);
+        await fromRun(moved!, "e".repeat(32));
+        await fromRun(joined!, "f".repeat(32));
+        await decideApproval(test.db, projectId, id, "once", "dana@acme.com");
+
+        expect(await claimRequest(test.db, projectId, id, joined!)).toBe("waits");
+        expect(await claimRequest(test.db, projectId, id, moved!)).toBe("waits");
+        await stopBeating(own!);
+        expect(await claimRequest(test.db, projectId, id, joined!)).toBe("waits");
+        expect(await claimRequest(test.db, projectId, id, moved!)).toBe("runs");
     });
 });
