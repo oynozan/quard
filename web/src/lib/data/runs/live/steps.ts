@@ -1,14 +1,21 @@
-import type { RunDecision, RunDecisionDetail, RunLabel, RunStep, RunWaiter } from "@quard/db";
+import type { RunAgentEvent, RunDecision, RunDecisionDetail, RunLabel, RunStep, RunWaiter } from "@quard/db";
 import { contextOf, isInfluenced } from "../../labels/context";
 import type { DecisionGuard, Label, Outcome, StepKind } from "../../types";
 import type { Step } from "../types";
+import { agentSteps } from "./links";
 import { argsOf } from "./values";
 
 // Rows read with their own event also say whether they came late and carry a detector score
 type StoredDecision = RunDecision & Partial<Pick<RunDecisionDetail, "degraded" | "score">>;
 
-// Stored steps with their labels and decisions, such as a whole stored run or an agent's recent calls
-export type StepSource = { steps: RunStep[]; labels: RunLabel[]; decisions: StoredDecision[] };
+// Stored steps with their labels and decisions, such as a whole stored run or an agent's recent calls.
+// A whole run also has its messages, handoffs and memory events.
+export type StepSource = {
+    steps: RunStep[];
+    labels: RunLabel[];
+    decisions: StoredDecision[];
+    events?: RunAgentEvent[];
+};
 
 const GUARDS: ReadonlySet<string> = new Set<DecisionGuard>([
     "source",
@@ -237,6 +244,7 @@ export function buildSteps(source: StepSource, waiting: RunWaiter[] = [], now = 
             step.kind === "model_call" ? modelStep(step, source.labels) : toolStep(step, source, firstCheck, owner),
         ),
         ...source.decisions.filter(shown).map((d) => guardStep(d, source.labels)),
+        ...agentSteps(source.events ?? [], source.labels),
         // Last, so the stable sort keeps a wait after the ask it ties with
         ...waiting.map((waiter) => waitingStep(waiter, source.labels, lastCheck, now)),
     ];

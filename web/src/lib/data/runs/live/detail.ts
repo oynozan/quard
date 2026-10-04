@@ -2,8 +2,9 @@ import type { PaymentRow, RunDetail as StoredRun, RunListItem, RunWaiter } from 
 import { paymentsOf } from "../../payments/run";
 import { stillWaits } from "../../approvals/live/heartbeat";
 import type { ModelUsage, RunAgent, RunDetail, RunRow, Step } from "../types";
+import { edgesOf } from "./links";
 import { decisionCounts, statusOf } from "./status";
-import { buildSteps } from "./steps";
+import { buildSteps, type StepSource } from "./steps";
 
 const ms = (date: Date) => date.getTime();
 
@@ -89,7 +90,7 @@ export function runRowOf(run: RunListItem, now: number, waiters: RunWaiter[] = [
 }
 
 export function runDetailOf(
-    run: StoredRun,
+    run: StoredRun & Pick<StepSource, "events">,
     now: number,
     waiters: RunWaiter[] = [],
     payments: PaymentRow[] = [],
@@ -128,7 +129,7 @@ export function runDetailOf(
     return {
         summary,
         agents,
-        graph: { nodes: agents, edges: [] },
+        graph: { nodes: agents, edges: edgesOf(steps) },
         steps,
         limits: [],
         payments: paymentsOf(payments),
