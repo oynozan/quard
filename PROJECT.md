@@ -507,14 +507,18 @@ const paidFetch = wrapFetchWithPayment(quard.x402Fetch(fetch), client);
 ```
 
 - **Few human approvals.** The guard allows or blocks on its own, and asks a person only above `approveAbove`. Such an approval waits before signing, because a signed payment expires within `maxTimeoutSeconds`.
-- **Defaults** (**Claude's pick**): $1 per payment, $5 per run, $50 per day, and untrusted origins blocked. They start in observe mode like the other product defaults, and never ask a person.
+- **Defaults** (**Claude's pick**): $1 per payment, $5 per run, $50 per day, untrusted origins blocked, and the payee fleet check on. They start in observe mode like the other product defaults, and never ask a person. An option a team sets runs in the guard's mode, which is block unless set. (**Claude's pick**)
+- **Untrusted payees.** A host or payee whose first appearance in the run was untrusted content is refused. A payee never seen in the run is allowed: the payee in a `402` is almost never in the content. (**Claude's pick**)
+- **Counting.** Run and day totals are counted before signing, with the cap checked in the same step, so parallel payments can't race past it. (**Claude's pick**)
+- **The refusal.** Inside a tool wrapped with `guard()`, the tool returns the refusal, like any guard. Outside one, the x402 client throws an error whose message is the refusal, for the app to pass on. (**Claude's pick**)
 - **Every x402 response is recorded.** `quard.x402Fetch(fetch)` sits under the x402 client and records:
     - price requests, including the ones the guard refused;
     - signed payments;
     - settlements, with the transaction hash;
     - whether the paid response arrived. If it didn't, the payment is flagged "paid, not delivered".
 
-  A signed payment that no `x402` guard checked is not sent, and Quard warns once, as it does for an unguarded tool.
+  A signed payment that no `x402` guard checked is not sent, and Quard warns once, as it does for an unguarded tool. The paid fetch gets a `403` whose body the model reads. (**Claude's pick**)
+- **Spend** counts settled payments only. A payment that settled but wasn't delivered still counts, because the money was spent. (**Claude's pick**)
 - **The chain doesn't matter.** The network is recorded, but no rule depends on it. Any scheme and network the x402 client supports works.
 - **No token is blocked for what it is.** USD caps apply where the value is known: stablecoins, from a small built-in list. Other tokens are recorded as "value unknown", and the count caps and `assetCaps` still apply.
 - **Wallet addresses stay in clear,** since they are public on chain. They are still a value kind, so labels, search and the fleet check find them.
@@ -523,7 +527,7 @@ const paidFetch = wrapFetchWithPayment(quard.x402Fetch(fetch), client);
     - The run view shows payment steps with amount, host, payee, network and a transaction link.
     - The runs list and the overview show spend next to cost.
     - The Summary page shows spend by day, agent, host and payee, plus new and quarantined payees.
-- **x402 over MCP.** A paid tool returns the `PaymentRequired` object as an error result, and the payment travels in `_meta["x402/payment"]`. Quard reads both through an MCP client wrapper.
+- **x402 over MCP.** A paid tool returns the `PaymentRequired` object as an error result, and the payment travels in `_meta["x402/payment"]`. Quard reads both through an MCP client wrapper, `quard.x402Mcp(client)`. (**Claude's pick**)
 - **Tests never touch a real chain.** They use a local x402 server and a stub facilitator. The sandbox uses a test network.
 
 ## Root-cause finder
@@ -808,6 +812,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | x402 chains and tokens | No rule depends on the chain; no token blocked for what it is | Owner |
 | — | Wallet addresses | Stored in clear, since they are public on chain | Owner |
 | — | x402 defaults | $1 per payment, $5 per run, $50 per day, untrusted origins blocked; observe mode first | Claude's pick |
+| — | x402 SDK names | `quard.x402()`, `quard.x402Fetch()`, `quard.x402Mcp()` | Claude's pick |
 | — | Content labels | Jev picks one label from a fixed list for public content; `none` goes to an AI | Owner |
 | — | Label list | Four risky labels, eight others and `none` | Claude's pick |
 | — | Jev acting in v1 | Yes: enforce by default; a team can switch it to observe | Owner |
