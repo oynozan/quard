@@ -22,6 +22,9 @@ const TOOLS = [
         name: ["string", "Supplier name"],
     }),
     define("fetchPage", "Read a web page", { url: ["string", "Full URL"] }),
+    define("fetchPaid", "Fetch a URL from a paid API. It pays with x402 when the server asks", {
+        url: ["string", "Full URL"],
+    }),
     define("readEmail", "Read the newest email in the inbox", {}),
     define("payInvoice", "Pay an invoice by bank transfer", {
         iban: ["string", "IBAN to pay"],
