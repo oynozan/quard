@@ -89,6 +89,24 @@ async function countThere(control: Control, taken: Taken): Promise<number[]> {
     return countHere(control, taken);
 }
 
+// One call's per-day counts, counted through control when they fit and it is there
+function countTaken(control: Control | undefined, taken: Taken): Promise<number[]> | number[] {
+    const fitsOne =
+        taken.counters.length <= MAX_DAY_COUNTS && taken.counters.every((found) => fitsControl(found.counter));
+    const linked = fitsOne ? control : undefined;
+    return linked?.link.ready() === true ? countThere(linked, taken) : countHere(linked, taken);
+}
+
+// Adds to per-day counters, all or none, and returns each counter's new total
+export async function dayTotals(
+    control: Control | undefined,
+    tool: string,
+    counters: Counter[],
+    day: string,
+): Promise<number[]> {
+    return countTaken(control, { tool, day, counters, at: "none" });
+}
+
 // Adds the call to its per-day counters, and puts the way to take them back in undo
 export async function countDays(
     call: GuardCall,
@@ -104,7 +122,7 @@ export async function countDays(
     const taken: Taken = { tool: call.tool, day: utcDay(), counters, at: "none" };
     const fitsOne = counters.length <= MAX_DAY_COUNTS && counters.every((found) => fitsControl(found.counter));
     const linked = fitsOne ? control : undefined;
-    const totals = linked?.link.ready() === true ? await countThere(linked, taken) : countHere(linked, taken);
+    const totals = await countTaken(control, taken);
     undo.push(() => giveBack(linked, taken));
     const over = counters.flatMap((found, index) => found.caps.filter((cap) => (totals[index] as number) > cap.max));
     return refusal(call, over, checked, "daily_limit_reached");

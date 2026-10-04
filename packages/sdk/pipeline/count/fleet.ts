@@ -8,7 +8,7 @@ import type { FleetUse } from "../../transport/link/queue.ts";
 import { recordDecision } from "../checks.ts";
 
 // Sends one report and finds its quarantined values, or keeps it when control can't answer
-async function reportChunk(control: Control, use: FleetUse, mode: Mode): Promise<FailResult | undefined> {
+export async function reportChunk(control: Control, use: FleetUse, mode: Mode): Promise<FailResult | undefined> {
     let kept = false;
     const reply = await control.requests.request(
         { type: "fleet", id: newEventId(), ...use },

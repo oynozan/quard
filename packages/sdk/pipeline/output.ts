@@ -1,11 +1,13 @@
 import { extractValues, keyText, labelFor, originKind, textOf, type Label } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
+import { GuardBlockedError, type GuardRefusal } from "../core/refusal.ts";
 import { now, record } from "../core/recorder.ts";
 import { incomingMessage } from "../context/carrier.ts";
 import type { RequestedCall } from "../context/registry.ts";
 import { currentScope } from "../context/scope.ts";
 import type { FailResult, GuardCall } from "../guards/call.ts";
 import type { GuardOptions, SourceOptions } from "../guards/options.ts";
+import { inFrame, newFrame, PaymentRefused } from "../guards/x402/frame.ts";
 import { checkSource, originFor, receiveMessage, type Received } from "../guards/source/source.ts";
 import type { AddOptions } from "../labels/content-index.ts";
 import { isLabelRef } from "../labels/records.ts";
@@ -47,7 +49,8 @@ export function recordToolCall(
     });
 }
 
-// Runs the tool with exactly the checked arguments
+// Runs the tool with exactly the checked arguments. A tool that throws
+// after the x402 guard refused a payment in it gives back that refusal.
 export async function runTool(
     fn: (...args: never[]) => unknown,
     args: unknown[],
@@ -55,14 +58,32 @@ export async function runTool(
     requested: RequestedCall | undefined,
 ): Promise<unknown> {
     const started = Date.now();
+    const frame = newFrame();
     try {
-        const output = await fn(...(args as never[]));
+        const output = await inFrame(frame, () => fn(...(args as never[])));
         recordToolCall(call, requested, "ok", started);
         return output;
     } catch (error) {
+        if (frame.refused !== undefined) {
+            recordToolCall(call, requested, "blocked", started);
+            return new PaymentRefused(frame.refused);
+        }
         recordToolCall(call, requested, "error", started, error);
         throw error;
     }
+}
+
+// The refusal a guarded tool returns, or throws with onBlock: "throw"
+export function paymentRefusal(refused: PaymentRefused, requested: RequestedCall | undefined): GuardRefusal {
+    if (requested !== undefined) {
+        // The refusal text the app sends back is ours, not outside content
+        requested.outputLabel = labelFor("system", getConfig().origins);
+    }
+    const { refusal, onBlock } = refused.refused;
+    if (onBlock === "throw") {
+        throw new GuardBlockedError(refusal);
+    }
+    return refusal;
 }
 
 // Values the call's own input holds. A result that echoes them back

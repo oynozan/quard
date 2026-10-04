@@ -7,6 +7,7 @@ import type { FailResult, GuardCall, RuleResult } from "../guards/call.ts";
 import { maskArgs } from "../guards/egress/payload.ts";
 import type { ApprovalOptions, GuardOptions } from "../guards/options.ts";
 import { isGuardType } from "../guards/types.ts";
+import { PaymentRefused } from "../guards/x402/frame.ts";
 import { labelArguments } from "../labels/value-labels.ts";
 import { policyOptions, refreshSources, sourcesReady } from "../policy/state.ts";
 import { syncRules } from "../transport/link/active.ts";
@@ -16,7 +17,7 @@ import { blocked } from "./approval/record.ts";
 import { asksOf, decide, preChecks, recordDecision } from "./checks.ts";
 import { countCall } from "./count/count.ts";
 import { reportRefused } from "./count/fleet.ts";
-import { finishOutput, recordToolCall, runTool } from "./output.ts";
+import { finishOutput, paymentRefusal, recordToolCall, runTool } from "./output.ts";
 import { snapshot } from "./snapshot.ts";
 
 type Spec = {
@@ -167,6 +168,9 @@ async function runPipeline(code: Spec, args: unknown[], signal: AbortSignal | un
     }
     const ran = call;
     const output = await withScope(scope, () => runTool(spec.fn, runArgs, ran, requested));
+    if (output instanceof PaymentRefused) {
+        return paymentRefusal(output, requested);
+    }
 
     // 8 and 9. Output checks; every step above was recorded
     const shown = await finishOutput(spec.list, call, output, requested);
@@ -191,6 +195,9 @@ export function guardWithSignal<F extends (...args: never[]) => unknown>(
     for (const item of list) {
         if (!isGuardType(item.type)) {
             throw new Error(`Unknown guard type: ${String(item.type)}`);
+        }
+        if (item.type === "x402") {
+            throw new Error("An x402 guard wraps an x402 client: use quard.x402(client, options)");
         }
         if (item.type === "approval" && item.timeout !== undefined && !(item.timeout > 0)) {
             throw new Error("An approval timeout must be a positive number of seconds");
