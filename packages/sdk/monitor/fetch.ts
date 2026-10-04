@@ -14,6 +14,7 @@ import { checkModelCall, countModelCall } from "../guards/limit/model-limits.ts"
 import { isShared } from "../guards/limit/run-counts.ts";
 import { addCost, countSharedModelCall } from "../pipeline/count/steps.ts";
 import { activeControl } from "../transport/link/active.ts";
+import { briefLabel } from "./agent-brief.ts";
 import { checkRequestedCalls } from "./check.ts";
 import { unguardedOutputLabel } from "./framework-tools.ts";
 import { asRecord, parseJson } from "./json.ts";
@@ -101,7 +102,9 @@ function labelInput(step: Step): void {
                 keepEarlier: requested?.outputLabel === undefined,
             });
         } else {
-            add(item.text, labelFor(item.role, overrides), { keepEarlier: true });
+            // An agent run as a tool reads its caller's brief as user input
+            const brief = item.role === "user" ? briefLabel(scope, item.text) : undefined;
+            add(item.text, brief ?? labelFor(item.role, overrides), { keepEarlier: true });
         }
     }
     if (request.conversationId !== undefined) {

@@ -3,6 +3,7 @@ import { newStepId } from "@quard/shared";
 import { now, record } from "../../core/recorder.ts";
 import { findCall } from "../../context/registry.ts";
 import { childScope, type Scope } from "../../context/scope.ts";
+import { markBrief } from "../../monitor/agent-brief.ts";
 
 // A frame is the scope of one Agents SDK run() call. Its agent follows
 // the framework: a handoff switches it, and an agent run as a tool gets
@@ -52,11 +53,14 @@ export function topFrame(parent: Scope, agent: string): Scope {
 }
 
 // A run() inside another run's tool call, as Agent.asTool() does. It
-// starts below the model step that asked for the call.
+// starts below the model step that asked for the call, and its user
+// input is the caller's brief.
 export function toolFrame(parent: Scope, agent: string): Scope {
     const stepId = askedBy.getStore() ?? (parent.lastStepId ??= newStepId());
     recordHandoff(parent, agent, "tool", stepId);
-    return frame({ ...childScope(parent, agent), parentStepId: stepId });
+    const child = frame({ ...childScope(parent, agent), parentStepId: stepId });
+    markBrief(child, parent.agent);
+    return child;
 }
 
 // A handoff inside one run() call switches the frame's agent in place.
