@@ -41,6 +41,9 @@ function jevReply(
 }
 
 const status = (code: number, headers: Record<string, string> = {}) => new Response("no", { status: code, headers });
+// A body whose read fails as when the try's own time runs out
+const slowBody = () =>
+    new ReadableStream({ start: (stream) => stream.error(new DOMException("slow", "TimeoutError")) });
 const jev = () => jevDetector({ apiKey: "ts-test-key" });
 
 describe("jevDetector", () => {
@@ -79,7 +82,8 @@ describe("jevDetector", () => {
         ["a busy reply with a wait it can't read", status(503, { "retry-after": "soon" })],
         ["a failed network", new TypeError("fetch failed")],
         ["a try that took too long", new DOMException("slow", "TimeoutError")],
-    ])("tries once more after %s", async (_what, first) => {
+        ["a body that took too long", async () => new Response(slowBody())],
+    ])("tries once more after %s", async (_what, first: Reply) => {
         const fetch = answers(first, jevReply("article"));
 
         expect((await jev().label("text")).label).toBe("article");

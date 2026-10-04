@@ -81,6 +81,15 @@ function pause(ms: number, signal: AbortSignal | undefined): Promise<void> {
     });
 }
 
+// Quard stopped waiting, this try took too long, or the network failed
+function failed(error: unknown, signal: AbortSignal | undefined): Outcome {
+    if (signal?.aborted === true) {
+        return { reason: "timeout", retry: false, waitMs: 0 };
+    }
+    const slow = error instanceof Error && error.name === "TimeoutError";
+    return { reason: slow ? "timeout" : "network", retry: true, waitMs: 0 };
+}
+
 async function ask(apiKey: string, text: string, signal: AbortSignal | undefined): Promise<Outcome> {
     let response: Response;
     try {
@@ -95,18 +104,20 @@ async function ask(apiKey: string, text: string, signal: AbortSignal | undefined
             signal: AbortSignal.any([AbortSignal.timeout(TRY_MS), ...(signal === undefined ? [] : [signal])]),
         });
     } catch (error) {
-        // Quard stopped waiting, this try took too long, or the network failed
-        if (signal?.aborted === true) {
-            return { reason: "timeout", retry: false, waitMs: 0 };
-        }
-        const slow = error instanceof Error && error.name === "TimeoutError";
-        return { reason: slow ? "timeout" : "network", retry: true, waitMs: 0 };
+        return failed(error, signal);
     }
     if (!response.ok) {
         const retry = response.status === 408 || response.status === 429 || response.status >= 500;
         return { reason: `http_${response.status}`, retry, waitMs: retryAfterMs(response) };
     }
-    const parsed = reply.safeParse(await response.json().catch(() => undefined));
+    let body: unknown;
+    try {
+        body = await response.json();
+    } catch (error) {
+        // Text that is not JSON is a bad reply; a body cut off is a failed try
+        return error instanceof SyntaxError ? { reason: "bad_reply", retry: false, waitMs: 0 } : failed(error, signal);
+    }
+    const parsed = reply.safeParse(body);
     if (!parsed.success) {
         return { reason: "bad_reply", retry: false, waitMs: 0 };
     }
