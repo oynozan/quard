@@ -29,7 +29,7 @@ describe("lookup", () => {
         expect(socket.of("labels")).toEqual([{ type: "labels", id: message.id, records: [messageRecord()] }]);
     });
 
-    it("answers with every label of a memory item, untrusted first", async () => {
+    it("answers with a memory item's labels merged to the least trusted", async () => {
         const project = await newProject(test.db);
         const ctx = testContext(test.db);
         const { connection, socket } = await readyConnection(ctx, project);
@@ -39,7 +39,9 @@ describe("lookup", () => {
 
         await lookup(ctx, connection, lookupMessage({ kind: "memory", print: PRINT }));
 
-        expect(socket.of("labels")[0]?.records).toEqual([untrusted, trusted]);
+        expect(socket.of("labels")[0]?.records).toMatchObject([
+            { kind: "memory", print: PRINT, label: { trust: "untrusted" } },
+        ]);
     });
 
     it("answers with no records for an unknown target or one in another project", async () => {
