@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { cleanText, combineLabels, extractValues, type ContextLabel, type Label } from "@quard/shared";
+import { combineLabels, extractValues, type ContextLabel, type Label } from "@quard/shared";
 
 export type Match = "exact" | "host" | "domain";
 
@@ -21,7 +21,7 @@ export type ContentRecord = {
     stepId: string;
     order: number;
     keys: string[];
-    // A hash of the normalized text, so content is only stored once
+    // A hash of the exact text, so content is only stored once
     print: string;
 };
 
@@ -37,10 +37,6 @@ function matchOf(key: string): Match {
         return "host";
     }
     return key.startsWith("domain:") ? "domain" : "exact";
-}
-
-function normalized(text: string): string {
-    return cleanText(text).replace(/\s+/g, " ").trim();
 }
 
 // For dedupe in this index only. It never goes into a record.
@@ -66,17 +62,18 @@ export class ContentIndex {
         return record;
     }
 
-    // Content seen before keeps its first label
+    // Content seen before keeps its first label. Only the exact text
+    // counts: a copy with hidden text added is new content.
     add(text: string, label: Label, stepId: string, options: AddOptions = {}): ContentRecord | undefined {
-        const plain = normalized(text);
-        if (plain === "" || this.#seen.has(hash(plain))) {
+        const print = hash(text);
+        if (text.trim() === "" || this.#seen.has(print)) {
             return undefined;
         }
-        this.#seen.add(hash(plain));
+        this.#seen.add(print);
         const keys = [...new Set(extractValues(text).flatMap((value) => value.keys))].filter(
             (key) => options.exclude?.has(key) !== true && !(options.keepEarlier === true && this.#byKey.has(key)),
         );
-        return this.#push({ label, stepId, keys, print: hash(plain) });
+        return this.#push({ label, stepId, keys, print });
     }
 
     // Takes in what another run read, keeping its labels
@@ -90,7 +87,7 @@ export class ContentIndex {
     }
 
     has(text: string): boolean {
-        return this.#seen.has(hash(normalized(text)));
+        return this.#seen.has(hash(text));
     }
 
     // Keys come strongest first, so the first match per record is kept
