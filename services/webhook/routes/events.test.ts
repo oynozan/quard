@@ -1,4 +1,4 @@
-import { createAgentKey, createProject, getRun, revokeAgentKey } from "@quard/db";
+import { createAgentKey, createProject, droppedEvents, getRun, listConfigErrors, revokeAgentKey } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { createRedactor, keyedHash, parseHashKey } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -126,25 +126,39 @@ describe("POST /v1/events", () => {
         expect(step.detail).toMatchObject(masked);
     });
 
-    it("notes events the SDK had to drop", async () => {
+    it("logs and stores the number of events the SDK had to drop, once per batch", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const since = new Date();
+        const batch = { ...rawBatch("5".repeat(32)), dropped: 3 };
 
-        await post({ ...rawBatch("5".repeat(32)), dropped: 3 });
+        await post(batch);
+        await post(batch);
 
         expect(warn).toHaveBeenCalledWith(
             expect.stringContaining("dropped 3 events (a full buffer, or values that could not be sent as JSON)"),
         );
+        expect(await droppedEvents(test.db, projectId, since)).toEqual({ count: 3, lastAt: expect.any(Date) });
         warn.mockRestore();
     });
 
-    it("logs a config error and stores nothing for it", async () => {
+    it("logs a config error and stores it apart from runs, redacted", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        const event = { type: "config_error", at: AT, source: "signatures", message: "feed unreachable" };
+        const message = "feed unreachable, mail jane@acme.com";
+        const event = { type: "config_error", at: AT, source: "signatures", message };
 
-        const res = await post({ events: [{ id: id(), event }] });
+        const res = await post({
+            events: [
+                { id: id(), event },
+                { id: id(), event },
+            ],
+        });
 
-        expect(await res.json()).toEqual({ received: 1, stored: 0 });
+        expect(await res.json()).toEqual({ received: 2, stored: 0 });
         expect(warn).toHaveBeenCalledWith(expect.stringContaining("the signatures file failed to load"));
+        const [stored] = await listConfigErrors(test.db, projectId, { limit: 10 });
+        expect(stored).toMatchObject({ source: "signatures", count: 2 });
+        expect(stored?.message).toContain("feed unreachable");
+        expect(stored?.message).not.toContain("jane@acme.com");
         warn.mockRestore();
     });
 

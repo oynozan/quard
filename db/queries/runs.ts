@@ -76,6 +76,8 @@ export type RunDecisionDetail = RunDecision & {
     degraded: boolean;
     // A detector's risk score, from 0 to 1
     score: number | null;
+    // The policy file version in force, when one is set
+    policy: string | null;
 };
 
 export type RunWarning = { eventId: string; stepId: string | null; agent: string; at: Date; body: unknown };
@@ -244,6 +246,7 @@ const OWN_EVENT = "e.project_id = decisions.project_id AND e.event_id = decision
 export const DECISION_EVENT_COLUMNS = [
     sql<boolean>`coalesce((SELECT e.degraded FROM events e WHERE ${sql.raw(OWN_EVENT)}), false)`.as("degraded"),
     sql<number | null>`(SELECT (e.body->>'score')::float8 FROM events e WHERE ${sql.raw(OWN_EVENT)})`.as("score"),
+    sql<string | null>`(SELECT e.body->>'policy' FROM events e WHERE ${sql.raw(OWN_EVENT)})`.as("policy"),
 ] as const;
 
 export async function getRun(db: Db, projectId: string, runId: string): Promise<RunDetail | undefined> {

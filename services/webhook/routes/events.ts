@@ -1,4 +1,4 @@
-import { ingestBatch, type Db } from "@quard/db";
+import { ingestBatch, recordConfigErrors, recordDropped, type Db } from "@quard/db";
 import { MAX_BATCH_BYTES, redactEvent, uploadBatch, type Redactor } from "@quard/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -30,15 +30,19 @@ export function eventRoutes(deps: EventDeps): Hono {
                         "(a full buffer, or values that could not be sent as JSON)",
                 );
             }
-            // Config errors belong to no run; they are logged until the dashboard shows them
-            for (const { event } of batch.data.events) {
-                if (event.type === "config_error") {
-                    console.warn(`webhook: project ${projectId}: the ${event.source} file failed to load`);
-                }
-            }
             // Redacted again here, so an old or broken SDK never stores a raw value
             const items = batch.data.events.map((item) => ({ ...item, event: redactEvent(deps.redactor, item.event) }));
             const stored = await ingestBatch(deps.db, projectId, items);
+            // After the events, so a resend after a failed ingest counts these once.
+            // The first event's id names the batch; the schema asks for one at least.
+            const now = new Date();
+            await recordDropped(deps.db, projectId, items[0]!.id, batch.data.dropped ?? 0, now);
+            // Config errors belong to no run, so they are kept apart
+            const errors = items.flatMap(({ event }) => (event.type === "config_error" ? [event] : []));
+            for (const { source } of errors) {
+                console.warn(`webhook: project ${projectId}: the ${source} file failed to load`);
+            }
+            await recordConfigErrors(deps.db, projectId, errors, now);
             return c.json({ received: items.length, stored }, 202);
         },
     );

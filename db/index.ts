@@ -165,6 +165,10 @@ export type {
     RunSummary,
     RunWarning,
 } from "./queries/runs.ts";
+export { listConfigErrors, recordConfigErrors } from "./queries/sdk-reports/config-errors.ts";
+export type { ConfigErrorInput, ConfigErrorRow, ConfigErrorSource } from "./queries/sdk-reports/config-errors.ts";
+export { droppedEvents, recordDropped } from "./queries/sdk-reports/drops.ts";
+export type { DroppedEvents } from "./queries/sdk-reports/drops.ts";
 export { hasRuns } from "./queries/search/has-runs.ts";
 export { findName } from "./queries/search/names.ts";
 export type { NameMatchRow, NameQuery, NameSearch } from "./queries/search/names.ts";

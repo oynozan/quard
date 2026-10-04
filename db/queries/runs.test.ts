@@ -142,7 +142,7 @@ describe("getRun", () => {
         expect(await getRun(test.db, other, "f".repeat(32))).toBeUndefined();
     });
 
-    it("adds each decision's late flag and detector score from its event", async () => {
+    it("adds each decision's late flag, detector score and policy version from its event", async () => {
         const projectId = await createProject(test.db, "Acme");
         const detector = {
             ...decision("2026-10-03T12:00:02.500Z"),
@@ -150,21 +150,23 @@ describe("getRun", () => {
             rule: "detector:injection",
             decision: "flag" as const,
             score: 0.93,
+            policy: "2026-10-01",
         };
         await ingestBatch(test.db, projectId, [item(started()), item(decision()), item(detector, true)]);
 
         const run = await getRun(test.db, projectId, RUN);
 
-        expect(run?.decisions.map(({ rule, degraded, score }) => ({ rule, degraded, score }))).toEqual([
-            { rule: "iban:from", degraded: false, score: null },
-            { rule: "detector:injection", degraded: true, score: 0.93 },
+        const extras = run?.decisions.map(({ rule, degraded, score, policy }) => ({ rule, degraded, score, policy }));
+        expect(extras).toEqual([
+            { rule: "iban:from", degraded: false, score: null, policy: null },
+            { rule: "detector:injection", degraded: true, score: 0.93, policy: "2026-10-01" },
         ]);
         expect(run?.decisions[0]).toMatchObject({ guard: "action", decision: "block", enforced: true });
     });
 
     it("keeps a decision whose event row is gone", async () => {
         const projectId = await createProject(test.db, "Acme");
-        const gone = item({ ...decision(), score: 0.5 }, true);
+        const gone = item({ ...decision(), score: 0.5, policy: "v1" }, true);
         await ingestBatch(test.db, projectId, [item(started()), gone]);
         await test.db
             .deleteFrom("events")
@@ -174,6 +176,6 @@ describe("getRun", () => {
 
         const run = await getRun(test.db, projectId, RUN);
 
-        expect(run?.decisions).toMatchObject([{ eventId: gone.id, degraded: false, score: null }]);
+        expect(run?.decisions).toMatchObject([{ eventId: gone.id, degraded: false, score: null, policy: null }]);
     });
 });
