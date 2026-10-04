@@ -92,6 +92,23 @@ describe("rulesOf", () => {
         ]);
     });
 
+    it("lists run limits, which the SDK sends under the tool *, as the whole run", () => {
+        const set = {
+            hash: A,
+            rules: [
+                entry("*", "limit", "max-depth", "observe"),
+                entry("delegate", "limit", "max-depth", "observe"),
+                entry("*", "limit", "max-depth", "observe"),
+                entry("*", "limit", "max-steps", "observe"),
+            ],
+        };
+
+        expect(rulesOf([set], [app("billing", [A])]).map((row) => [row.name, row.tools])).toEqual([
+            ["max-depth", ["delegate"]],
+            ["max-steps", []],
+        ]);
+    });
+
     it("leaves out rules of a guard the dashboard does not know", () => {
         const set = {
             hash: A,

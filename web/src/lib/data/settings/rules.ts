@@ -12,6 +12,9 @@ const GUARDS: ReadonlySet<string> = new Set<GuardType>([
     "permission",
 ]);
 
+// The SDK lists run limits under this tool, for the whole run
+const WHOLE_RUN = "*";
+
 const order = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 function byName(a: RuleRow, b: RuleRow): number {
@@ -36,19 +39,21 @@ export function rulesOf(sets: RuleSetRow[], apps: ConnectedAppRow[]): RuleRow[] 
             const mode = guard === "approval" ? null : entry.mode;
             const id = `${set.hash} ${guard} ${entry.rule} ${mode}`;
             const row = rows.get(id);
+            // No tools reads as the whole run
+            const tools = entry.tool === WHOLE_RUN ? [] : [entry.tool];
             if (!row) {
                 rows.set(id, {
                     name: entry.rule,
                     guard,
-                    tools: [entry.tool],
+                    tools,
                     apps: names,
                     mode,
                     hash: set.hash,
                     summary: "",
                     source: "team",
                 });
-            } else if (!row.tools.includes(entry.tool)) {
-                row.tools.push(entry.tool);
+            } else {
+                row.tools.push(...tools.filter((tool) => !row.tools.includes(tool)));
             }
         }
     }
