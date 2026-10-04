@@ -1,0 +1,114 @@
+# Self-host Quard
+
+Quard runs in your own cloud, from one Docker Compose file. It starts Postgres and four services:
+
+- **web**: the dashboard, on port 3000.
+- **webhook**: receives events from your agents, on port 4100.
+- **control**: the live link your agents keep open for counters and approvals, on port 4200.
+- **worker**: finds the cause of incidents in the background. It has no port.
+
+A one-off **migrate** step sets up the database before the services start.
+
+## What you need
+
+- A machine with Docker and Docker Compose v2, and at least 4 GB of memory to build the images.
+- Git, to get the code, and `openssl`, to make keys.
+- A free [Privy](https://www.privy.io) account. The dashboard signs people in through Privy, with an email code or GitHub.
+
+## 1. Get the code
+
+```sh
+git clone https://github.com/oynozan/quard.git
+cd quard
+```
+
+## 2. Set up sign-in
+
+1. Create an app in the [Privy dashboard](https://dashboard.privy.io).
+2. Under login methods, turn on **Email** and **GitHub**.
+3. Under allowed domains, add the address you will open the dashboard at, such as `http://localhost:3000`. Privy works on `localhost` and on HTTPS addresses only.
+4. Copy the **App ID** and the **App secret** from **App settings**.
+
+Anyone who signs in with a verified email or a GitHub account can use the dashboard. To keep it private, run it inside your network or behind your VPN.
+
+## 3. Fill in the settings
+
+Copy the example settings file:
+
+```sh
+cp .env.example .env
+```
+
+Then fill in these lines in `.env`:
+
+| Setting                    | What to put there                                                          |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD`        | A password for the database. Make one with `openssl rand -hex 24`.         |
+| `QUARD_HASH_KEY`           | 64 hex characters. Make it with `openssl rand -hex 32`.                    |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | The Privy App ID, 25 characters.                                           |
+| `PRIVY_APP_SECRET`         | The Privy App secret.                                                      |
+| `QUARD_SESSION_SECRET`     | Signs the dashboard's session cookie. Make it with `openssl rand -hex 32`. |
+
+The hash key turns IBANs, card numbers and emails into hashes, so they are never stored in clear. Every agent process uses the same key, so keep it with your other secrets. It never leaves your network. If it changes, search no longer finds values from older runs.
+
+These are optional:
+
+| Setting                                                      | What it does                                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                                             | Your own OpenAI key. The worker uses it for the AI reviewer and replay. Without it, both are off. |
+| `OPENAI_BASE_URL`                                            | Another address for the OpenAI API. The default is `https://api.openai.com/v1`.                   |
+| `PRIVY_VERIFICATION_KEY`                                     | Privy's verification key, with `\n` for line breaks. Saves a key fetch on each sign-in.           |
+| `QUARD_PROJECT_ID`                                           | The project the dashboard shows. Empty means the first project.                                   |
+| `QUARD_WEB_PORT`, `QUARD_WEBHOOK_PORT`, `QUARD_CONTROL_PORT` | Other ports on the machine, when 3000, 4100 or 4200 are taken.                                    |
+| `POSTGRES_USER`, `POSTGRES_DB`                               | The database user and name. Both default to `quard`.                                              |
+
+## 4. Start Quard
+
+```sh
+docker compose up -d --build
+```
+
+The first build takes a few minutes. Then check that everything is up:
+
+```sh
+docker compose ps
+```
+
+`postgres`, `webhook`, `control` and `web` show `healthy`, and `worker` is up. `migrate` is not listed, because it ran once and exited. If a service keeps restarting, `docker compose logs <service>` says why.
+
+## 5. Create a project and an agent key
+
+```sh
+docker compose run --rm migrate node db/cli/setup-main.ts --project "Acme"
+```
+
+It prints the project id and an agent key that starts with `qk_live_`:
+
+```text
+Project:   7f0c2a52-…
+Agent key: qk_live_…
+The agent key is shown once. Only its hash is stored.
+```
+
+Copy the key now and keep it as a secret. Your agents send their runs with it.
+
+You can also make keys in the dashboard, under [Settings](/guides/settings#create-a-key). On a new install, the first key there sets up the project.
+
+## 6. Open the dashboard
+
+Go to [http://localhost:3000](http://localhost:3000) and sign in. The pages stay empty until your first run arrives. [Your first guarded run](/install/first-run) sends one.
+
+## Run it on a server
+
+- Put HTTPS in front of `web`, with a reverse proxy such as Caddy or nginx, and add that address to the allowed domains in Privy.
+- Agents need to reach `webhook` and `control`. Give them their own HTTPS addresses, or keep them inside your network. `control` uses a WebSocket, so the proxy must pass WebSocket upgrades through.
+- Postgres keeps its data in the `postgres-data` volume and is not open to the outside. Back it up with `docker compose exec postgres pg_dump -U quard quard`.
+
+## Update Quard
+
+```sh
+git pull
+docker compose up -d --build
+```
+
+The migrate step brings the database up to date before the services start again.

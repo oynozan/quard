@@ -11,3 +11,6 @@ coverage
 
 # Data of the dev Postgres (pnpm --filter @quard/db dev:db)
 .pglite/
+
+# SDK tarballs from pnpm --filter quard pack
+*.tgz

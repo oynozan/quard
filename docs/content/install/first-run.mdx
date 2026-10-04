@@ -1,0 +1,131 @@
+# Your first guarded run
+
+This page builds a small agent that sends emails, puts a guard on its email tool and sends the run to your dashboard. It takes about five minutes.
+
+You need:
+
+- Quard running, as [Self-host Quard](/install/self-host) shows, with an agent key and the hash key from your `.env`.
+- Node.js 22.12 or newer.
+- An OpenAI API key.
+
+## 1. Install the SDK
+
+```sh
+mkdir first-agent
+cd first-agent
+npm init -y
+npm install quard openai
+```
+
+Installing from your copy of the Quard repository instead? Run `pnpm install`, `pnpm --filter quard build` and `pnpm --filter quard pack` there. That writes `quard-0.0.0.tgz` in the repository folder. Then run `npm install /path/to/quard/quard-0.0.0.tgz openai` here.
+
+## 2. Add your settings
+
+Make a file named `.env` in the same folder:
+
+```sh
+QUARD_AGENT_KEY=qk_live_...
+QUARD_WEBHOOK_URL=http://localhost:4100
+QUARD_CONTROL_URL=http://localhost:4200
+QUARD_HASH_KEY=<the same 64 hex characters as on the server>
+OPENAI_API_KEY=sk-...
+```
+
+The URLs point at `webhook` and `control`. Change them if Quard runs on another machine or on other ports.
+
+## 3. Write the agent
+
+Make a file named `agent.mjs`:
+
+```js
+import OpenAI from "openai";
+import { guard, isGuardRefusal, quard } from "quard";
+
+quard.configure({
+    key: process.env.QUARD_AGENT_KEY,
+    webhookUrl: process.env.QUARD_WEBHOOK_URL,
+    controlUrl: process.env.QUARD_CONTROL_URL,
+    hashKey: process.env.QUARD_HASH_KEY,
+});
+
+// Quard records every model call made through this client
+const client = quard.wrap(new OpenAI());
+
+// Your tool. This one only pretends to send.
+async function sendEmail({ to, subject }) {
+    return `Sent "${subject}" to ${to}`;
+}
+
+// The guard: at most one email per run
+const guardedSendEmail = guard(sendEmail, { type: "limit", name: "sendEmail", maxCallsPerRun: 1 });
+
+const model = "gpt-5.4-mini";
+const tools = [
+    {
+        type: "function",
+        name: "sendEmail",
+        description: "Send an email",
+        strict: true,
+        parameters: {
+            type: "object",
+            properties: { to: { type: "string" }, subject: { type: "string" } },
+            required: ["to", "subject"],
+            additionalProperties: false,
+        },
+    },
+];
+
+// Everything inside quard.run() is one run, by the agent "assistant"
+await quard.run({ agent: "assistant" }, async () => {
+    let response = await client.responses.create({
+        model,
+        tools,
+        input: "Send two emails to dana@acme.com, one with the subject 'Hello' and one with 'Your order shipped'.",
+    });
+    // Run the tools the model asks for, then send it the results
+    for (let turn = 0; turn < 5; turn++) {
+        const calls = response.output.filter((item) => item.type === "function_call");
+        if (calls.length === 0) break;
+        const results = [];
+        for (const call of calls) {
+            const result = await guardedSendEmail(JSON.parse(call.arguments));
+            // A blocked call returns a refusal, which the model reads instead
+            const output = isGuardRefusal(result) ? result.text : result;
+            results.push({ type: "function_call_output", call_id: call.call_id, output });
+        }
+        response = await client.responses.create({ model, tools, previous_response_id: response.id, input: results });
+    }
+    console.log(response.output_text);
+});
+```
+
+`quard.wrap()` lets Quard see each model call. `guard()` wraps the tool, and Quard checks every call to it before it runs.
+
+## 4. Run it
+
+```sh
+node --env-file=.env agent.mjs
+```
+
+The model asks to send two emails. The first one goes out. The guard blocks the second, so the model gets a refusal instead and says so:
+
+```text
+I sent the "Hello" email to dana@acme.com. The second email was blocked because only one email is allowed per run.
+```
+
+The wording changes from run to run, because a real model writes it.
+
+## 5. See the run in the dashboard
+
+Open the dashboard and go to **Runs**. The newest run is from the agent `assistant`. It completed, with two model calls and two tool calls. Open it to see the timeline: the first `sendEmail` call ran, and the second one was blocked by the limit guard.
+
+The block also opened an incident, under **Incidents**, which traces the path that led to it.
+
+Nothing showing up? Check that `QUARD_WEBHOOK_URL` answers at `/health`, and that the agent key and the hash key match the ones Quard uses.
+
+## Next steps
+
+- Read about the other [guards](/concepts/guards): source, action, approval, egress, limit and x402.
+- Learn to read a run in the [Runs guide](/guides/runs).
+- Have a person approve risky calls with an [approval guard](/concepts/approvals).
+- Using the OpenAI Agents SDK? See [OpenAI Agents SDK](/integrations/openai-agents).
