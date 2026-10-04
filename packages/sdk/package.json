@@ -32,10 +32,14 @@
         "zod": "catalog:"
     },
     "peerDependencies": {
-        "@openai/agents": "^0.18.0"
+        "@openai/agents": "^0.18.0",
+        "@x402/core": "^2.28.0"
     },
     "peerDependenciesMeta": {
         "@openai/agents": {
+            "optional": true
+        },
+        "@x402/core": {
             "optional": true
         }
     },
