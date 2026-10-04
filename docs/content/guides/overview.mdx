@@ -14,6 +14,13 @@ The overview is the home page. It shows how your agents are doing right now and 
 
 The overview updates itself every few seconds while it is open. Before your first run, every chart and list here is drawn empty.
 
+### SDK problems
+
+A panel below the charts appears only when something needs fixing:
+
+- **A policy file or signature feed that failed to load.** Each message shows how many times it was seen and when it was last seen. The SDK keeps using the last good version until the file loads again.
+- **Events lost.** How many events SDKs dropped in the last 24 hours while they could not reach the backend, and when the last ones were lost.
+
 ## What needs attention
 
 ![The lists on the overview](/images/guides/overview-lists.webp)

@@ -330,6 +330,7 @@ monitor applies the same checks to what never passes through `guard()`, from Gua
 Decided by Q6 and Q7.
 
 - Rules live in code, in `guard()` options, and optionally in one JSON policy file set with `quard.configure({ policyFile })`. Code rules change through pull requests and roll back with a redeploy. Operators can edit the policy file while agents run: a tool listed there uses the file's options instead of its code options, from its next call on. (**Owner**)
+- A policy file or signature feed that fails to load leaves the last good one in use. The SDK records a config error, which `webhook` stores and the overview shows. (**Claude's pick**)
 - Each guard needs `name`: the tool name the model sees. `guard()` throws without it, because a function's own name can differ (`rawFetchPage`) or be lost to minifiers. The dashboard uses it to keep a rule's history across deploys and to link the model's tool call to the matching guarded call.
 - On connect, and again whenever they change, the SDK sends its active rules, as names and a hash, to `control`. Every decision records that hash. The dashboard shows which rules ran but does not edit them.
 - Rules a team writes **block by default**. `mode: "observe"` records "would block" or "would ask" and lets the call run. Observe rules never change the final decision.
@@ -383,7 +384,7 @@ Decided by Q23.
 | Jev detector | Keeps working: the SDK calls Jev directly, not through the backend |
 | Decision records | Buffered, up to 10,000, and retried every 1 s to 60 s |
 
-If the buffer fills, the oldest allow records are dropped first, and the number lost is recorded. Records sent late carry `degraded: true`.
+If the buffer fills, the oldest allow records are dropped first, and the number lost is recorded. `webhook` stores it, and the overview shows how many events were lost in the last 24 hours. Records sent late carry `degraded: true`.
 
 ## Approvals
 
@@ -400,6 +401,7 @@ Decided by Q8, Q21 and Q24.
 - While a request is open, a new identical call (same agent, tool and arguments) waits on the same request instead of opening another. (**Claude's pick**)
 - A waiting process can stop, for example after a crash or a host time limit. Its heartbeats then stop, and the dashboard shows the request as "no longer waiting". The request stays open. An "approve once" given then is used by the next identical call. (**Claude's pick**)
 - Some hosts stop a waiting call. Vercel Functions and Cloud Run stop after 5 minutes by default. Vercel allows up to 800 seconds on Pro and Enterprise and 5 minutes on Hobby; Cloud Run allows up to 60 minutes. Teams there should raise the limit where they can, or set the optional `timeout`, in seconds, on the approval guard. There is no timeout by default. (**Claude's pick**)
+- Action and egress guards take the same optional `timeout` for their asks. When several guards ask, the call waits at most the shortest timeout among them. (**Claude's pick, owner asked**)
 - The approver must see real values, so an open request keeps the full arguments. After the decision only the hash and the masked arguments are kept. See [Redaction](#redaction).
 
 ```ts
@@ -839,6 +841,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Content label review | A Labels page in the dashboard; the AI fallback for `none` uses the team's own key and the reviewer's model | Claude's pick |
 | — | Hosted MCP approvals | monitor keeps approval on and never sends the follow-up; `quard.mcpApprovals()` gives the app the answers, refusing blocked calls | Claude's pick |
 | — | Hosted tool rules | By the name the model uses, from the policy file or `hostedTools` in code | Claude's pick |
+| — | Ask timeout on action and egress | An optional `timeout` in seconds, like the approval guard's; a call waits at most the shortest timeout among the guards that asked | Claude's pick, owner asked |
 
 ## Changes to the spec
 

@@ -36,6 +36,8 @@ A run counts as waiting only while the waiting process still runs. If that proce
 
 **Untrusted context** above the timeline counts the steps that ran after the agent had read untrusted content. In the timeline, the arrow keys move between steps, Enter opens one and Escape clears. **Table** shows the same steps as a table.
 
+**Warnings** above the run summary list what the SDK noticed in plain words, such as a tool that is not wrapped with `guard()` and so is recorded but never stopped, a model request it could not read, or a detector request that failed and why. The same warning from the same agent shows once, with a count.
+
 ## Look at one step
 
 Click a cell in the timeline, or a row in its table, to open the step in the drawer.
@@ -46,6 +48,6 @@ Click a cell in the timeline, or a row in its table, to open the step in the dra
 2. **Details.** The kind of step, the agent, its status, when it started and how long it took. **Context** is the label of everything the agent had read before this step, with the origin that made it untrusted. **Parent step** is the step that led here.
 3. **Arguments.** Each argument of a tool call with where its value first appeared. **First seen in** names the origin, then the agent, the time and how the value matched: an exact match, found inside a longer value, the same host or the same domain. **+1 more** means it appeared in other places too. **model-generated** means the value appeared nowhere earlier in the run. **not traced** means the value is a plain word, date or amount, which Quard does not trace on its own.
 
-Other sections show what the step has. A guard decision shows the guard, rule, mode and reason. A model call shows its tokens, its cost and the tools it asked for. A tool call shows the label of its output, and a failed step shows its error. A call waiting for a person shows its request, with a link to answer it.
+Other sections show what the step has. A guard decision shows the guard, rule, mode and reason, and **Policy** shows the policy file version in force when the decision carried one. A model call shows its tokens, its cost and the tools it asked for. A tool call shows the label of its output, and a failed step shows its error. A call waiting for a person shows its request, with a link to answer it.
 
 The open step is part of the page address, so you can share a link that opens it.
