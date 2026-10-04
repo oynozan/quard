@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { atomicAmount } from "./amount.ts";
 
 // x402: a server answers 402 with a price, the client signs a payment and
 // sends the request again, and the server answers with the settlement.
@@ -12,11 +13,12 @@ export const X402_HEADERS = {
     v1Response: "x-payment-response",
 } as const;
 
-// One payment option a server accepts. Amounts are atomic units.
+// One payment option a server accepts. Amounts are atomic units, read
+// as a signer reads them and kept as decimal text.
 export const paymentOption = z.object({
     scheme: z.string().min(1).max(100),
     network: z.string().min(1).max(200),
-    amount: z.string().regex(/^\d{1,78}$/),
+    amount: z.preprocess((value) => atomicAmount(value) ?? value, z.string().regex(/^\d{1,78}$/)),
     asset: z.string().min(1).max(200),
     payTo: z.string().min(1).max(200),
     maxTimeoutSeconds: z.number().int().nonnegative().optional(),

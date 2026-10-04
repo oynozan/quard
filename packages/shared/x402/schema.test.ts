@@ -24,4 +24,13 @@ describe("x402 schemas", () => {
         );
         expect(paymentRequired.safeParse({ x402Version: 2, accepts: [] }).success).toBe(false);
     });
+
+    it("reads a whole-number or hex amount as atomic units", () => {
+        const accepts = [
+            { ...option, amount: 1_000_000_000 },
+            { ...option, amount: "0x3B9ACA00" },
+        ];
+        const parsed = paymentRequired.parse({ x402Version: 2, accepts });
+        expect(parsed.accepts.map((entry) => entry.amount)).toEqual(["1000000000", "1000000000"]);
+    });
 });

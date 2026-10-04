@@ -122,6 +122,12 @@ describe("paidOption and x402VersionOf", () => {
     it("takes a v2 payment's accepted option", () => {
         expect(paidOption({ x402Version: 2, accepted: option, payload: {} })).toEqual(option);
         expect(paidOption({ accepted: { ...option, amount: "x" } })).toBeUndefined();
+        expect(paidOption({ accepted: { ...option, amount: 10_000 } })).toEqual(option);
+    });
+
+    it("reads a v1 amount sent as a number", () => {
+        const v1 = priceFrom({ x402Version: 1, accepts: [{ ...v1Option, maxAmountRequired: 5000 }] });
+        expect(v1?.accepts[0]?.amount).toBe("5000");
     });
 
     it("finds a v1 payment's option in the price", () => {

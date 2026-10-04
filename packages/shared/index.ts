@@ -147,6 +147,7 @@ export { refusalText } from "./refusals/templates.ts";
 export type { ReasonCode, RefusalInput } from "./refusals/templates.ts";
 export { canonicalJson, plainJson } from "./values/canonical.ts";
 export { extractValues } from "./values/extract.ts";
+export { atomicAmount } from "./x402/amount.ts";
 export { paymentOption, paymentRequired, paymentResponse, X402_HEADERS } from "./x402/schema.ts";
 export type { PaymentOption, PaymentRequired, PaymentResponse } from "./x402/schema.ts";
 export {

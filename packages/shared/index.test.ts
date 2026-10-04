@@ -24,6 +24,7 @@ describe("@quard/shared", () => {
             "askMessage",
             "askReason",
             "askedMessage",
+            "atomicAmount",
             "beatMessage",
             "cancelMessage",
             "canonicalJson",
