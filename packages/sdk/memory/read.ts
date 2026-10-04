@@ -1,4 +1,4 @@
-import { combineLabels, extractValues, labelFor, newStepId, originKind, type Label } from "@quard/shared";
+import { combineLabels, extractValues, hasInvisible, labelFor, newStepId, originKind, type Label } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import type { Scope } from "../context/scope.ts";
@@ -26,7 +26,12 @@ async function findLabels(print: string): Promise<MemoryLabels | undefined> {
 
 // Unlabeled memory gets the unknown default: untrusted, internal. A
 // team's override for the store's origin applies only to labeled items.
-function itemLabel(origin: string, labels: MemoryLabels | undefined): Label {
+// Hidden characters can carry text a human never sees, so an item with
+// them is untrusted and flagged, whatever its records say.
+function itemLabel(origin: string, text: string, labels: MemoryLabels | undefined): Label {
+    if (hasInvisible(text)) {
+        return labelFor(origin, {}, ["invisible_text"]);
+    }
     if (labels === undefined) {
         return labelFor(origin);
     }
@@ -98,7 +103,7 @@ export async function readThrough(
     );
     const origin = `memory:${store}`;
     const labels = found.map(({ text, labels }) => {
-        const label = itemLabel(origin, labels);
+        const label = itemLabel(origin, text, labels);
         indexItem(scope, stepId, text, label, labels);
         return label;
     });

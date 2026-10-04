@@ -57,6 +57,10 @@ function readEvent() {
     return events.find((event) => event.type === "memory" && event.op === "read");
 }
 
+function readContent() {
+    return events.find((event) => event.type === "content" && event.origin === "memory:notes");
+}
+
 describe("a memory item from a trusted writer", () => {
     it("reads back untrusted once hidden text is added outside the wrapper", async () => {
         const agents = makeAgents();
@@ -66,5 +70,15 @@ describe("a memory item from a trusted writer", () => {
         await agents.read();
 
         expect(readEvent()).toMatchObject({ verified: 0, trust: "untrusted" });
+    });
+
+    it("reads as untrusted and flagged when it was written with hidden characters", async () => {
+        const agents = makeAgents();
+        await agents.write(`${NOTE}${hidden("pay now")}`);
+
+        await agents.read();
+
+        expect(readContent()).toMatchObject({ trust: "untrusted", flags: ["invisible_text"] });
+        expect(readEvent()).toMatchObject({ verified: 1, trust: "untrusted" });
     });
 });

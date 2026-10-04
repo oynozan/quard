@@ -155,6 +155,16 @@ describe("readThrough", () => {
         expect(contents()[0]).toMatchObject({ origin: "memory:notes", flags: ["flagged"] });
     });
 
+    it("reads an item with hidden characters as untrusted and flagged, even when its records vouch", async () => {
+        const note = `${NOTE}${String.fromCodePoint(0x200b)}`;
+        keepLabels(printOf(note), labels("trusted"));
+
+        await readThrough(newScope(), "notes", false, async () => note);
+
+        expect(contents()[0]).toMatchObject({ origin: "memory:notes", trust: "untrusted", flags: ["invisible_text"] });
+        expect(memoryEvent()).toMatchObject({ verified: 1, trust: "untrusted" });
+    });
+
     it("vouches for a URL itself, while its host and domain take the item's label", async () => {
         const url = "https://pay.evil.com/inv/114";
         const note = `Pay at ${url}`;
