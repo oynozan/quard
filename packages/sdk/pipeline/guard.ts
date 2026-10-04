@@ -11,7 +11,7 @@ import { labelArguments } from "../labels/value-labels.ts";
 import { policyOptions, refreshSources, sourcesReady } from "../policy/state.ts";
 import { syncRules } from "../transport/link/active.ts";
 import { askHuman } from "./approval/human.ts";
-import { blocked } from "./approval/record.ts";
+import { aborted, blocked } from "./approval/record.ts";
 import { asksOf, decide, preChecks, recordDecision } from "./checks.ts";
 import { countCall } from "./count/count.ts";
 import { reportRefused } from "./count/fleet.ts";
@@ -94,7 +94,9 @@ function refuse(
     return refused;
 }
 
-async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
+async function runPipeline(code: Spec, args: unknown[], signal: AbortSignal | undefined): Promise<unknown> {
+    // A call its caller already gave up on is not checked at all
+    signal?.throwIfAborted();
     // One copy of the arguments is used for checks, approval and the run
     let runArgs = snapshot(args);
     let input = inputOf(runArgs);
@@ -139,7 +141,7 @@ async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
     if (final?.decision === "ask") {
         const approval = spec.list.find((item): item is ApprovalOptions => item.type === "approval");
         approvedArgs = canonicalJson(input);
-        const answer = await askHuman(call, asksOf(checked), approval?.timeout);
+        const answer = await askHuman(call, asksOf(checked), approval?.timeout, signal);
         const stopped = answer === "approved" ? changed(call, approvedArgs) : answer;
         if (stopped !== undefined) {
             return refuse(spec, call, requested, stopped);
@@ -156,7 +158,7 @@ async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
     }
 
     // 7. Count, then run inside the scope so calls made by the tool join this run
-    const stop = (await countCall(call, spec.list, checked)) ?? changed(call, approvedArgs);
+    const stop = (await countCall(call, spec.list, checked)) ?? changed(call, approvedArgs) ?? aborted(call, signal);
     if (stop !== undefined) {
         return refuse(spec, call, requested, stop);
     }
@@ -171,12 +173,17 @@ async function runPipeline(code: Spec, args: unknown[]): Promise<unknown> {
     return shown.output;
 }
 
-// Wraps a tool so every call runs the guard pipeline. `name` is the tool
-// name the model sees; it keeps rule history and permissions stable.
-export function guard<F extends (...args: never[]) => unknown>(
+type Guarded<F extends (...args: never[]) => unknown> = (
+    signal: AbortSignal | undefined,
+    args: Parameters<F>,
+) => Promise<Awaited<ReturnType<F>> | GuardRefusal>;
+
+// guard() with an abort signal for each call. An aborted call stops
+// waiting for approval and never runs the tool.
+export function guardWithSignal<F extends (...args: never[]) => unknown>(
     fn: F,
     options: GuardOptions | GuardOptions[],
-): (...args: Parameters<F>) => Promise<Awaited<ReturnType<F>> | GuardRefusal> {
+): Guarded<F> {
     const list = Array.isArray(options) ? options : [options];
     for (const item of list) {
         if (!isGuardType(item.type)) {
@@ -194,8 +201,18 @@ export function guard<F extends (...args: never[]) => unknown>(
     syncRules();
     const spec: Spec = { fn, list, tool };
     type Result = Awaited<ReturnType<F>> | GuardRefusal;
-    return async (...args: Parameters<F>): Promise<Result> => {
-        const result: unknown = await runPipeline(spec, args);
+    return async (signal, args): Promise<Result> => {
+        const result: unknown = await runPipeline(spec, args, signal);
         return result as Result;
     };
+}
+
+// Wraps a tool so every call runs the guard pipeline. `name` is the tool
+// name the model sees; it keeps rule history and permissions stable.
+export function guard<F extends (...args: never[]) => unknown>(
+    fn: F,
+    options: GuardOptions | GuardOptions[],
+): (...args: Parameters<F>) => Promise<Awaited<ReturnType<F>> | GuardRefusal> {
+    const guarded = guardWithSignal(fn, options);
+    return (...args) => guarded(undefined, args);
 }

@@ -11,20 +11,21 @@ export async function askControl(
     call: GuardCall,
     asks: readonly FailResult[],
     ms: number | undefined,
+    signal?: AbortSignal,
 ): Promise<FailResult | "approved"> {
     const message = askFor(call, asks, control.hashKey, rulesHash());
     if (typeof message === "string") {
         return blocked(call, message, "approval_unavailable");
     }
-    const waiting = control.approvals.ask(message, ms);
+    const waiting = control.approvals.ask(message, ms, signal);
     // The approver then finds the run in the dashboard
     void flushUploads();
     const answer = await waiting;
     if (answer.kind === "down") {
         return blocked(call, "backend-down", "backend_unavailable");
     }
-    if (answer.kind === "timeout") {
-        return blocked(call, "timeout", "approval_timed_out", answer.requestId);
+    if (answer.kind === "timeout" || answer.kind === "aborted") {
+        return blocked(call, answer.kind, "approval_timed_out", answer.requestId);
     }
     if (answer.answer === "deny") {
         return blocked(call, "human", "approval_denied", answer.requestId);

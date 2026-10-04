@@ -70,6 +70,46 @@ describe("askHuman", () => {
     });
 });
 
+describe("askHuman with an abort signal", () => {
+    it("stops at once for a call that is already aborted", async () => {
+        const approver = vi.fn(async () => "once" as const);
+        configure({ approver });
+
+        expect(await askHuman(makeAskableCall({}), ASKS, undefined, AbortSignal.abort())).toMatchObject({
+            rule: "aborted",
+            reason: "approval_timed_out",
+        });
+        expect(approver).not.toHaveBeenCalled();
+    });
+
+    it("stops waiting for an approver in code when the call aborts", async () => {
+        configure({ approver: () => new Promise(() => {}) });
+        const controller = new AbortController();
+
+        const asked = askHuman(makeAskableCall({}), ASKS, 60, controller.signal);
+        controller.abort();
+
+        expect(await asked).toMatchObject({ rule: "aborted", reason: "approval_timed_out" });
+        vi.advanceTimersByTime(60_000);
+    });
+
+    it("stops waiting for the dashboard when the call aborts, and tells control", async () => {
+        const fake = fakeSockets();
+        const hashKey = parseHashKey("ab".repeat(32));
+        const control = createControl({ url: "ws://c", key: "k", hashKey, open: fake.open });
+        setActiveControl(control);
+        const socket = fake.connect();
+        const controller = new AbortController();
+
+        const asked = askHuman(makeAskableCall({}), ASKS, undefined, controller.signal);
+        controller.abort();
+
+        expect(await asked).toMatchObject({ rule: "aborted", reason: "approval_timed_out" });
+        expect(sentOf(socket, "cancel")).toHaveLength(1);
+        control.stop();
+    });
+});
+
 describe("timeoutMs", () => {
     it("turns seconds into a wait setTimeout can make", () => {
         expect(timeoutMs(undefined)).toBeUndefined();

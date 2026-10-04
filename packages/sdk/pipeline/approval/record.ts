@@ -12,6 +12,12 @@ export function blocked(call: GuardCall, rule: string, reason: ReasonCode, reque
     return result;
 }
 
+// A call whose caller gave up, such as on the SDK's tool timeout, never
+// runs. No one is waiting for its answer any more.
+export function aborted(call: GuardCall, signal: AbortSignal | undefined): FailResult | undefined {
+    return signal?.aborted === true ? blocked(call, "aborted", "approval_timed_out") : undefined;
+}
+
 export function approved(call: GuardCall, rule: string, request?: string): "approved" {
     recordDecision(call, { guard: "approval", rule, decision: "allow", mode: "block", request });
     return "approved";
