@@ -1,6 +1,10 @@
+import { sql } from "kysely";
 import type { Db } from "../connect/connect.ts";
 
 export type Project = { id: string; name: string };
+
+// Any fixed number other than the migration lock's 7231
+const FIRST_PROJECT_LOCK = 7232;
 
 // What the settings page shows. Retention is 30 days unless the row was edited.
 export type ProjectSettings = { id: string; name: string; retentionDays: number; createdAt: Date };
@@ -23,6 +27,16 @@ export async function firstProject(db: Db): Promise<Project | undefined> {
         .orderBy("id")
         .limit(1)
         .executeTakeFirst();
+}
+
+// The oldest project, or a new one when there is none. Projects have no unique
+// column, so a lock makes overlapping calls wait and then find the same project.
+export async function findOrCreateFirstProject(db: Db, name: string): Promise<string> {
+    return db.transaction().execute(async (trx) => {
+        await sql`SELECT pg_advisory_xact_lock(${FIRST_PROJECT_LOCK})`.execute(trx);
+        const first = await firstProject(trx);
+        return first?.id ?? (await createProject(trx, name));
+    });
 }
 
 export async function projectSettings(db: Db, id: string): Promise<ProjectSettings | undefined> {

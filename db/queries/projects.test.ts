@@ -1,15 +1,22 @@
-import { sql } from "kysely";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Kysely, PostgresDialect, sql } from "kysely";
+import pg from "pg";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { connect, type Db } from "../connect/connect.ts";
+import type { Database } from "../schema/database.ts";
 import { startTestDb, type TestDb } from "../test/pglite.ts";
-import { createProject, findProject, firstProject, projectSettings } from "./projects.ts";
+import { createProject, findOrCreateFirstProject, findProject, firstProject, projectSettings } from "./projects.ts";
 
 let test: TestDb;
+// A pool with several connections, for calls that race
+let many: Db;
 
 beforeAll(async () => {
     test = await startTestDb();
+    many = connect(test.url, 4);
 }, 60_000);
 
 afterAll(async () => {
+    await many.destroy();
     await test.stop();
 });
 
@@ -64,5 +71,54 @@ describe("projectSettings", () => {
 
     it("finds nothing for an unknown project", async () => {
         expect(await projectSettings(test.db, "00000000-0000-0000-0000-000000000000")).toBeUndefined();
+    });
+});
+
+describe("findOrCreateFirstProject", () => {
+    // Each test starts from a new install
+    beforeEach(async () => {
+        await test.db.deleteFrom("projects").execute();
+    });
+
+    it("makes a project on a new install, and finds it from then on", async () => {
+        const id = await findOrCreateFirstProject(test.db, "Default");
+
+        expect(await findProject(test.db, id)).toEqual({ id, name: "Default" });
+        expect(await findOrCreateFirstProject(test.db, "Other")).toBe(id);
+        expect(await test.db.selectFrom("projects").select("id").execute()).toEqual([{ id }]);
+    });
+
+    it("makes one project when two calls overlap", async () => {
+        // Two open connections, so both reads go out at once
+        const read = () => many.selectFrom("projects").select("id").execute();
+        await Promise.all([read(), read()]);
+
+        const ids = await Promise.all([
+            findOrCreateFirstProject(many, "Default"),
+            findOrCreateFirstProject(many, "Default"),
+        ]);
+
+        expect(ids[1]).toBe(ids[0]);
+        expect(await test.db.selectFrom("projects").select("id").execute()).toEqual([{ id: ids[0] }]);
+    });
+
+    it("takes its lock inside the transaction, before it reads", async () => {
+        // On a real server the lock is what makes the second call wait
+        const statements: string[] = [];
+        const logged = new Kysely<Database>({
+            dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: test.url, max: 1 }) }),
+            log: (event) => void statements.push(event.query.sql),
+        });
+
+        await findOrCreateFirstProject(logged, "Default");
+        await logged.destroy();
+
+        expect(statements).toEqual([
+            "begin",
+            "SELECT pg_advisory_xact_lock($1)",
+            'select "id", "name" from "projects" order by "created_at", "id" limit $1',
+            'insert into "projects" ("name") values ($1) returning "id"',
+            "commit",
+        ]);
     });
 });

@@ -86,7 +86,13 @@ export {
 export type { AgentKeyMatch, AgentKeyRow, NewAgentKey } from "./queries/keys.ts";
 export { originOverrides } from "./queries/origins.ts";
 export type { OriginOverrideRow } from "./queries/origins.ts";
-export { createProject, findProject, firstProject, projectSettings } from "./queries/projects.ts";
+export {
+    createProject,
+    findOrCreateFirstProject,
+    findProject,
+    firstProject,
+    projectSettings,
+} from "./queries/projects.ts";
 export type { Project, ProjectSettings } from "./queries/projects.ts";
 export { getRun, listRuns } from "./queries/runs.ts";
 export type {
