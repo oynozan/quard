@@ -22,5 +22,5 @@ function bigIntOf(value: unknown): bigint | undefined {
 export function atomicAmount(value: unknown): string | undefined {
     const amount = bigIntOf(value);
     const text = amount?.toString();
-    return amount === undefined || amount < 0n || (text as string).length > MAX_DIGITS ? undefined : text;
+    return amount === undefined || amount < BigInt(0) || (text as string).length > MAX_DIGITS ? undefined : text;
 }
