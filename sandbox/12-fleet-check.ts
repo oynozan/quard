@@ -3,7 +3,7 @@
 // A limit guard with fleetCheck watches the IBANs in a field across every
 // run of the project. A value first seen less than 7 days ago that a 5th
 // separate run uses within 24 hours is quarantined: blocked in every run,
-// until someone marks it known at http://localhost:3000/summary.
+// until someone marks it known at http://localhost:3100/summary.
 //
 // Here five runs each pay the same new IBAN from an email. Each run looks
 // fine on its own. Look for the limit guard's line in run 5.
@@ -68,5 +68,5 @@ for (let run = 1; run <= 5; run++) {
     );
 }
 
-title("The IBAN is now in quarantine at http://localhost:3000/summary");
+title("The IBAN is now in quarantine at http://localhost:3100/summary");
 console.log("  Mark it as known there to release it.");

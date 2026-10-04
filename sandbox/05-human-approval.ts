@@ -21,7 +21,7 @@ import { askInTerminal, closeTerminal } from "./lib/terminal.ts";
 const client = quard.wrap(new OpenAI());
 
 if (DASHBOARD) {
-    console.log("Answer each payment at http://localhost:3000/approvals");
+    console.log("Answer each payment at http://localhost:3100/approvals");
 } else {
     quard.configure({ approver: askInTerminal });
 }

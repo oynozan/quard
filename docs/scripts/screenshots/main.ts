@@ -13,7 +13,7 @@ export async function main(argv: string[]) {
     const { values } = parseArgs({
         args: argv,
         options: {
-            url: { type: "string", default: "http://localhost:3000" },
+            url: { type: "string", default: "http://localhost:3100" },
             only: { type: "string" },
             chrome: { type: "string", default: process.env.CHROME_PATH ?? CHROME_PATH },
         },

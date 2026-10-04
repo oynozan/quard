@@ -46,10 +46,10 @@ pnpm --filter @quard/db create-project --project Acme
 export QUARD_HASH_KEY=<from the last step>
 node services/webhook/main.ts                                    # events, port 4100
 node services/control/main.ts                                    # approvals and limits, port 4200
-cd web && pnpm dev                                               # Privy settings: web/.env.example
+cd web && pnpm dev                                               # dashboard, port 3100; Privy settings: web/.env.example
 ```
 
-Then set `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` in `sandbox/.env` (the lines are there, commented out) and run any example. With them set, `05-human-approval.ts` waits for your answer at http://localhost:3000/approvals instead of asking in the terminal.
+Then set `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` in `sandbox/.env` (the lines are there, commented out) and run any example. With them set, `05-human-approval.ts` waits for your answer at http://localhost:3100/approvals instead of asking in the terminal.
 
 ## Examples
 

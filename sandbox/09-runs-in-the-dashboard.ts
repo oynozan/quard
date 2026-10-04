@@ -67,7 +67,7 @@ const payInvoice = guard(async (input: { iban: string; amount: number }) => `pai
 quard.configure({
     onEvent: (event) => {
         if (event.type === "run_started") {
-            console.log(`  Dashboard: http://localhost:3000/runs/${event.runId}`);
+            console.log(`  Dashboard: http://localhost:3100/runs/${event.runId}`);
         } else if (event.type === "model_call" && event.usage !== undefined) {
             console.log(`    · ${event.model}: ${event.usage.inputTokens} tokens in, ${event.usage.outputTokens} out`);
         } else if (event.type === "run_finished") {
