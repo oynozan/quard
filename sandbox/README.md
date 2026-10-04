@@ -131,10 +131,13 @@ These run with or without it:
 | `23-shared-memory.ts`             | `quard.memory()`: a web IBAN in a saved note is blocked in a later run, and so is a note edited behind its back |
 | `24-openai-agents-sdk.ts`         | The OpenAI Agents SDK with `quardRunner()` and `guardedTool()`; the web IBAN is blocked after a handoff         |
 | `25-run-limits.ts`                | Run limits on turns between two agents and on model calls, first observed, then enforced                        |
+| `26-paid-link-in-a-page.ts` | The x402 guard refuses to pay a host found in a web page, before signing; the model reads the refusal |
+| `27-paid-api-in-a-loop.ts` | A paid API called in a loop stops at the run cap, with each payment and settlement printed; no API key needed |
 
 ## How it fits together
 
 - `import { guard, quard } from "quard"` is the same line an app would use. `pnpm install` links `node_modules/quard` to `lib/quard`, which re-exports the SDK source in `packages/sdk`, so SDK changes show up right away. `quard/openai-agents` works the same way.
 - The sandbox is a workspace package (`@quard/sandbox`), so CI type-checks the examples.
 - `lib/agent.ts` is a plain agent loop on the Responses API, and `lib/tools.ts` holds the tool definitions the model sees.
+- `lib/x402/` holds a local x402 server with a stub facilitator and a fake signer, so the payment examples need no chain or wallet.
 - `lib/env.ts` loads `.env`, `lib/terminal.ts` asks for approvals, and `lib/show.ts` prints events.
