@@ -95,6 +95,14 @@ describe("writeThrough", () => {
         ]);
     });
 
+    it("labels a write from a run that read nothing as unknown content", async () => {
+        await writeThrough(newScope(), "notes", `Pay ${IBAN}`, async () => undefined);
+
+        const unknown = { trust: "untrusted", sensitivity: "internal", origins: ["unknown"], flagged: false };
+        expect(stored.mock.calls[0]?.[0][0]?.label).toEqual(unknown);
+        expect(keptLabels(printOf(`Pay ${IBAN}`))?.label).toEqual(unknown);
+    });
+
     it("still writes when the backend did not store the labels", async () => {
         stored.mockResolvedValueOnce(false);
         const write = vi.fn(async () => "ok");
@@ -102,7 +110,7 @@ describe("writeThrough", () => {
         expect(await writeThrough(newScope(), "notes", "hello", write)).toBe("ok");
 
         expect(write).toHaveBeenCalled();
-        expect(memoryEvent()).toMatchObject({ verified: 0, trust: "trusted", sensitivity: "public" });
+        expect(memoryEvent()).toMatchObject({ verified: 0, trust: "untrusted", sensitivity: "internal" });
     });
 
     it("still writes when storing the labels failed outright", async () => {

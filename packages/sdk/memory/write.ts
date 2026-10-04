@@ -3,6 +3,7 @@ import type { Scope } from "../context/scope.ts";
 import { printOf } from "../labels/content-index.ts";
 import { valueHash } from "../labels/hashed.ts";
 import { textOf } from "../labels/text-of.ts";
+import { vouchedLabel } from "../labels/vouched-label.ts";
 import { storeLabels } from "../transport/labels.ts";
 import { recordMemory } from "./event.ts";
 import { keepLabels } from "./kept.ts";
@@ -33,7 +34,7 @@ export async function writeThrough(
     const stepId = newStepId();
     const text = textOf(value);
     const print = printOf(text);
-    const label = labelRecord(scope.run.index.context());
+    const label = labelRecord(vouchedLabel(scope.run.index));
     keepLabels(print, { label, values: valueRecords(text, scope.run.index, localHash) });
     const record: MemoryRecord = {
         kind: "memory",
