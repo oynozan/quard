@@ -11,9 +11,9 @@ export type QuarantinedFleetItem = {
     // The field the value was first seen in
     field: string;
     key: string;
-    // The mask, or the domain itself
+    // The mask, or the domain or wallet itself
     value: string;
-    // Null for domains, which are kept in clear
+    // Null for domains and wallets, which are kept in clear
     hash: string | null;
     firstSeenAt: Date;
     quarantinedAt: Date;

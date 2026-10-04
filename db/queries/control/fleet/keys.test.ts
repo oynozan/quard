@@ -14,4 +14,11 @@ describe("splitFleetKey", () => {
         expect(splitFleetKey("domain:evil.com")).toEqual({ value: "evil.com", hash: null });
         expect(splitFleetKey("evil.com")).toEqual({ value: "evil.com", hash: null });
     });
+
+    it("keeps a wallet in clear, with no hash", () => {
+        expect(splitFleetKey("wallet:0x209693Bc6afc0C5328bA36FaF03C514EF312287C")).toEqual({
+            value: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+            hash: null,
+        });
+    });
 });
