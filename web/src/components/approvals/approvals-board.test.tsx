@@ -11,7 +11,7 @@ const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 const actions = vi.hoisted(() => ({ answerApproval: vi.fn(), revokeAlwaysGrant: vi.fn() }));
 vi.mock("@/lib/data/approvals/actions", () => actions);
-const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+const router = vi.hoisted(() => ({ refresh: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 const ME = "dana@acme.com";
@@ -33,6 +33,7 @@ afterEach(async () => {
     vi.unstubAllGlobals();
     toast.mockClear();
     router.refresh.mockClear();
+    router.replace.mockClear();
     actions.answerApproval.mockReset();
     actions.revokeAlwaysGrant.mockReset();
 });
@@ -80,6 +81,29 @@ describe("ApprovalsBoard", () => {
         show();
         expect(cards()).toEqual([EMAIL, PAY, CONTOSO, DEPLOY]);
         expect(heading("Waiting for an answer")).toBe("Waiting for an answer4");
+    });
+
+    it("counts every open request, and lists the rest a step at a time", async () => {
+        actions.answerApproval.mockResolvedValue("decided");
+        render(<ApprovalsBoard data={approvalsData({ more: 120 })} now={NOW} approver={ME} shown={100} />);
+        expect(heading("Waiting for an answer")).toBe("Waiting for an answer124");
+        fireEvent.click(screen.getByRole("button", { name: "Show 100 more" }));
+        expect(router.replace).toHaveBeenCalledWith("/approvals?shown=200", { scroll: false });
+
+        answer(EMAIL, "Approve once");
+        expect(heading("Waiting for an answer")).toBe("Waiting for an answer123");
+        await flush();
+        expect(status().textContent).toBe("Approved send_email once. 123 still open.");
+    });
+
+    it("keeps the count and the way to the rest when every listed request is answered", () => {
+        actions.answerApproval.mockReturnValue(later("decided").promise);
+        show(approvalsData({ open: [openRequest(PAY)], more: 3 }));
+        answer(PAY, "Approve once");
+        expect(cards()).toHaveLength(0);
+        expect(heading("Waiting for an answer")).toBe("Waiting for an answer3");
+        expect(screen.queryByRole("heading", { name: "Nothing waits for an answer" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Show 3 more" })).toBeTruthy();
     });
 
     it("approves once: the card leaves at once, and the server's answer confirms it", async () => {

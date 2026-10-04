@@ -41,6 +41,7 @@ export function applyChange(view: BoardView, change: BoardChange): BoardView {
     const granted = answer !== "always approve" || covered(view.grants, item);
     return {
         open: view.open.filter((entry) => entry.request.id !== id),
+        more: view.more,
         decisions: saved ? view.decisions : [decisionOf(item, answer, at, by), ...view.decisions],
         grants: granted ? view.grants : [grantOf(item, at, by), ...view.grants],
         fresh: saved ? view.fresh : [...view.fresh, id],

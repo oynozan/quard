@@ -27,14 +27,16 @@ async function runsOf(db: Db, projectId: string, runIds: string[], now: number):
     return runs;
 }
 
-// Everything the approvals page shows: open requests, "always approve" grants and past answers
-export async function getApprovals(): Promise<ApprovalsData> {
+// Everything the approvals page shows: at least `shown` open requests, with every one a call
+// still waits on, plus "always approve" grants and past answers
+export async function getApprovals(shown: number): Promise<ApprovalsData> {
     const scope = await projectScope();
-    if (!scope) return { open: [], grants: [], decisions: [] };
+    if (!scope) return { open: [], more: 0, grants: [], decisions: [] };
     const { db, project } = scope;
     const now = Date.now();
-    const [open, grants, decided] = await Promise.all([
-        listOpenRequests(db, project.id),
+    const [open, total, grants, decided] = await Promise.all([
+        listOpenRequests(db, project.id, shown),
+        countOpenRequests(db, project.id),
         listGrants(db, project.id),
         listDecidedRequests(db, project.id),
     ]);
@@ -46,6 +48,7 @@ export async function getApprovals(): Promise<ApprovalsData> {
     );
     return {
         open: open.map((item) => detailOf(item, runs.get(item.runId) ?? null, now)),
+        more: Math.max(0, total - open.length),
         grants: grants.map(grantOf),
         decisions: decided.map(decisionOf),
     };
@@ -63,7 +66,7 @@ export async function getApproval(id: string): Promise<ApprovalDetail | null> {
     return detailOf(item, runs.get(item.runId) ?? null, now);
 }
 
-// Open requests for the overview, newest first
+// Open requests for the overview, in the approvals page's order
 export async function openApprovalRequests(): Promise<ApprovalRequest[]> {
     const scope = await projectScope();
     if (!scope) return [];

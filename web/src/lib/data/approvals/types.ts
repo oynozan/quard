@@ -66,6 +66,8 @@ export type AlwaysGrant = {
 
 export type ApprovalsData = {
     open: ApprovalDetail[];
+    // Open requests past the list, which "Show more" lists
+    more: number;
     grants: AlwaysGrant[];
     decisions: ApprovalDecision[];
 };

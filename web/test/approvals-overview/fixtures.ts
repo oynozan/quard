@@ -177,7 +177,7 @@ export function contosoPayment(): ApprovalDetail {
     });
 }
 
-// The open requests newest first, as the server lists them
+// The open requests, newest first
 export function openRequests(): ApprovalDetail[] {
     return [payInvoice(), sendEmail(), deployService(), contosoPayment()];
 }

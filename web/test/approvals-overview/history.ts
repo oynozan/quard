@@ -130,5 +130,5 @@ export function decisions(): ApprovalDecision[] {
 
 // Everything the approvals page shows
 export function approvalsData(changes: Partial<ApprovalsData> = {}): ApprovalsData {
-    return { open: openRequests(), grants: grants(), decisions: decisions(), ...changes };
+    return { open: openRequests(), more: 0, grants: grants(), decisions: decisions(), ...changes };
 }

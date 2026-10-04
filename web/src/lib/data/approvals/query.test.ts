@@ -31,7 +31,7 @@ afterAll(async () => {
 
 describe("approvals from Postgres", () => {
     it("shows nothing before a project exists", async () => {
-        expect(await getApprovals()).toEqual({ open: [], grants: [], decisions: [] });
+        expect(await getApprovals(100)).toEqual({ open: [], more: 0, grants: [], decisions: [] });
         expect(await getApproval("apr_0000000000000000")).toBeNull();
         expect(await openApprovalRequests()).toEqual([]);
         expect(await openApprovalCount()).toBe(0);
@@ -47,7 +47,7 @@ describe("approvals from Postgres", () => {
         ids.old = (await openApprovalRequest(test.db, projectId, askInput(OLD, { argsHash: "f".repeat(32) }))).id;
         await decideApproval(test.db, projectId, ids.old, "always", "dana@acme.com");
 
-        const data = await getApprovals();
+        const data = await getApprovals(100);
         expect(requireSession).toHaveBeenCalled();
         expect(data.open.map((item) => item.request.id).sort()).toEqual([ids.open, ids.lost].sort());
         const waiting = data.open.find((item) => item.request.id === ids.open)!;
@@ -84,10 +84,10 @@ describe("approvals from Postgres", () => {
     });
 
     it("shows a revoked grant as revoked", async () => {
-        const [grant] = (await getApprovals()).grants;
+        const [grant] = (await getApprovals(100)).grants;
         const projectId = (await test.db.selectFrom("projects").select("id").executeTakeFirstOrThrow()).id;
         await revokeGrant(test.db, projectId, grant.id, "@dana-k");
-        expect((await getApprovals()).grants[0]).toMatchObject({ id: grant.id, revokedBy: "@dana-k" });
+        expect((await getApprovals(100)).grants[0]).toMatchObject({ id: grant.id, revokedBy: "@dana-k" });
     });
 
     it("opens one open request, and none that is decided or unknown", async () => {

@@ -11,18 +11,23 @@ import { DecisionsTable } from "./decisions-table";
 import { GrantsTable } from "./grants-table";
 import { applyChange, boardOf } from "./lib/board";
 import { ANSWER_CODE, answerMessage } from "./lib/model";
+import { SHOWN_STEP } from "./lib/shown";
+import { MoreRequests } from "./more-requests";
 import { RequestCard } from "./request-card";
 
-type Props = { data: ApprovalsData; now: number; approver: string };
+// `shown` is how many open requests the address asks for
+type Props = { data: ApprovalsData; now: number; approver: string; shown?: number };
 
 // Open requests, standing grants and past answers. An answer shows at once and
 // is saved in the background; if saving fails, the request comes back.
-export function ApprovalsBoard({ data, now, approver }: Props) {
+export function ApprovalsBoard({ data, now, approver, shown = SHOWN_STEP }: Props) {
     const router = useRouter();
     const [view, change] = useOptimistic(boardOf(data), applyChange);
     const [announce, setAnnounce] = useState("");
     const cards = useRef(new Map<string, HTMLElement>());
     const heading = useRef<HTMLDivElement>(null);
+    // Every open request, listed here or not, like the sidebar count
+    const waiting = view.open.length + view.more;
 
     function tell(message: string, id: string) {
         showToast(message, id);
@@ -49,7 +54,7 @@ export function ApprovalsBoard({ data, now, approver }: Props) {
                 if (result === "decided") {
                     const message = answerMessage(answer, tool);
                     showToast(message, "approval-answer");
-                    setAnnounce(`${message}. ${rest.length} still open.`);
+                    setAnnounce(`${message}. ${rest.length + view.more} still open.`);
                     return;
                 }
                 tell(
@@ -87,7 +92,7 @@ export function ApprovalsBoard({ data, now, approver }: Props) {
 
             <section aria-label="Waiting for an answer" className="min-w-0">
                 <div ref={heading} tabIndex={-1} className="outline-none">
-                    <SectionHeading title="Waiting for an answer" count={view.open.length} />
+                    <SectionHeading title="Waiting for an answer" count={waiting} />
                 </div>
                 {view.open.length > 0 ? (
                     <div className="grid gap-6">
@@ -104,14 +109,19 @@ export function ApprovalsBoard({ data, now, approver }: Props) {
                             />
                         ))}
                     </div>
-                ) : (
+                ) : waiting === 0 ? (
                     <div className="border-y border-line">
                         <TableState
                             title="Nothing waits for an answer"
                             body="Calls a guard sends to a human pause here."
                         />
                     </div>
-                )}
+                ) : null}
+                {view.more > 0 ? (
+                    <div className="mt-6">
+                        <MoreRequests more={view.more} shown={shown} />
+                    </div>
+                ) : null}
             </section>
 
             <GrantsTable grants={view.grants} now={now} onRevoke={revoke} />
