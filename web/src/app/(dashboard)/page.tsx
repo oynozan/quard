@@ -1,4 +1,5 @@
 import { HeroChart } from "@/components/charts/hero-chart";
+import { AutoRefresh } from "@/components/kit/auto-refresh";
 import { PAGE_WIDE } from "@/components/kit/page";
 import { DecisionLog } from "@/components/overview/decision-log";
 import { ApprovalsSection, IncidentsSection, RunsSection } from "@/components/overview/overview-tables";
@@ -20,6 +21,7 @@ export default async function OverviewPage() {
 
     return (
         <div className={PAGE_WIDE}>
+            <AutoRefresh />
             <HeroChart greeting={data.greeting} values={data.activity.values} endsAt={data.activity.endsAt} />
 
             <TerminalOverview

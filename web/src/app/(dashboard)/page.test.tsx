@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OverviewData } from "@/lib/data/overview";
 import type { RunRow } from "@/lib/data/runs/types";
@@ -22,6 +22,8 @@ vi.mock("@/lib/data/approvals", () => ({
     openApprovalRequests: data.openApprovalRequests,
     openApprovalCount: data.openApprovalCount,
 }));
+const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 // Six runs that started two days before the request
 const RUNS = Array.from({ length: 6 }, (_, n) => runRow({ id: `${n}`.repeat(32), startedAt: NOW - 2 * DAY }));
@@ -35,6 +37,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
 });
@@ -89,6 +92,20 @@ describe("OverviewPage", () => {
         expect(headers("Incidents")).toEqual(["Incident", "Cause", "Replay", "Opened"]);
         expect(region("Incidents").getByRole("status").textContent).toBe("No incidents yet");
         expect(region("Decision log").getAllByRole("listitem")).toHaveLength(2);
+    });
+
+    it("reads its data again every 5 seconds, so its Live marks hold", async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response(null, { status: 204 })),
+        );
+        render(await OverviewPage());
+
+        await act(async () => vi.advanceTimersByTime(4999));
+        expect(router.refresh).not.toHaveBeenCalled();
+        await act(async () => vi.advanceTimersByTime(1));
+        expect(router.refresh).toHaveBeenCalledTimes(1);
     });
 
     it("keeps the whole layout on a new install, with empty frames, zeros and table headers", async () => {
