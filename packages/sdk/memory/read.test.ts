@@ -177,6 +177,14 @@ describe("readThrough", () => {
         expect(memoryEvent()).toMatchObject({ verified: 1, trust: "trusted" });
     });
 
+    it("builds no keys from values under fields named like secrets", async () => {
+        const item = { session: { token: "Xk9mP2qL7v" }, invoice: "INV-2026-0042" };
+
+        await readThrough(newScope(), "notes", false, async () => item);
+
+        expect(contents()).toMatchObject([{ origin: "memory:notes", keys: ["id:inv-2026-0042"] }]);
+    });
+
     it("vouches for a URL itself, while its host and domain take the item's label", async () => {
         const url = "https://pay.evil.com/inv/114";
         const note = `Pay at ${url}`;

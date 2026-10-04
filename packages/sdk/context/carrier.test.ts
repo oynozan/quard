@@ -132,6 +132,16 @@ describe("inject", () => {
         });
     });
 
+    it("leaves out values under fields named like secrets", async () => {
+        await runScope({}, async () => {
+            currentScope()?.run.index.add(`Pay ${IBAN}`, labelFor("web:evil.com"), "s1");
+
+            const carrier = await inject({ content: { note: "hello", password: IBAN } });
+
+            expect((await findRecord(carrier.labelRef))?.values).toEqual([]);
+        });
+    });
+
     it("leaves out the parent step before the sender made one, and records its depth and tools", async () => {
         await runScope({ tools: ["send", "delegate"] }, () =>
             agentScope("helper", async () => {

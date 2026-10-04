@@ -94,6 +94,14 @@ describe("writeThrough", () => {
         ]);
     });
 
+    it("keeps no value records for values under fields named like secrets", async () => {
+        const value = { note: "hello", password: IBAN };
+
+        await writeThrough(webScope(), "notes", value, async () => undefined);
+
+        expect(keptLabels(printOf(value))?.values).toEqual([]);
+    });
+
     it("labels a write from a run that read nothing as unknown content", async () => {
         await writeThrough(newScope(), "notes", `Pay ${IBAN}`, async () => undefined);
 

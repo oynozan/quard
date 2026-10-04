@@ -1,10 +1,10 @@
 import {
     combineLabels,
     extractValues,
+    keyText,
     labelFor,
     newStepId,
     originKind,
-    textOf,
     type ExtractedValue,
     type Label,
 } from "@quard/shared";
@@ -108,8 +108,9 @@ export async function readThrough(
     const result = await read();
     const list: unknown[] = many && Array.isArray(result) ? result : [result];
     const items = list.filter((item) => item !== undefined && item !== null);
+    // Values under secret-named fields never become keys
     const found = await Promise.all(
-        items.map(async (item) => ({ text: textOf(item), labels: await findLabels(printOf(item)) })),
+        items.map(async (item) => ({ text: keyText(item), labels: await findLabels(printOf(item)) })),
     );
     const origin = `memory:${store}`;
     const labels = found.map(({ text, labels }) => {

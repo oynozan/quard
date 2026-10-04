@@ -1,4 +1,4 @@
-import { newStepId, type ContextLabel, type ContextLabelRecord, type MemoryRecord, textOf } from "@quard/shared";
+import { keyText, newStepId, type ContextLabel, type ContextLabelRecord, type MemoryRecord } from "@quard/shared";
 import type { Scope } from "../context/scope.ts";
 import { valueHash } from "../labels/hashed.ts";
 import { printOf } from "../labels/print.ts";
@@ -31,7 +31,8 @@ export async function writeThrough(
     write: () => Promise<unknown>,
 ): Promise<unknown> {
     const stepId = newStepId();
-    const text = textOf(value);
+    // Values under secret-named fields never become records
+    const text = keyText(value);
     const print = printOf(value);
     const label = labelRecord(vouchedLabel(scope.run.index));
     keepLabels(print, { label, values: valueRecords(text, scope.run.index, localHash) });

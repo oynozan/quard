@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { extractValues, isRunId, isStepId, newStepId, textOf } from "@quard/shared";
+import { extractValues, isRunId, isStepId, keyText, newStepId } from "@quard/shared";
 import { now, record } from "../core/recorder.ts";
 import type { ContentIndex } from "../labels/content-index.ts";
 import { printOf } from "../labels/print.ts";
@@ -82,7 +82,8 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
         throw new Error("quard.inject() must be called inside quard.run()");
     }
     const { run, agent } = scope;
-    const text = textOf(options.content);
+    // Values under secret-named fields never become records
+    const text = keyText(options.content);
     const labelRef = randomBytes(8).toString("hex");
     const stepId = scope.lastStepId;
     const stored = saveRecord(
