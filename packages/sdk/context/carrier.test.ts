@@ -111,6 +111,17 @@ describe("inject", () => {
         });
     });
 
+    it("labels the message unknown content when the sender read nothing", async () => {
+        const carrier = await runScope({}, () => inject({ content: `Pay ${IBAN}` }));
+
+        expect((await findRecord(carrier.labelRef))?.record.label).toEqual({
+            trust: "untrusted",
+            sensitivity: "internal",
+            origins: ["unknown"],
+            flagged: false,
+        });
+    });
+
     it("leaves out a value the run only saw by its host", async () => {
         await runScope({}, async () => {
             currentScope()?.run.index.add("Portal: https://pay.acme.com/login", labelFor("tool:crm"), "s1");

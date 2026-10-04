@@ -6,6 +6,7 @@ import { printOf } from "../labels/content-index.ts";
 import { findRecord, keptRun, saveRecord, type FoundRecord, type ValueRecord } from "../labels/records.ts";
 import { textOf } from "../labels/text-of.ts";
 import { exactOccurrences } from "../labels/value-labels.ts";
+import { vouchedLabel } from "../labels/vouched-label.ts";
 import { uploadsOn } from "../transport/configure.ts";
 import { storeLabels } from "../transport/labels.ts";
 import { readBaggage } from "./baggage.ts";
@@ -85,7 +86,7 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
             sender: agent,
             depth: scope.depth,
             print: printOf(text),
-            label: run.index.context(),
+            label: vouchedLabel(run.index),
             values: valuesOf(text, run.index),
             tools: scope.tools === undefined ? undefined : [...scope.tools].sort(),
         },
