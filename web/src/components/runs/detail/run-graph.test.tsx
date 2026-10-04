@@ -68,6 +68,16 @@ describe("RunGraph", () => {
         expect(screen.getByText("No messages")).toBeTruthy();
     });
 
+    it("lists every agent when their parents form a loop", () => {
+        const looped = [
+            makeAgent({ name: "planner", parent: "writer" }),
+            makeAgent({ name: "writer", parent: "planner" }),
+        ];
+        render(<RunGraph graph={{ nodes: looped, edges: [] }} startedAt={START} />);
+        const links = within(screen.getByRole("list", { name: "Agents by delegation" })).queryAllByRole("link");
+        expect(links.map((link) => link.textContent)).toEqual(["planner", "writer"]);
+    });
+
     it("labels an agent only with the message from its own parent", () => {
         const sideways = makeEdge({ kind: "message", from: "writer", to: "research bot" });
         render(<RunGraph graph={{ nodes: [root, child], edges: [sideways] }} startedAt={START} />);

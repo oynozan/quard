@@ -34,6 +34,12 @@ describe("agentTree", () => {
     it("is empty for a run with no agents", () => {
         expect(agentTree([])).toEqual([]);
     });
+
+    it("places agents caught in a parent loop from the one that started first, so none go missing", () => {
+        const loop = [makeAgent("a", "b"), makeAgent("b", "a")];
+        expect(shape(agentTree(loop))).toEqual([["a", ["b"]]]);
+        expect(shape(agentTree([makeAgent("billing", null), ...loop]))).toEqual(["billing", ["a", ["b"]]]);
+    });
 });
 
 describe("treeOrder", () => {
