@@ -1,6 +1,7 @@
 import { createAgentKey, createProject, getIncident, listIncidents, requestReplay } from "@quard/db";
+import { projectKeys } from "@quard/db/server";
 import { startTestDb, type TestDb } from "@quard/db/testing";
-import { createRedactor, findIbans, isValidIban, parseHashKey } from "@quard/shared";
+import { findIbans, isValidIban, parseHashKey } from "@quard/shared";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { guard, quard, type RunEvent } from "../../../packages/sdk/index.ts";
 import type { Fetch } from "../../../packages/sdk/monitor/fetch.ts";
@@ -17,7 +18,8 @@ import { CALL_USD, OPENAI, payingModel, USAGE } from "../test/model.ts";
 // entry point, turning point, damage and missing guard, confirmed by replay.
 // The real SDK uploads to the webhook, then the worker's jobs run on PGlite.
 
-const HASH_KEY = "ab".repeat(32);
+// The server's QUARD_HASH_KEY; the SDK fetches its project's key from the webhook
+const INSTALL_KEY = parseHashKey("ab".repeat(32));
 const IBAN = "DE89370400440532013000";
 const MODEL = "gpt-5.4-mini";
 const URL = "https://invoices.evil-pay.com/inv/114";
@@ -100,10 +102,10 @@ async function runAgent(tools: Record<string, Tool>): Promise<void> {
 
 // The M1 attack with payInvoice's IBAN rule in observe mode, uploaded to the webhook
 async function uploadAttack(projectId: string): Promise<void> {
-    const webhook = createApp({ db: test.db, redactor: createRedactor(parseHashKey(HASH_KEY)) });
+    const webhook = createApp({ db: test.db, keys: projectKeys(INSTALL_KEY) });
     vi.stubGlobal("fetch", (url: string, init: RequestInit) => webhook.request(url, init));
     const { key } = await createAgentKey(test.db, projectId, "billing");
-    quard.configure({ key, webhookUrl: "http://webhook.test", hashKey: HASH_KEY, onEvent: (e) => events.push(e) });
+    quard.configure({ key, webhookUrl: "http://webhook.test", onEvent: (e) => events.push(e) });
     const rawPay = vi.fn(async (_input: { iban: string; amount: number }) => "paid");
     const fetchPage = guard(async (_input: { url: string }) => PAGE, {
         type: "source",
