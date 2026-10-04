@@ -128,6 +128,7 @@ export { isCard, normalizeCard, replaceCards } from "./redact/cards.ts";
 export { redactEvent } from "./redact/event.ts";
 export { keyedHash, parseHashKey } from "./redact/hash.ts";
 export { CUT, maskCard, maskEmail, maskIban } from "./redact/masks.ts";
+export { redactRecord } from "./redact/record.ts";
 export { createRedactor, redactText } from "./redact/redactor.ts";
 export type { Redactor } from "./redact/redactor.ts";
 export { removeSecrets, SECRET_FIELD } from "./redact/secrets.ts";

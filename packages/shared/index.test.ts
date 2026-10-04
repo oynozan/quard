@@ -98,6 +98,7 @@ describe("@quard/shared", () => {
             "readPort",
             "readyMessage",
             "redactEvent",
+            "redactRecord",
             "redactText",
             "refusalText",
             "removeSecrets",
