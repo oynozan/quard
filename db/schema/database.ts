@@ -274,6 +274,38 @@ export type AgentMessagesTable = {
     at: Timestamp;
 };
 
+// jsonb that may be null, written later
+type NullableJson = ColumnType<unknown, string | null | undefined, string | null>;
+
+export type IncidentsTable = {
+    project_id: string;
+    id: string;
+    run_id: string;
+    opened_at: Timestamp;
+    // Copied from the verdict, null until it is found
+    category: string | null;
+    damage_step_id: string | null;
+    damage_tool: string | null;
+    damage_agent: string | null;
+    entry_agent: string | null;
+    entry_origin: string | null;
+    entry_trust: "trusted" | "untrusted" | null;
+    turning_agent: string | null;
+    verdict: NullableJson;
+    reviewer: NullableJson;
+    replay: NullableJson;
+    find_state: Generated<"pending" | "done" | "failed">;
+    find_error: string | null;
+    review_state: Generated<"pending" | "done" | "skipped" | "failed">;
+    replay_state: Generated<"idle" | "requested" | "running" | "done" | "failed">;
+    attempts: Generated<number>;
+    run_after: DefaultTimestamp;
+    leased_until: Timestamp | null;
+    spent_usd: Generated<number>;
+    cap_usd: Generated<number>;
+    replay_requested_by: string | null;
+};
+
 export type Database = {
     projects: ProjectsTable;
     agent_keys: AgentKeysTable;
@@ -295,4 +327,5 @@ export type Database = {
     memory_labels: MemoryLabelsTable;
     run_counters: RunCountersTable;
     agent_messages: AgentMessagesTable;
+    incidents: IncidentsTable;
 };

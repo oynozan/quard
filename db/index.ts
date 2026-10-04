@@ -82,6 +82,30 @@ export type {
 export { ingestBatch } from "./queries/ingest/store.ts";
 export { findMemoryRecords, findMessageRecord } from "./queries/labels/find.ts";
 export { storeLabelRecords } from "./queries/labels/store.ts";
+export { getModelCalls } from "./queries/incidents/calls.ts";
+export type { ModelCallRecord } from "./queries/incidents/calls.ts";
+export { incidentCounts } from "./queries/incidents/counts.ts";
+export type { IncidentCounts } from "./queries/incidents/counts.ts";
+export { claimIncidentJob, deferIncidentJob } from "./queries/incidents/jobs.ts";
+export { getIncident, incidentsForAgent, incidentsForRuns, listIncidents } from "./queries/incidents/list.ts";
+export { requestReplay } from "./queries/incidents/replay.ts";
+export type { ReplayRequest } from "./queries/incidents/replay.ts";
+export { failFind, saveReplay, saveReview, saveVerdict } from "./queries/incidents/save.ts";
+export type {
+    ClaimedJob,
+    IncidentCategory,
+    IncidentRow,
+    MissingGuard,
+    ReplayCount,
+    ReplayOutcome,
+    StoredReplay,
+    StoredReview,
+    StoredRound,
+    StoredVerdict,
+    TracedValue,
+    VerdictEntry,
+    VerdictPlace,
+} from "./queries/incidents/types.ts";
 export {
     agentKeyFor,
     createAgentKey,

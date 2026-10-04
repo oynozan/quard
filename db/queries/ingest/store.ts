@@ -2,6 +2,7 @@ import type { UploadItem } from "@quard/shared";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import type { Database } from "../../schema/database.ts";
+import { openIncidents } from "../incidents/open.ts";
 import {
     agentMessageRows,
     decisionRows,
@@ -109,6 +110,7 @@ export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]
                 .values(decisions)
                 .onConflict((c) => c.doNothing())
                 .execute();
+            await openIncidents(trx, projectId, decisions);
         }
         if (messages.length > 0) {
             await trx
