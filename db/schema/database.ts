@@ -1,4 +1,9 @@
 import type { ColumnType, Generated } from "kysely";
+import type { AgentMessagesTable, MemoryLabelsTable, MessageRecordsTable, RunCountersTable } from "./multi-agent.ts";
+import type { PaymentsTable } from "./payments.ts";
+
+export type { AgentMessagesTable, MemoryLabelsTable, MessageRecordsTable, RunCountersTable } from "./multi-agent.ts";
+export type { PaymentsTable } from "./payments.ts";
 
 // Postgres returns Date; we insert ISO strings or Dates
 type Timestamp = ColumnType<Date, Date | string, Date | string>;
@@ -41,6 +46,8 @@ export type RunsTable = {
     blocked: Generated<number>;
     cost_usd: Generated<number>;
     cost_known: Generated<boolean>;
+    spend_usd: Generated<number>;
+    spend_known: Generated<boolean>;
     influenced: Generated<boolean>;
     flagged: Generated<boolean>;
     degraded: Generated<boolean>;
@@ -174,7 +181,7 @@ export type DayCountersTable = {
 export type FleetValuesTable = {
     project_id: string;
     key: string;
-    kind: "iban" | "email" | "domain";
+    kind: "iban" | "email" | "domain" | "wallet";
     field: string;
     first_seen_at: DefaultTimestamp;
     quarantined_at: Timestamp | null;
@@ -223,55 +230,6 @@ export type AgentVersionsTable = {
     instructions: string | null;
     first_seen_at: DefaultTimestamp;
     last_seen_at: DefaultTimestamp;
-};
-
-export type MessageRecordsTable = {
-    project_id: string;
-    ref: string;
-    run_id: string;
-    step_id: string | null;
-    sender: string;
-    depth: number;
-    print: string;
-    label: Json;
-    value_labels: DefaultJson;
-    tools: string[] | null;
-    stored_at: DefaultTimestamp;
-};
-
-export type MemoryLabelsTable = {
-    project_id: string;
-    print: string;
-    store: string;
-    run_id: string;
-    agent: string;
-    label: Json;
-    value_labels: DefaultJson;
-    first_written_at: DefaultTimestamp;
-    last_written_at: DefaultTimestamp;
-};
-
-export type RunCountersTable = {
-    project_id: string;
-    run_id: string;
-    counter: string;
-    used: Generated<number>;
-    updated_at: DefaultTimestamp;
-};
-
-export type AgentMessagesTable = {
-    project_id: string;
-    event_id: string;
-    run_id: string;
-    step_id: string;
-    kind: "message" | "handoff" | "tool";
-    from_agent: string;
-    to_agent: string;
-    parent_step_id: string | null;
-    trust: "trusted" | "untrusted";
-    sensitivity: "internal" | "public";
-    verified: Generated<boolean>;
-    at: Timestamp;
 };
 
 // jsonb that may be null, written later
@@ -328,4 +286,5 @@ export type Database = {
     run_counters: RunCountersTable;
     agent_messages: AgentMessagesTable;
     incidents: IncidentsTable;
+    payments: PaymentsTable;
 };

@@ -1,10 +1,15 @@
-import { Globe, Landmark, Mail } from "lucide-react";
+import { Globe, Landmark, Mail, Wallet } from "lucide-react";
 import { NameCell } from "@/components/kit/data-table";
 import type { QuarantinedValue } from "@/lib/data/fleet";
 
-export const KIND_NAMES: Record<QuarantinedValue["kind"], string> = { iban: "IBAN", email: "Email", domain: "Domain" };
+export const KIND_NAMES: Record<QuarantinedValue["kind"], string> = {
+    iban: "IBAN",
+    email: "Email",
+    domain: "Domain",
+    wallet: "Wallet",
+};
 
-const ICONS = { iban: Landmark, email: Mail, domain: Globe };
+const ICONS = { iban: Landmark, email: Mail, domain: Globe, wallet: Wallet };
 
 // A masked value with its kind icon and field
 export function ValueCell({ value }: { value: Pick<QuarantinedValue, "kind" | "field" | "value"> }) {

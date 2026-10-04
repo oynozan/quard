@@ -4,7 +4,7 @@ import type { Db } from "../../../connect/connect.ts";
 import { splitFleetKey } from "./keys.ts";
 import { daysBefore, hoursBefore } from "./window.ts";
 
-type FleetKind = "iban" | "email" | "domain";
+type FleetKind = "iban" | "email" | "domain" | "wallet";
 
 export type QuarantinedFleetItem = {
     kind: FleetKind;

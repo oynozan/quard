@@ -27,6 +27,6 @@ describe("ValueCell", () => {
     });
 
     it("names each kind in plain words", () => {
-        expect(KIND_NAMES).toEqual({ iban: "IBAN", email: "Email", domain: "Domain" });
+        expect(KIND_NAMES).toEqual({ iban: "IBAN", email: "Email", domain: "Domain", wallet: "Wallet" });
     });
 });

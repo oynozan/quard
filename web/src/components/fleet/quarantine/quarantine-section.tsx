@@ -21,7 +21,7 @@ type Kind = "all" | QuarantinedValue["kind"];
 const KINDS: Kind[] = ["all", "iban", "email", "domain"];
 // The kind filter only helps once the list is long
 const FILTER_FROM = 6;
-const PLURALS = { all: "values", iban: "IBANs", email: "email addresses", domain: "domains" };
+const PLURALS = { all: "values", iban: "IBANs", email: "email addresses", domain: "domains", wallet: "wallets" };
 
 type QuarantineSectionProps = {
     quarantine: QuarantinedValue[];

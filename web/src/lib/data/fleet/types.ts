@@ -20,7 +20,7 @@ export type BlocksHeatmap = {
 };
 
 export type QuarantinedValue = {
-    kind: "iban" | "email" | "domain";
+    kind: "iban" | "email" | "domain" | "wallet";
     field: string;
     // The fleet key, such as "iban:DE89…3000#<hash>" or "domain:acme.com"
     key: string;
@@ -40,7 +40,7 @@ export type QuarantinedValue = {
 
 // New values the fleet check is counting, not yet at the runs that block.
 export type WatchedValue = {
-    kind: "iban" | "email" | "domain";
+    kind: "iban" | "email" | "domain" | "wallet";
     field: string;
     key: string;
     value: string;
