@@ -1,4 +1,5 @@
 import { messageOf, type JobDeps } from "../jobs/deps.ts";
+import { startCleanup } from "./cleanup.ts";
 import { runNextJob } from "./jobs.ts";
 
 export type Worker = {
@@ -10,6 +11,8 @@ export type WorkerOptions = JobDeps & {
     log?: (message: string) => void;
     // How long to wait when no job is due
     pollMs?: number;
+    // How often the retention cleanup runs
+    cleanupEveryMs?: number;
 };
 
 // At most this many jobs run at once
@@ -17,9 +20,10 @@ const SLOTS = 4;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Claims and runs incident jobs until stopped
+// Claims and runs incident jobs, and runs the retention cleanup, until stopped
 export function startWorker(options: WorkerOptions): Worker {
     const { log = console.log, pollMs = 1_000 } = options;
+    const cleanup = startCleanup({ db: options.db, log, everyMs: options.cleanupEveryMs });
     let stopped = false;
     const loop = async () => {
         while (!stopped) {
@@ -40,7 +44,7 @@ export function startWorker(options: WorkerOptions): Worker {
     return {
         async stop() {
             stopped = true;
-            await Promise.all(slots);
+            await Promise.all([...slots, cleanup.stop()]);
             log("worker stopped");
         },
     };

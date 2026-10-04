@@ -4,7 +4,11 @@ import { startWorker } from "./worker.ts";
 
 const runNextJob = vi.hoisted(() => vi.fn<() => Promise<string | undefined>>());
 
+const cleanupStop = vi.hoisted(() => vi.fn(async () => {}));
+const startCleanup = vi.hoisted(() => vi.fn((_options: object) => ({ stop: cleanupStop })));
+
 vi.mock("./jobs.ts", () => ({ runNextJob }));
+vi.mock("./cleanup.ts", () => ({ startCleanup }));
 
 const deps = { db: {} as Db, openai: undefined };
 
@@ -12,6 +16,8 @@ afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     runNextJob.mockReset();
+    startCleanup.mockClear();
+    cleanupStop.mockClear();
 });
 
 describe("startWorker", () => {
@@ -40,6 +46,17 @@ describe("startWorker", () => {
         expect(log).toHaveBeenNthCalledWith(1, "worker started");
         expect(log).toHaveBeenCalledWith("find inc_6: verdict: bad input");
         expect(log).toHaveBeenLastCalledWith("worker stopped");
+    });
+
+    it("runs the retention cleanup beside the jobs and stops it too", async () => {
+        runNextJob.mockResolvedValue(undefined);
+        const log = vi.fn();
+
+        const worker = startWorker({ ...deps, log, pollMs: 5, cleanupEveryMs: 50 });
+        expect(startCleanup).toHaveBeenCalledWith({ db: deps.db, log, everyMs: 50 });
+        await worker.stop();
+
+        expect(cleanupStop).toHaveBeenCalledTimes(1);
     });
 
     it("logs a failed claim and tries again after a pause", async () => {
