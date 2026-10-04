@@ -28,7 +28,9 @@ if (DASHBOARD) {
     });
     // Only a warning: example 13 runs with the backend down on purpose
     await fetch(`${webhookUrl}/health`, { signal: AbortSignal.timeout(1000) }).catch(() => {
-        console.warn(`The Quard backend at ${webhookUrl} isn't answering. Start webhook and control as sandbox/README.md shows.`);
+        console.warn(
+            `The Quard backend at ${webhookUrl} isn't answering. Start webhook and control as sandbox/README.md shows.`,
+        );
     });
 }
 
