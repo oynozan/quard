@@ -129,7 +129,7 @@ node sandbox/playground/run.ts
 
 In a terminal it tells a short story and asks what the agent should do; without one, as in scripts, it uses the prompt in `scenario.json`. It then prints each step, what Quard detected, where the run went and how long Quard's checks took. The last line, `@result`, holds the same as JSON for scripts. Quard rereads `policy.json` and `signatures.json` before each guarded call, so an edit applies from the next guarded call. With `TYPESAFE_API_KEY` in `sandbox/.env` the detector is Jev; without it an OpenAI model scores the text, as in example 19.
 
-With `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` in `sandbox/.env` and the backend running (see "See runs in the dashboard"), the run shows up in the dashboard, and anything Quard blocked or flagged opens an incident.
+With `QUARD_AGENT_KEY` in `sandbox/.env` and the backend running (see "See runs in the dashboard"), the run shows up in the dashboard, and anything Quard blocked or flagged opens an incident.
 
 The playground has tests, which need no API key: `pnpm --filter @quard/sandbox test`.
 

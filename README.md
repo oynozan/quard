@@ -25,15 +25,14 @@ To change the run, edit the files in [sandbox/playground/](sandbox/playground):
 
 ### Add the dashboard
 
-Make a hash key with `openssl rand -hex 32`. Create `web/.env.local` with it:
+Make the servers' hash key. Agents never need it: they get their project's key with the agent key.
 
 ```sh
-DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres
-QUARD_HASH_KEY=<your hash key>
-QUARD_SKIP_SIGN_IN=1
+KEY=$(openssl rand -hex 32)
+printf 'DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres\nQUARD_HASH_KEY=%s\nQUARD_SKIP_SIGN_IN=1\n' "$KEY" > web/.env.local
 ```
 
-Add the same `QUARD_HASH_KEY` line to `sandbox/.env`. Then start each of these in its own terminal:
+Then start each of these in its own terminal:
 
 ```sh
 pnpm --filter @quard/db dev:db

@@ -63,7 +63,9 @@ async function backend(): Promise<{ server: Server; url: string; paths: string[]
     const server = createServer((request, response) => {
         paths.push(`${request.method} ${request.url}`);
         request.resume();
-        response.writeHead(200, { "content-type": "application/json" }).end("{}");
+        // The SDK asks webhook for its project's hash key before it uploads
+        const body = request.url === "/v1/hash-key" ? JSON.stringify({ hashKey: "ab".repeat(32) }) : "{}";
+        response.writeHead(200, { "content-type": "application/json" }).end(body);
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     return { server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, paths };
@@ -89,7 +91,7 @@ describe("run.ts", SLOW, () => {
     it("sends the run to the backend when it answers, and still exits by itself", async () => {
         const { server, url, paths } = await backend();
         fake.script([{ text: "Hi." }]);
-        const keys = { QUARD_AGENT_KEY: "qk_test", QUARD_HASH_KEY: "ab".repeat(32) };
+        const keys = { QUARD_AGENT_KEY: "qk_test" };
         const ended = await node([join(PLAYGROUND, "run.ts"), playgroundFolder()], {
             ...keys,
             QUARD_WEBHOOK_URL: url,
@@ -106,7 +108,6 @@ describe("run.ts", SLOW, () => {
         fake.script([{ text: "Hi." }]);
         const ended = await node([join(PLAYGROUND, "run.ts"), playgroundFolder()], {
             QUARD_AGENT_KEY: "qk_test",
-            QUARD_HASH_KEY: "ab".repeat(32),
             QUARD_WEBHOOK_URL: url,
             QUARD_CONTROL_URL: url,
         });

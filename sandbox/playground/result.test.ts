@@ -54,7 +54,7 @@ describe("summaryLines", () => {
             "Detected:",
             "  readEmail: source guard, rule source, flag: instructions, invisible_text",
             "  the run: limit guard, rule max-steps, would block (observe mode)",
-            "Not sent to the dashboard: set QUARD_AGENT_KEY and QUARD_HASH_KEY in sandbox/.env and start webhook.",
+            "Not sent to the dashboard: set QUARD_AGENT_KEY in sandbox/.env and start webhook.",
             "Time: 5.0 s in all, 5.0 s in 3 model calls, no tool calls",
         ]);
     });

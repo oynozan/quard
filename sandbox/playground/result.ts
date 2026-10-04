@@ -103,7 +103,7 @@ export function summaryLines(result: SandboxResult): string[] {
             : ["Detected:", ...result.detections.map(detectionText)]),
         result.recorded
             ? `Sent to the dashboard as run ${result.runId}. A block or flagged content opens an incident there.`
-            : "Not sent to the dashboard: set QUARD_AGENT_KEY and QUARD_HASH_KEY in sandbox/.env and start webhook.",
+            : "Not sent to the dashboard: set QUARD_AGENT_KEY in sandbox/.env and start webhook.",
         `Time: ${seconds(timing.totalMs)} in all, ${seconds(timing.modelMs)} in ${timing.modelCalls} model calls, ${quard}`,
     ];
 }
