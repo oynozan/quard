@@ -177,10 +177,13 @@ Decided by Q1, Q2 and Q3.
 - A request chained to an earlier response, through `previous_response_id` or `conversation`, joins that run and reuses its labels. The SDK takes them from its own in-process copy, or else asks `control`. History Quard never saw counts as untrusted.
 - In a stream, monitor passes events through as they arrive. Only the event that completes a tool call is held until that call passes its checks.
 
+Rules for hosted tools use the name the model uses: `web_search`, or the hosted MCP tool's name. They come from the policy file's `guards`, else from `hostedTools` in `quard.configure()`. (**Claude's pick**)
+
 **Hosted web search** (Q3)
 
 - Allowed. monitor adds `"web_search_call.action.sources"` to the request's `include` list and keeps any values already there. This only adds the source list to the response.
-- monitor records the queries and source URLs, checks the consulted domains against the block and allow lists, and marks the response web-influenced.
+- An enforced `source` rule's `allowDomains` becomes the tool's `allowed_domains` filter, narrowing any filter the app set. The API has no block filter, so `blockDomains` is only checked afterwards. (**Claude's pick**)
+- monitor records each site the search opened, listed or cited as `web:<domain>` content, checks those domains against the block and allow lists, and marks the response web-influenced. A blocked site can't be stopped, so its content is flagged `blocked_domain`. The queries are not recorded yet.
 - The page text never reaches Quard, so the scan is recorded as `unscanned`, not `pass`.
 - Values copied from those pages are found nowhere in the run, so they count as model-generated.
 - Teams that need page scanning and exact value tracing run search as their own tool, wrapped with a `source` guard.
@@ -188,7 +191,9 @@ Decided by Q1, Q2 and Q3.
 **Hosted MCP**
 
 - The Responses API can ask for approval before a hosted MCP tool runs. monitor answers these requests with `action` and `approval` rules.
-- This only works while approval stays on for that tool. If `require_approval` is `"never"`, or a filter skips the tool, Quard can only record the call.
+- This only works while approval stays on for that tool, so monitor sets `require_approval: "always"` on every hosted MCP server in the request. (**Claude's pick**)
+- monitor never sends the follow-up request. `quard.mcpApprovals(response)` checks each approval request like a guarded call (permission, `limit`, `action`, `egress`, `approval`) and returns the `mcp_approval_response` items for the app's next request. Blocked calls, and requests monitor never saw, are refused with the refusal text as the reason. Asks wait for a human. Each request is decided once. (**Claude's pick**)
+- What a hosted MCP tool returned is labeled `mcp:<server label>` and flagged `unscanned`.
 
 ### Run context
 
@@ -828,6 +833,8 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | When replay runs | On a click on the incident page; the verdict and AI note run on their own; past the cap, continue with $5 more | Owner |
 | — | Request for replay | The SDK records each model call's redacted request while uploads are on, up to 512 KiB | Claude's pick |
 | — | Bad handoff | From the messages and handoffs M4 records; a dropped constraint is never named, since message text is not stored | Owner, Claude's pick |
+| — | Hosted MCP approvals | monitor keeps approval on and never sends the follow-up; `quard.mcpApprovals()` gives the app the answers, refusing blocked calls | Claude's pick |
+| — | Hosted tool rules | By the name the model uses, from the policy file or `hostedTools` in code | Claude's pick |
 
 ## Changes to the spec
 
@@ -845,7 +852,6 @@ These points changed the spec. The spec doc was updated to match them on 2026-10
 
 Not decided yet:
 
-- **Hosted MCP approvals.** Answering an approval request takes a follow-up model request. Decide whether monitor sends it inside the same client call or hands it to the app.
 - **WebSocket transport.** The OpenAI Agents SDK can reach the Responses API over a WebSocket. The fetch hook does not cover it yet.
 - **Node 26** becomes LTS on 2026-10-28. Move the services to it then.
 - **Hash key rotation for label records.** Memory labels outlive runs, but their hashes use the current key only. After a key change, items written before it read back as untrusted. Decide whether lookups also try the old key.
