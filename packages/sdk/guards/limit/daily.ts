@@ -47,7 +47,7 @@ export function dayUsed(day: string, tool: string, counter: string): number {
     return days.get(day)?.get(counterKey(tool, counter)) ?? 0;
 }
 
-// Counts only grow within a day, so the larger total wins
+// The larger total wins, since control's can lack counts made here for it
 export function noteDayUsed(day: string, tool: string, counter: string, used: number): void {
     const counts = countsOf(day);
     const key = counterKey(tool, counter);

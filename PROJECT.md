@@ -308,7 +308,7 @@ From the spec:
 - A blocked value goes on the quarantine list. It stays there until someone marks it known in the dashboard.
 - For its first 7 days, the check runs in observe mode, because it has no history yet.
 
-**Per-day limits** (`maxCallsPerDay`, `maxAmountPerDay`) count every agent's calls to the tool across the project, per UTC day. `control` keeps the count, so every process shares it. One call's per-day counts are added all or none, and a call refused after it was counted gives them back. (**Claude's pick**)
+**Per-day limits** (`maxCallsPerDay`, `maxAmountPerDay`) count every agent's calls to the tool across the project, per UTC day. `control` keeps the count, so every process shares it. One call's per-day counts are added all or none, and a call refused after it was counted gives them back. Another process that saw those counts before they were given back may keep them in its local count until the next UTC day. (**Claude's pick**)
 
 ### Guards inside monitor
 
