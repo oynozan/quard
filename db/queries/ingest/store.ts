@@ -3,6 +3,7 @@ import { sql, type Transaction } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import type { Database } from "../../schema/database.ts";
 import { openIncidents } from "../incidents/open.ts";
+import { chunkRows } from "./chunks.ts";
 import { paymentRows } from "./payments.ts";
 import {
     agentMessageRows,
@@ -106,6 +107,7 @@ export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]
         const decisions = decisionRows(projectId, added);
         const messages = agentMessageRows(projectId, added);
         const payments = paymentRows(projectId, added);
+        const chunks = chunkRows(projectId, added);
         if (steps.length > 0) {
             await trx
                 .insertInto("steps")
@@ -139,6 +141,13 @@ export async function ingestBatch(db: Db, projectId: string, batch: UploadItem[]
             await trx
                 .insertInto("payments")
                 .values(payments)
+                .onConflict((c) => c.doNothing())
+                .execute();
+        }
+        if (chunks.length > 0) {
+            await trx
+                .insertInto("chunk_labels")
+                .values(chunks)
                 .onConflict((c) => c.doNothing())
                 .execute();
         }

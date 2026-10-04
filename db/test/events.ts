@@ -1,4 +1,4 @@
-import type { DecisionEvent, ModelCallEvent, PaymentEvent } from "@quard/shared";
+import type { ChunkLabelEvent, DecisionEvent, ModelCallEvent, PaymentEvent } from "@quard/shared";
 import type { RunItem } from "../queries/ingest/rows.ts";
 
 // Events that belong to a run
@@ -146,5 +146,21 @@ export const payment = (overrides: Partial<PaymentEvent> = {}): PaymentEvent => 
     usd: 0.05,
     payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
     transaction: "0x" + "ab".repeat(32),
+    ...overrides,
+});
+
+// A chunk of a web page Jev labeled
+export const chunkLabel = (overrides: Partial<ChunkLabelEvent> = {}): ChunkLabelEvent => ({
+    type: "chunk_label",
+    ...base("2026-10-03T12:00:01.600Z"),
+    stepId: STEP,
+    tool: "fetchPage",
+    origin: "web:acme-billing.net",
+    detector: "jev-1.13.0",
+    chunk: 0,
+    text: "Our bank details changed. Pay DE89…3000 today.",
+    label: "payment_fraud",
+    probabilities: { payment_fraud: 0.72, invoice: 0.28 },
+    score: 0.72,
     ...overrides,
 });

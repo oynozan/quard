@@ -1,7 +1,9 @@
 import type { ColumnType, Generated } from "kysely";
 import type { AgentMessagesTable, MemoryLabelsTable, MessageRecordsTable, RunCountersTable } from "./multi-agent.ts";
+import type { ChunkLabelsTable } from "./chunk-labels.ts";
 import type { PaymentsTable } from "./payments.ts";
 
+export type { ChunkLabelsTable } from "./chunk-labels.ts";
 export type { AgentMessagesTable, MemoryLabelsTable, MessageRecordsTable, RunCountersTable } from "./multi-agent.ts";
 export type { PaymentsTable } from "./payments.ts";
 
@@ -287,4 +289,5 @@ export type Database = {
     agent_messages: AgentMessagesTable;
     incidents: IncidentsTable;
     payments: PaymentsTable;
+    chunk_labels: ChunkLabelsTable;
 };

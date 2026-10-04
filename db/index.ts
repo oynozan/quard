@@ -81,6 +81,18 @@ export type {
     GuardCount,
     ToolCoverage,
 } from "./queries/decisions.ts";
+export { claimFallbackJob, MAX_FALLBACK_ATTEMPTS, saveFallback } from "./queries/chunks/fallback.ts";
+export { chunkQueue, countOpenChunks, reviewedChunks } from "./queries/chunks/queue.ts";
+export { FLAG_AT, labelStats, reviewChunk } from "./queries/chunks/review.ts";
+export type {
+    ChunkFallback,
+    ChunkItem,
+    ChunkReview,
+    FallbackJob,
+    FallbackResult,
+    FallbackState,
+    LabelStat,
+} from "./queries/chunks/types.ts";
 export { ingestBatch } from "./queries/ingest/store.ts";
 export { RUN_LIMIT_RULES, runLimitCounts } from "./queries/limits/run-limits.ts";
 export type { RunLimitRow, RunLimitRule } from "./queries/limits/run-limits.ts";
