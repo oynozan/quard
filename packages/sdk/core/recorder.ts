@@ -10,8 +10,9 @@ function isQuiet(event: RunEvent): boolean {
     return event.type === "decision" && (event.decision === "allow" || event.decision === "pass");
 }
 
-// ponytail: 32 Mi characters of request bodies held while the webhook is
-// down; past it the oldest model calls lose theirs, and their replay is limited
+// ponytail: 32 Mi characters of request bodies and output texts held while
+// the webhook is down; past it the oldest model calls lose both, and their
+// replay is limited
 const MAX_BODY_CHARS = 32 * 1024 * 1024;
 const bodySizes = new WeakMap<RunEvent, number>();
 let bodyChars = 0;
@@ -24,10 +25,10 @@ function forget(events: RunEvent[]): RunEvent[] {
 }
 
 function holdBody(event: RunEvent): void {
-    if (event.type !== "model_call" || event.requestBody === undefined) {
+    if (event.type !== "model_call" || (event.requestBody === undefined && event.outputText === undefined)) {
         return;
     }
-    const size = JSON.stringify(event.requestBody).length;
+    const size = JSON.stringify(event.requestBody ?? {}).length + JSON.stringify(event.outputText ?? []).length;
     bodySizes.set(event, size);
     bodyChars += size;
     for (const [i, held] of buffer.entries()) {
@@ -36,7 +37,7 @@ function holdBody(event: RunEvent): void {
         }
         const heldSize = bodySizes.get(held);
         if (held.type === "model_call" && heldSize !== undefined) {
-            const { requestBody: _body, ...rest } = held;
+            const { requestBody: _body, outputText: _text, ...rest } = held;
             buffer[i] = rest;
             bodyChars -= heldSize;
         }

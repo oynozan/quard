@@ -20,7 +20,7 @@ import { checkRequestedCalls } from "./check.ts";
 import { unguardedOutputLabel } from "./framework-tools.ts";
 import { asRecord, parseJson } from "./json.ts";
 import { readResponsesRequest, type ResponsesRequest } from "./request.ts";
-import { functionCallOf, functionCallsOf, responseIdOf, type FunctionCall } from "./response.ts";
+import { functionCallOf, functionCallsOf, outputTextOf, responseIdOf, type FunctionCall } from "./response.ts";
 import { tapSse } from "./sse.ts";
 import { rememberVersion, versionOf } from "./versions.ts";
 
@@ -41,13 +41,16 @@ function refusedResponse(refusal: GuardRefusal): Response {
 
 // ponytail: agents that resend the whole input each call pass this cap on
 // long runs; dedupe input items by keyed hash per run if that matters
-const MAX_REQUEST_BODY = 512 * 1024;
+const MAX_CALL_TEXT = 512 * 1024;
 
-// The body replay resends. Kept only while uploads are on, or the
-// event buffer would hold it for nothing.
-function requestBodyOf(step: Step): { requestBody?: Record<string, unknown> } {
-    const body = step.request.replayBody;
-    return uploadsOn() && JSON.stringify(body).length <= MAX_REQUEST_BODY ? { requestBody: body } : {};
+type CallText = { requestBody?: Record<string, unknown>; outputText?: string[] };
+
+// The body replay resends and the model's answer, as one size. Kept only
+// while uploads are on, or the event buffer would hold them for nothing.
+function callTextOf(step: Step, outputText: string[]): CallText {
+    const requestBody = step.request.replayBody;
+    const size = JSON.stringify(requestBody).length + JSON.stringify(outputText).length;
+    return uploadsOn() && size <= MAX_CALL_TEXT ? { requestBody, outputText } : {};
 }
 
 // The current scope, or the run of the response, conversation or tool
@@ -130,6 +133,7 @@ function recordModelCall(
     responseId?: string,
     calls: FunctionCall[] = [],
     usage?: TokenUsage,
+    outputText: string[] = [],
 ): void {
     // One clock read, so at minus durationMs is the start
     const end = Date.now();
@@ -147,7 +151,7 @@ function recordModelCall(
         durationMs: end - step.started,
         agentVersion: step.version,
         ...(usage === undefined ? {} : { usage }),
-        ...requestBodyOf(step),
+        ...callTextOf(step, outputText),
     });
 }
 
@@ -174,7 +178,7 @@ function finishResponse(
     }
     const usage = usageOf(response);
     addCost(step.scope.run, step.request.model, usage);
-    recordModelCall(step, status, responseId, calls, usage);
+    recordModelCall(step, status, responseId, calls, usage, outputTextOf(response));
 }
 
 // Each tool call is checked once, when its last event arrives

@@ -55,6 +55,8 @@ export const modelCallEvent = z.object({
         .optional(),
     // The request body, redacted and cut to what a replay resends
     requestBody: z.record(z.string(), z.unknown()).optional(),
+    // The texts of the assistant messages in the response, redacted
+    outputText: z.array(z.string()).optional(),
     status: z.enum(["ok", "error"]),
     durationMs,
 });

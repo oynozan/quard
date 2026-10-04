@@ -18,12 +18,29 @@ export function functionCallOf(item: unknown): FunctionCall | undefined {
     };
 }
 
-export function functionCallsOf(response: unknown): FunctionCall[] {
+function outputOf(response: unknown): unknown[] {
     const output = asRecord(response)?.output;
-    if (!Array.isArray(output)) {
-        return [];
-    }
-    return output.map(functionCallOf).filter((call): call is FunctionCall => call !== undefined);
+    return Array.isArray(output) ? output : [];
+}
+
+export function functionCallsOf(response: unknown): FunctionCall[] {
+    return outputOf(response)
+        .map(functionCallOf)
+        .filter((call): call is FunctionCall => call !== undefined);
+}
+
+// The output_text parts of the assistant messages in a response
+export function outputTextOf(response: unknown): string[] {
+    return outputOf(response).flatMap((item) => {
+        const message = asRecord(item);
+        if (message?.type !== "message" || message.role !== "assistant" || !Array.isArray(message.content)) {
+            return [];
+        }
+        return message.content.flatMap((part) => {
+            const text = asRecord(part);
+            return text?.type === "output_text" && typeof text.text === "string" ? [text.text] : [];
+        });
+    });
 }
 
 export function responseIdOf(response: unknown): string | undefined {

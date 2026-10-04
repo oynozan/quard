@@ -134,6 +134,30 @@ describe("recorder", () => {
         );
     });
 
+    it("counts output texts with the bodies and strips both", () => {
+        const call = (text: string, withBody: boolean): RunEvent => ({
+            type: "model_call",
+            runId: "r",
+            stepId: text.slice(0, 1),
+            agent: "a",
+            at: "t",
+            model: "m",
+            toolCalls: [],
+            status: "ok",
+            durationMs: 1,
+            agentVersion: "v",
+            ...(withBody ? { requestBody: { input: "hi" } } : {}),
+            outputText: [text],
+        });
+        record(call("a".repeat(20 * 1024 * 1024), false));
+        record(call("b".repeat(20 * 1024 * 1024), true));
+
+        expect(takeEvents().map((event) => event.type === "model_call" && event.outputText !== undefined)).toEqual([
+            false,
+            true,
+        ]);
+    });
+
     it("stamps the time as ISO text", () => {
         expect(now()).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });

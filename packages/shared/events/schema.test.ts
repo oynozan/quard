@@ -51,6 +51,7 @@ describe("runEvent", () => {
             usage: { inputTokens: 10, cachedTokens: 2, outputTokens: 5 },
             agentVersion: "f".repeat(16),
             requestBody: { model: "gpt", input: [{ role: "user", content: "hi" }], store: false },
+            outputText: ["Done."],
             status: "ok",
             durationMs: 3,
         },
@@ -146,6 +147,7 @@ describe("runEvent", () => {
         ["an empty agent", { agent: "" }],
         ["a negative duration", { durationMs: -1 }],
         ["a request body that is not an object", { requestBody: "{}" }],
+        ["output text that is not a list of strings", { outputText: ["a", 1] }],
     ])("rejects %s", (_, change) => {
         const event = {
             type: "model_call",
