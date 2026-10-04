@@ -8,6 +8,7 @@ import { rulesHash } from "../../../packages/sdk/policy/rules.ts";
 import { fakeResponses } from "../../../packages/sdk/test/fake-responses.ts";
 import { resetAll } from "../../../packages/sdk/test/reset.ts";
 import { activeControl } from "../../../packages/sdk/transport/link/active.ts";
+import { SDK_VERSION } from "../../../packages/sdk/transport/link/version.ts";
 import { newProject, type TestProject } from "../test/context.ts";
 import { REDACTOR } from "../test/messages.ts";
 import { only, startTestControl, type TestControl } from "../test/server.ts";
@@ -104,7 +105,7 @@ describe("an SDK connected to control", { timeout: 30_000 }, () => {
         expect(version.instructions).not.toContain("billing@acme.com");
         expect(await connections()).toEqual([
             {
-                sdk: "0.0.0",
+                sdk: SDK_VERSION,
                 host: hostname(),
                 pid: process.pid,
                 rules_hash: rulesHash(),
