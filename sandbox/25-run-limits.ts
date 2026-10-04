@@ -17,7 +17,7 @@
 //      refused before it is sent, the client throws, and the run ends
 //      blocked.
 //
-// Run: node sandbox/18-run-limits.ts
+// Run: node sandbox/25-run-limits.ts
 
 import OpenAI from "openai";
 import { guard, quard } from "quard";

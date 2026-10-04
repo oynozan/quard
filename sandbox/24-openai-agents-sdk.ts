@@ -12,7 +12,7 @@
 //
 // The second run takes the bank details from our supplier records: paid.
 //
-// Run: node sandbox/17-openai-agents-sdk.ts
+// Run: node sandbox/24-openai-agents-sdk.ts
 
 import { Agent } from "@openai/agents";
 import OpenAI from "openai";

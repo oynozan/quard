@@ -16,7 +16,7 @@
 // kept in the backend too, so other processes read them back, and they
 // outlive the runs that wrote them.
 //
-// Run: node sandbox/16-shared-memory.ts
+// Run: node sandbox/23-shared-memory.ts
 
 import OpenAI from "openai";
 import { guard, quard } from "quard";

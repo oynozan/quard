@@ -51,7 +51,7 @@ quard.configure({
 });
 
 // A failed or blocked run rethrows; its ending is printed above
-async function run(agent: string, work: () => Promise<void>): Promise<void> {
+async function run(agent: string, work: () => Promise<unknown>): Promise<void> {
     try {
         await quard.run({ agent }, work);
     } catch {

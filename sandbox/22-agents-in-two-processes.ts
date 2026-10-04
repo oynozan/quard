@@ -17,7 +17,7 @@
 //
 // Needs the local backend, as sandbox/README.md shows.
 //
-// Run: node sandbox/15-agents-in-two-processes.ts
+// Run: node sandbox/22-agents-in-two-processes.ts
 
 import { fork } from "node:child_process";
 import { once } from "node:events";
