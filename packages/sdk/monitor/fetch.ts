@@ -189,9 +189,17 @@ function watchStream(step: Step, body: ReadableStream<Uint8Array>): ReadableStre
     });
 }
 
+// Fetches made here. A client copied from a wrapped one keeps its
+// fetch, so this spots it where the client itself would not.
+const monitorFetches = new WeakSet<Fetch>();
+
+export function isMonitorFetch(fetch: Fetch | undefined): boolean {
+    return fetch !== undefined && monitorFetches.has(fetch);
+}
+
 // The monitor: every Responses API call passes through here
 export function createMonitorFetch(inner: Fetch): Fetch {
-    return async (input, init) => {
+    const monitor: Fetch = async (input, init) => {
         const request = await readResponsesRequest(input, init);
         if (request === undefined) {
             return inner(input, init);
@@ -247,4 +255,6 @@ export function createMonitorFetch(inner: Fetch): Fetch {
         finishResponse(step, parseJson(text), (call) => checkRequestedCalls([call], scope, step.stepId), "ok");
         return new Response(text, options);
     };
+    monitorFetches.add(monitor);
+    return monitor;
 }

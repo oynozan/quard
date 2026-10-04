@@ -186,3 +186,16 @@ describe("an agent run as a tool", () => {
         expect(firstOrigin(tools.checked())).toBe("web:invoices.evil-pay.com");
     });
 });
+
+describe("a runner given a copy of a wrapped client", () => {
+    it("records each model call once", async () => {
+        const { client, bodies } = scriptedClient({ orchestrator: [{ text: "Done." }] });
+        const copy = quard.wrap(client).withOptions({ timeout: 30_000 });
+
+        const result = await quardRunner({ client: copy }).run(testAgent("orchestrator"), "Hello.");
+
+        expect(result.finalOutput).toBe("Done.");
+        expect(bodies).toHaveLength(1);
+        expect(modelCalls(events)).toHaveLength(1);
+    });
+});

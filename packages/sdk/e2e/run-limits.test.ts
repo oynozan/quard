@@ -168,3 +168,22 @@ describe("step and cost limits", () => {
         expect(events.find((event) => event.type === "run_finished")).toMatchObject({ status: "blocked" });
     });
 });
+
+describe("a copy of a wrapped client", () => {
+    it("counts each call once when it is wrapped again", async () => {
+        quard.configure({ runLimits: { mode: "block", steps: 2, costUsd: 1.5 } });
+        const fake = fakeResponses(() => ({ text: "ok", usage: USAGE }));
+        const base = quard.wrap(new OpenAI({ apiKey: "test", fetch: fake.fetch, maxRetries: 0 }));
+        const openai = quard.wrap(base.withOptions({ timeout: 30_000 }));
+
+        await quard.run({ agent: "boss" }, async () => {
+            await openai.responses.create({ model: "gpt-5.4-mini", input: "one" });
+            await openai.responses.create({ model: "gpt-5.4-mini", input: "two" });
+        });
+
+        // Counted twice, the second call would pass $0.75 x 2 and step 2 x 2
+        expect(fake.bodies).toHaveLength(2);
+        expect(events.filter((event) => event.type === "model_call")).toHaveLength(2);
+        expect(overLimits()).toEqual([]);
+    });
+});
