@@ -108,7 +108,7 @@ describe("a guarded tool called with values JSON can't hold", () => {
         expect(await flushUploads()).toBe(true);
 
         expect(sent("ask").map((ask) => ask.args)).toEqual([{ amount: "10n" }, { amount: 5, self: "[seen]" }]);
-        expect(sent("count").map((count) => count.add)).toEqual([10, 5]);
+        expect(sent("count").flatMap((count) => count.counts.map((item) => item.add))).toEqual([10, 5]);
         expect(toolCalls().map((event) => event.arguments)).toEqual([{ amount: "10" }, { amount: 5, self: "…" }]);
     });
 });
