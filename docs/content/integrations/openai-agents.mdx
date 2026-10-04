@@ -67,4 +67,3 @@ const result = await runner.run(orchestrator, "Pay invoice 114 from Acme Supplie
 - To follow agents run as tools, the first `quardRunner()` call wraps the SDK's `Runner.prototype.run`. Runners without a `quardRunner()` provider run as before. So do runs started with the SDK's `run()`, and agent tools with their own `runConfig.modelProvider`.
 - An agent whose `model` is a `Model` object, not a name, skips the wrapped client. Its model calls are not recorded, but its guarded tools still carry the right agent.
 - Inside an agent run as a tool, `onBlock: "throw"` stops only that agent's run. The calling agent reads the error as the tool result.
-- Quard still warns about an unguarded tool for handoff and agent tool calls.

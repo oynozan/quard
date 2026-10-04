@@ -68,4 +68,3 @@ Takes the SDK's `tool()` options, plus `guard`: the options of one guard or a li
 - To follow agents run as tools, the first `quardRunner()` call wraps `Runner.prototype.run`. A runner that does not use a `quardRunner()` provider runs as before. So do runs started with the SDK's `run()`, and agent tools with their own `runConfig.modelProvider`.
 - An agent whose `model` is a `Model` object, not a name, skips the wrapped client. Its model calls are not recorded, but its guarded tools still carry the right agent.
 - Inside an agent run as a tool, `onBlock: "throw"` stops that agent's run. The calling agent reads the error as the tool result.
-- The monitor still warns `unwrapped_tool` for handoff and agent tool calls.

@@ -3,6 +3,7 @@ import { currentScope, finishRun, newScope, withScope } from "../../context/scop
 import { unwrapBlocked } from "./blocked.ts";
 import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
 import { carryLabels, notePause, pausedOf, takePaused, type Paused } from "./paused.ts";
+import { noteSdkTools } from "./sdk-tools.ts";
 
 type Run = (this: Runner, agent: Agent, input: unknown, options?: unknown) => Promise<unknown>;
 
@@ -20,11 +21,12 @@ export function followProvider(provider: object): void {
 // the run it stopped in. The run ends with the result, or for a stream,
 // when the stream completes. A run stopped for the SDK's approval does
 // not end until a resumed run does.
-function startRun<T>(agent: string, paused: Paused | undefined, call: () => Promise<T>): Promise<T> {
+function startRun<T>(agent: Agent, paused: Paused | undefined, call: () => Promise<T>): Promise<T> {
     const back = takePaused(paused);
-    const root = back?.root ?? newScope({ agent });
-    const frame = topFrame(back?.frame ?? root, agent);
+    const root = back?.root ?? newScope({ agent: agent.name });
+    const frame = topFrame(back?.frame ?? root, agent.name);
     carryLabels(paused, root.run);
+    noteSdkTools(root.run, agent);
     return new Promise<T>((resolve, reject) => {
         const follow = async () => {
             const result = await withScope(frame, () => unwrapBlocked(call()));
@@ -50,14 +52,15 @@ function startRun<T>(agent: string, paused: Paused | undefined, call: () => Prom
     });
 }
 
-function inFrame<T>(agent: string, input: unknown, call: () => Promise<T>): Promise<T> {
+function inFrame<T>(agent: Agent, input: unknown, call: () => Promise<T>): Promise<T> {
     const parent = currentScope();
     const paused = pausedOf(input);
     if (parent === undefined) {
         return startRun(agent, paused, call);
     }
-    const frame = isFrame(parent) ? toolFrame(parent, agent) : topFrame(parent, agent);
+    const frame = isFrame(parent) ? toolFrame(parent, agent.name) : topFrame(parent, agent.name);
     carryLabels(paused, frame.run);
+    noteSdkTools(frame.run, agent);
     return withScope(frame, () => unwrapBlocked(call()));
 }
 
@@ -72,6 +75,7 @@ function watch(runner: Runner): void {
         const current = currentScope();
         if (current !== undefined && isFrame(current)) {
             handOff(current, to.name);
+            noteSdkTools(current.run, to);
         }
     });
     runner.on("agent_tool_start", (_context, _agent, _tool, { toolCall }) => {
@@ -80,8 +84,8 @@ function watch(runner: Runner): void {
 }
 
 // A resumed run goes on with the agent it stopped at
-function startingAgent(agent: Agent, input: unknown): string {
-    return input instanceof RunState ? input._currentAgent.name : agent.name;
+function startingAgent(agent: Agent, input: unknown): Agent {
+    return input instanceof RunState ? input._currentAgent : agent;
 }
 
 // Follows every run() of a Runner that uses a quardRunner() provider.
