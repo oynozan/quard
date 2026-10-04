@@ -3,7 +3,6 @@ import { startTestDb, type TestDb } from "@quard/db/testing";
 import { createRedactor, parseHashKey, type MemoryRecord, type MessageRecord, type ValueRecord } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.ts";
-import { cleanRecord } from "./labels.ts";
 
 const SECRET = "sk-proj-abcdefghijklmnopqrstuvwx";
 const PRINT = "b".repeat(64);
@@ -69,28 +68,6 @@ function post(body: unknown, auth = `Bearer ${key}`, raw = false) {
     });
 }
 
-describe("cleanRecord", () => {
-    it("removes secrets from origins and keeps everything else", () => {
-        const leaky = message({
-            label: { ...message().label, origins: ["user", `web:acme.com/?key=${SECRET}`] },
-            values: [{ ...VALUE, origin: `mcp:crm?token=${SECRET}` }],
-        });
-
-        const clean = cleanRecord(leaky);
-
-        expect(JSON.stringify(clean)).not.toContain(SECRET);
-        expect(clean.label.origins).toEqual(["user", "web:acme.com/?key=sk-proj-…"]);
-        expect(clean.values[0]?.origin).toBe("mcp:crm?token=…");
-        expect({ ...clean, label: leaky.label, values: leaky.values }).toEqual(leaky);
-    });
-
-    it("leaves emails in origins as they are, so receivers can match them", () => {
-        const fromEmail = memory({ label: { ...memory().label, origins: ["email:jane@acme.com"] } });
-
-        expect(cleanRecord(fromEmail)).toEqual(fromEmail);
-    });
-});
-
 describe("POST /v1/labels", () => {
     it("stores records before it answers, so a lookup finds them at once", async () => {
         const sent = message();
@@ -111,6 +88,47 @@ describe("POST /v1/labels", () => {
 
         const found = await findMessageRecord(test.db, projectId, leaky.ref);
         expect(found?.label.origins).toEqual(["web:acme.com/?key=sk-proj-…"]);
+    });
+
+    it("stores records with emails, IBANs and cards masked and secrets removed from every name", async () => {
+        const print = "d".repeat(64);
+        const origins = [
+            "email:jane.doe@acme.com",
+            "web:https://x.io/?iban=DE89370400440532013000",
+            "web:https://x.io/?card=4111111111111111",
+        ];
+        const values = [
+            { ...VALUE, origin: `mcp:crm?token=${SECRET}`, flags: [`token=${SECRET}`, "jane.doe@acme.com"] },
+        ];
+        const leaky = message({
+            sender: `agent-${SECRET}`,
+            label: { ...message().label, origins },
+            values,
+            tools: [`pay-${SECRET}`],
+        });
+        const written = memory({
+            print,
+            store: `notes-${SECRET}`,
+            agent: "billing jane.doe@acme.com",
+            label: { ...memory().label, origins },
+            values,
+        });
+
+        expect((await post({ records: [leaky, written] })).status).toBe(201);
+
+        const found = [
+            await findMessageRecord(test.db, projectId, leaky.ref),
+            ...(await findMemoryRecords(test.db, projectId, print)),
+        ];
+        const text = JSON.stringify(found);
+        for (const raw of [SECRET, "jane.doe", "DE89370400440532013000", "4111111111111111"]) {
+            expect(text).not.toContain(raw);
+        }
+        const masked = ["email:j…@acme.com", "web:https://x.io/?iban=DE89…3000", "web:https://x.io/?card=4111…1111"];
+        expect(found.map((record) => record?.label.origins)).toEqual([masked, masked]);
+        expect(found[0]).toMatchObject({ sender: "agent-sk-proj-…", tools: ["pay-sk-proj-…"] });
+        expect(found[1]).toMatchObject({ store: "notes-sk-proj-…", agent: "billing j…@acme.com" });
+        expect(found[1]?.values[0]).toMatchObject({ origin: "mcp:crm?token=…", flags: ["token=…", "j…@acme.com"] });
     });
 
     it("stores a resent message once", async () => {

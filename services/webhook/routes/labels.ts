@@ -1,23 +1,13 @@
 import { storeLabelRecords, type Db } from "@quard/db";
-import { LABELS_PATH, labelUpload, removeSecrets, type LabelRecord } from "@quard/shared";
+import { LABELS_PATH, labelUpload, redactRecord, type Redactor } from "@quard/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { issuesOf, projectFor, readJson } from "../http/request.ts";
 
-export type LabelDeps = { db: Db };
+export type LabelDeps = { db: Db; redactor: Redactor };
 
 // Label records are small, so an upload fits well inside this
 const MAX_BODY = 1024 * 1024;
-
-// Secrets are removed again here, so an old or broken SDK never stores
-// one. Origins keep the rest as it is: receivers match them exactly.
-export function cleanRecord(record: LabelRecord): LabelRecord {
-    return {
-        ...record,
-        label: { ...record.label, origins: record.label.origins.map(removeSecrets) },
-        values: record.values.map((value) => ({ ...value, origin: removeSecrets(value.origin) })),
-    };
-}
 
 // Label records another process may read right away. Answers only once
 // they are stored. Agent keys only.
@@ -34,7 +24,9 @@ export function labelRoutes(deps: LabelDeps): Hono {
             if (!upload.success) {
                 return c.json({ error: "invalid_labels", issues: issuesOf(upload.error) }, 400);
             }
-            const stored = await storeLabelRecords(deps.db, projectId, upload.data.records.map(cleanRecord));
+            // Redacted again here, as the SDK does, so an old or broken SDK never stores a raw value
+            const records = upload.data.records.map((record) => redactRecord(record, deps.redactor));
+            const stored = await storeLabelRecords(deps.db, projectId, records);
             return c.json({ stored }, 201);
         },
     );
