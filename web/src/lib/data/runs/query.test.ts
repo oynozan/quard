@@ -4,6 +4,7 @@ import { addWaiter, createProject, ingestBatch, openApprovalRequest } from "@qua
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ASKED_STEP, askInput, waitingRun } from "../../../../test/approvals-overview/live";
+import { addPayment } from "../../../../test/payments/rows";
 import { at, attack, item, scoredFetch, signatureMatch } from "../../../../test/runs/events";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
@@ -100,6 +101,29 @@ describe("runs from Postgres", () => {
             name: "PROMPT-INJECTION-1",
             status: "blocked",
         });
+    });
+
+    it("shows a run's x402 payment steps and spend", async () => {
+        const projectId = await createProject(test.db, "Paid");
+        vi.stubEnv("QUARD_PROJECT_ID", projectId);
+        await ingestBatch(test.db, projectId, attack(RUN, "billing"));
+        const at = Date.UTC(2026, 9, 3, 12, 0, 5);
+        await addPayment(test.db, projectId, RUN, at, { stage: "challenged" });
+        await addPayment(test.db, projectId, RUN, at + 1000, { txHash: "0xabc", delivered: false });
+        await test.db
+            .updateTable("runs")
+            .set({ spend_usd: 0.01, spend_known: false })
+            .where("project_id", "=", projectId)
+            .execute();
+
+        const [row] = await listRuns();
+        const run = await getRun(RUN);
+        vi.stubEnv("QUARD_PROJECT_ID", "");
+        expect(row).toMatchObject({ spendUsd: 0.01, spendKnown: false });
+        expect(run?.summary).toMatchObject({ spendUsd: 0.01, spendKnown: false });
+        expect(run?.payments).toMatchObject([
+            { stage: "settled", startedAt: at, at: at + 1000, txHash: "0xabc", delivered: false, amount: "10000" },
+        ]);
     });
 
     it("says which decisions came late and keeps a detector's score", async () => {

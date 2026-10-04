@@ -70,6 +70,8 @@ export function storedRun(): RunDetail {
         blocked: 1,
         costUsd: 0.0062,
         costKnown: false,
+        spendUsd: 0,
+        spendKnown: true,
         influenced: true,
         flagged: true,
         degraded: false,

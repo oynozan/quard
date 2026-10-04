@@ -1,3 +1,4 @@
+import type { Payment } from "../payments/types";
 import type { DecisionGuard, GuardMode, Label, Outcome, RunStatus, RunSummary, StepKind, ValueLabel } from "../types";
 
 // The run limits PROJECT.md names
@@ -166,6 +167,8 @@ export type RunDetail = {
     // Time ordered.
     steps: Step[];
     limits: RunLimitUse[];
+    // x402 payment steps, oldest first
+    payments: Payment[];
 };
 
 export type RunQuery = {

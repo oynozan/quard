@@ -31,6 +31,8 @@ function item(fields: Partial<RunListItem> = {}): RunListItem {
         blocked: 1,
         costUsd: 0.0031,
         costKnown: true,
+        spendUsd: 0,
+        spendKnown: true,
         influenced: true,
         flagged: true,
         degraded: false,
@@ -44,7 +46,7 @@ function item(fields: Partial<RunListItem> = {}): RunListItem {
 
 describe("runRowOf", () => {
     it("turns a stored list row into the runs list's row", () => {
-        expect(runRowOf(item(), LATER)).toEqual({
+        expect(runRowOf(item({ spendUsd: 0.25, spendKnown: false }), LATER)).toEqual({
             id: RUN,
             rootAgent: "billing",
             agents: ["billing"],
@@ -54,6 +56,8 @@ describe("runRowOf", () => {
             steps: 8,
             costUsd: 0.0031,
             costKnown: true,
+            spendUsd: 0.25,
+            spendKnown: false,
             decisions: { allowed: 2, asked: 0, blocked: 1 },
             untrusted: true,
             tools: ["fetchPage", "payInvoice"],

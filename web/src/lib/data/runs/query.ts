@@ -1,4 +1,4 @@
-import { getRun as storedRun, incidentsForRuns, listRuns as storedRuns, runWaiters } from "@quard/db";
+import { getRun as storedRun, incidentsForRuns, listRuns as storedRuns, runPayments, runWaiters } from "@quard/db";
 import { APPROVAL_STALE_MS } from "@quard/shared";
 import { projectScope } from "../scope";
 import { runDetailOf } from "./live/detail";
@@ -39,12 +39,13 @@ export async function getRun(runId: string): Promise<RunDetail | null> {
     const scope = await projectScope();
     if (!scope) return null;
     const { db, project } = scope;
-    const [run, incidents, waiters] = await Promise.all([
+    const [run, incidents, waiters, payments] = await Promise.all([
         storedRun(db, project.id, runId),
         incidentsForRuns(db, project.id, [runId]),
         runWaiters(db, project.id, [runId]),
+        runPayments(db, project.id, runId),
     ]);
     if (!run) return null;
-    const detail = runDetailOf(run, Date.now(), waiters);
+    const detail = runDetailOf(run, Date.now(), waiters, payments);
     return { ...detail, summary: { ...detail.summary, incidentId: incidents[0]?.id ?? null } };
 }

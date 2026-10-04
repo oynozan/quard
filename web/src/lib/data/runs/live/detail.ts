@@ -1,4 +1,5 @@
-import type { RunDetail as StoredRun, RunListItem, RunWaiter } from "@quard/db";
+import type { PaymentRow, RunDetail as StoredRun, RunListItem, RunWaiter } from "@quard/db";
+import { paymentsOf } from "../../payments/run";
 import { stillWaits } from "../../approvals/live/heartbeat";
 import type { ModelUsage, RunAgent, RunDetail, RunRow, Step } from "../types";
 import { decisionCounts, statusOf } from "./status";
@@ -77,6 +78,8 @@ export function runRowOf(run: RunListItem, now: number, waiters: RunWaiter[] = [
         steps: run.modelCalls + run.toolCalls + allowed + asked + blocked + live.length,
         costUsd: run.costUsd,
         costKnown: run.costKnown,
+        spendUsd: run.spendUsd,
+        spendKnown: run.spendKnown,
         decisions: run.decisions,
         untrusted: run.influenced,
         tools: run.tools,
@@ -85,7 +88,12 @@ export function runRowOf(run: RunListItem, now: number, waiters: RunWaiter[] = [
     };
 }
 
-export function runDetailOf(run: StoredRun, now: number, waiters: RunWaiter[] = []): RunDetail {
+export function runDetailOf(
+    run: StoredRun,
+    now: number,
+    waiters: RunWaiter[] = [],
+    payments: PaymentRow[] = [],
+): RunDetail {
     const { live, approvalId } = waitingOf(waiters, now);
     const steps = buildSteps(run, live, now);
     const agents = agentsOf(run.agent, steps);
@@ -109,11 +117,20 @@ export function runDetailOf(run: StoredRun, now: number, waiters: RunWaiter[] = 
         steps: steps.length,
         costUsd: run.costUsd,
         costKnown: run.costKnown,
+        spendUsd: run.spendUsd,
+        spendKnown: run.spendKnown,
         decisions: decisionCounts(steps),
         untrusted: steps.some((step) => step.context.trust === "untrusted"),
         tools: [...new Set(run.steps.filter((step) => step.kind === "tool_call").map((step) => step.name))],
         incidentId: null,
         approvalId,
     };
-    return { summary, agents, graph: { nodes: agents, edges: [] }, steps, limits: [] };
+    return {
+        summary,
+        agents,
+        graph: { nodes: agents, edges: [] },
+        steps,
+        limits: [],
+        payments: paymentsOf(payments),
+    };
 }

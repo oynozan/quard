@@ -41,6 +41,10 @@ export type RunSummary = {
     costUsd: number;
     // False when a model's price is unknown; the cost then shows as "—"
     costKnown?: boolean;
+    // Settled x402 spend; absent means none
+    spendUsd?: number;
+    // False when a settled token has no known USD value
+    spendKnown?: boolean;
     decisions: DecisionCounts;
     untrusted: boolean;
 };
