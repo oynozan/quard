@@ -74,11 +74,14 @@ function addContent(
 
 // Values the item's records vouch for come in first with their stored
 // labels, so a web-derived IBAN stays web-derived here. Then the item.
-// In a trusted item, values no record vouched for stay model-generated.
+// In a trusted item, values no record vouched for stay model-generated,
+// here and in any trusted tool output that holds them later.
 function indexItem(scope: Scope, stepId: string, text: string, label: Label, labels: MemoryLabels | undefined): void {
     const stored = new Map(labels?.values.map((value) => [value.hash, value]));
     const vouched = (found: ExtractedValue) => stored.has(localHash(found.type, found.value));
-    const exclude = label.trust === "trusted" ? new Set(unvouchedKeys(text, vouched)) : undefined;
+    if (label.trust === "trusted") {
+        scope.run.index.markMadeUp(unvouchedKeys(text, vouched));
+    }
     for (const { type, value } of extractValues(text)) {
         const found = stored.get(localHash(type, value));
         if (found !== undefined) {
@@ -87,10 +90,10 @@ function indexItem(scope: Scope, stepId: string, text: string, label: Label, lab
             const exclude = new Set(extractValues(value).flatMap((other) => other.keys.filter((k) => k !== key)));
             const { origin, trust, sensitivity, flags } = found;
             const own = { origin, kind: originKind(origin), trust, sensitivity, flags };
-            addContent(scope, stepId, value, own, { exclude, keepEarlier: true }, true);
+            addContent(scope, stepId, value, own, { exclude, keepEarlier: true, vouched: true }, true);
         }
     }
-    addContent(scope, stepId, text, label, { exclude, keepEarlier: true });
+    addContent(scope, stepId, text, label, { keepEarlier: true });
 }
 
 // Reads, then labels each item and adds it to the run's content index.

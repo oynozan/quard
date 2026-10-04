@@ -209,6 +209,27 @@ describe("readThrough", () => {
         expect(origins(`iban:${IBAN}`)).toEqual([]);
     });
 
+    it("keeps the values a trusted item's records did not vouch for out of later tool output", async () => {
+        keepLabels(printOf(NOTE), labels("trusted"));
+        const scope = newScope();
+
+        await readThrough(scope, "notes", false, async () => NOTE);
+        scope.run.index.add(`key: n\nnote: ${NOTE}`, labelFor("tool:readNote"), STEP);
+
+        expect(scope.run.index.lookup([`iban:${IBAN}`])).toEqual([]);
+    });
+
+    it("lets an item's records vouch for a value marked made up before", async () => {
+        const crm = { ...webIban(), origin: "tool:crm", trust: "trusted" as const };
+        keepLabels(printOf(NOTE), labels("trusted", [crm]));
+        const scope = newScope();
+        scope.run.index.markMadeUp([`iban:${IBAN}`]);
+
+        await readThrough(scope, "notes", false, async () => NOTE);
+
+        expect(originOf(scope, IBAN)).toBe("tool:crm");
+    });
+
     it("indexes the values an untrusted item's records did not vouch for under its label", async () => {
         keepLabels(printOf(NOTE), labels("untrusted"));
         const scope = newScope();
