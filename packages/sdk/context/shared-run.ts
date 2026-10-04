@@ -13,7 +13,5 @@ export function startSharing(run: RunState): void {
     if (control === undefined || !isRunId(run.runId) || !markShared(run)) {
         return;
     }
-    for (const { counter, add } of runTotals(run)) {
-        control.runs.send({ run, counter, add });
-    }
+    control.runs.send(run, runTotals(run));
 }

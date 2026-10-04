@@ -22,8 +22,7 @@ const runCount = (id: string, counter = "steps"): RunCountMessage => ({
     type: "run_count",
     id,
     runId: "b".repeat(32),
-    counter,
-    add: 1,
+    counts: [{ counter, add: 1 }],
 });
 
 function setup() {
@@ -57,19 +56,13 @@ describe("requests to control", () => {
     it("matches the answer to a run count the same way", async () => {
         const { fake, requests } = setup();
         const socket = fake.connect();
-        const runCount: RunCountMessage = {
-            type: "run_count",
-            id: ID,
-            runId: "d".repeat(32),
-            counter: "steps",
-            add: 1,
-        };
+        const message = runCount(ID);
 
-        const reply = requests.request(runCount, { ms: 5000 });
-        expect(socket.sent.at(-1)).toEqual(runCount);
-        socket.reply({ type: "counted", id: ID, ok: true, used: 12 });
+        const reply = requests.request(message, { ms: 5000 });
+        expect(socket.sent.at(-1)).toEqual(message);
+        socket.reply({ type: "run_counted", id: ID, ok: true, used: [12] });
 
-        expect(await reply).toEqual({ type: "counted", id: ID, ok: true, used: 12 });
+        expect(await reply).toEqual({ type: "run_counted", id: ID, ok: true, used: [12] });
     });
 
     it("answers undefined at once when control is away", async () => {
@@ -164,10 +157,10 @@ describe("requests to control", () => {
         const found = requests.request(lookup(ID), { ms: 5000 });
         const counted = requests.request(runCount("2".repeat(16)), { ms: 5000 });
         socket.reply(records);
-        socket.reply({ type: "counted", id: "2".repeat(16), ok: true, used: 4 });
+        socket.reply({ type: "run_counted", id: "2".repeat(16), ok: true, used: [4] });
 
         expect(await found).toEqual(records);
-        expect(await counted).toMatchObject({ type: "counted", used: 4 });
+        expect(await counted).toMatchObject({ type: "run_counted", used: [4] });
         expect(socket.sent.map((message) => message.type)).toEqual(["hello", "lookup", "run_count"]);
     });
 

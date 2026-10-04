@@ -71,6 +71,15 @@ export function noteRunUsed(run: RunState, counter: string, used: number): void 
     setUsed(run, counter, Math.max(runUsed(run, counter), used));
 }
 
+// Control's totals, one for each counter in the order they were sent
+export function noteRunTotals(
+    run: RunState,
+    counts: ReadonlyArray<{ counter: string }>,
+    used: readonly number[],
+): void {
+    counts.forEach(({ counter }, index) => noteRunUsed(run, counter, used[index] as number));
+}
+
 export function addRunUsed(run: RunState, counter: string, add: number): void {
     setUsed(run, counter, runUsed(run, counter) + add);
 }

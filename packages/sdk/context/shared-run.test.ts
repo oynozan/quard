@@ -18,7 +18,9 @@ function linked() {
 }
 
 const runCounts = (socket: FakeSocket) =>
-    sentOf(socket, "run_count").map(({ runId, counter, add, max }) => ({ runId, counter, add, max }));
+    sentOf(socket, "run_count").flatMap(({ runId, counts }) =>
+        counts.map(({ counter, add, max }) => ({ runId, counter, add, max })),
+    );
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -43,6 +45,7 @@ describe("startSharing", () => {
         startSharing(run);
 
         expect(isShared(run)).toBe(true);
+        expect(sentOf(socket, "run_count")).toHaveLength(1);
         expect(runCounts(socket)).toEqual([
             { runId: run.runId, counter: "steps", add: 3, max: undefined },
             { runId: run.runId, counter: "cost", add: 0.75, max: undefined },

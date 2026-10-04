@@ -14,8 +14,14 @@ function setup() {
     return { fake, control };
 }
 
+// Each count sent, flattened, with the run it is for
 const runCounts = (socket: FakeSocket) =>
-    sentOf(socket, "run_count").map(({ runId, counter, add, max }) => ({ runId, counter, add, max }));
+    sentOf(socket, "run_count").flatMap(({ runId, counts }) =>
+        counts.map(({ counter, add, max }) => ({ runId, counter, add, max })),
+    );
+
+const counted = (id: string | undefined, ok: boolean, used: number[]) =>
+    ({ type: "run_counted", id: id as string, ok, used }) as const;
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
 
@@ -62,7 +68,7 @@ describe("addToRun without control", () => {
 });
 
 describe("addToRun through control", () => {
-    it("sends the cap and takes control's total", async () => {
+    it("sends all of a call's counts in one message with their caps, and takes control's totals", async () => {
         const { fake, control } = setup();
         const socket = fake.connect();
         const run = newRun();
@@ -71,16 +77,57 @@ describe("addToRun through control", () => {
             { counter: "steps", add: 1, max: 200 },
             { counter: "calls:pay", add: 1, max: undefined },
         ]);
-        const [steps, calls] = sentOf(socket, "run_count");
-        expect(runCounts(socket)).toEqual([
-            { runId: run.runId, counter: "steps", add: 1, max: 200 },
-            { runId: run.runId, counter: "calls:pay", add: 1, max: undefined },
+        const [sent] = sentOf(socket, "run_count");
+        expect(sent?.counts).toEqual([
+            { counter: "steps", add: 1, max: 200 },
+            { counter: "calls:pay", add: 1 },
         ]);
-        socket.reply({ type: "counted", id: steps?.id as string, ok: true, used: 12 });
-        socket.reply({ type: "counted", id: calls?.id as string, ok: false, used: 4 });
+        socket.reply(counted(sent?.id, true, [12, 4]));
 
-        expect(await added).toEqual([12, 5]);
+        expect(await added).toEqual([12, 4]);
         expect([run.modelCalls, run.counters.get("calls:pay")]).toEqual([12, 4]);
+    });
+
+    it("adds this call to none of the totals when control refuses it", async () => {
+        const { fake, control } = setup();
+        const socket = fake.connect();
+        const run = newRun();
+
+        const added = addToRun(control, run, [
+            { counter: "calls:pay", add: 1, max: 5 },
+            { counter: "amount:pay:amount", add: 200, max: 1000 },
+        ]);
+        const [sent] = sentOf(socket, "run_count");
+        socket.reply(counted(sent?.id, false, [1, 900]));
+
+        expect(await added).toEqual([2, 1100]);
+        expect([run.counters.get("calls:pay"), run.counters.get("amount:pay:amount")]).toEqual([1, 900]);
+        expect(runCounts(await reconnect(fake))).toEqual([]);
+    });
+
+    it("counts here a call with more counts than one message takes", async () => {
+        const { fake, control } = setup();
+        const socket = fake.connect();
+        const run = newRun();
+        const adds = Array.from({ length: 21 }, (_, n) => ({ counter: `calls:t${n}`, add: 1, max: undefined }));
+
+        expect(await addToRun(control, run, adds)).toEqual(adds.map(() => 1));
+
+        expect(runCounts(socket)).toEqual([]);
+        expect(runCounts(await reconnect(fake))).toEqual([]);
+    });
+
+    it("counts here when control's answer has the wrong number of totals", async () => {
+        const { fake, control } = setup();
+        const socket = fake.connect();
+        const run = newRun();
+
+        const added = addToRun(control, run, [{ counter: "steps", add: 1, max: 5 }]);
+        const [sent] = sentOf(socket, "run_count");
+        socket.reply(counted(sent?.id, true, [3, 4]));
+
+        expect(await added).toEqual([1]);
+        expect(run.modelCalls).toBe(1);
     });
 
     it("counts here while control is away, and sends the count without a cap once it is back", async () => {
@@ -115,7 +162,7 @@ describe("addToRun through control", () => {
         vi.advanceTimersByTime(5000);
         expect(await added).toEqual([1]);
         const [late] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: late?.id as string, ok: true, used: 3 });
+        socket.reply(counted(late?.id, true, [3]));
 
         expect(run.modelCalls).toBe(3);
         expect(runCounts(await reconnect(fake))).toEqual([]);
@@ -130,7 +177,7 @@ describe("addToRun through control", () => {
         vi.advanceTimersByTime(5000);
         await added;
         const [late] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: late?.id as string, ok: false, used: 5 });
+        socket.reply(counted(late?.id, false, [5]));
 
         expect(run.modelCalls).toBe(5);
         expect(runCounts(await reconnect(fake)).map((count) => count.add)).toEqual([1]);
@@ -158,7 +205,7 @@ describe("addToRun through control", () => {
         vi.advanceTimersByTime(5000);
         expect(await added).toEqual([6]);
         const [late] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: late?.id as string, ok: true, used: 6 });
+        socket.reply(counted(late?.id, true, [6]));
 
         expect(run.modelCalls).toBe(6);
         expect(runCounts(await reconnect(fake))).toEqual([]);
@@ -183,12 +230,12 @@ describe("readCost", () => {
 
         const higher = readCost(control, run);
         const [first] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: first?.id as string, ok: true, used: 4.5 });
+        socket.reply(counted(first?.id, true, [4.5]));
         expect(await higher).toBe(4.5);
 
         const lower = readCost(control, run);
         const [, second] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: second?.id as string, ok: true, used: 1 });
+        socket.reply(counted(second?.id, true, [1]));
         expect(await lower).toBe(4.5);
 
         expect(runCounts(socket)).toEqual([
@@ -207,7 +254,7 @@ describe("readCost", () => {
         vi.advanceTimersByTime(5000);
         expect(await read).toBe(0.5);
         const [late] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: late?.id as string, ok: true, used: 6 });
+        socket.reply(counted(late?.id, true, [6]));
 
         expect(run.costUsd).toBe(6);
     });

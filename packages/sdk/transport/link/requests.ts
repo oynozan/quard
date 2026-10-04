@@ -4,7 +4,9 @@ import type { Link } from "./link.ts";
 // What the SDK asks control, each answered with the request's id
 export type Request = CountMessage | RunCountMessage | FleetMessage | LookupMessage;
 
-export type Reply = Extract<ServerMessage, { type: "counted" | "fleet_result" | "labels" }>;
+export type Reply = Extract<ServerMessage, { type: "counted" | "run_counted" | "fleet_result" | "labels" }>;
+
+const REPLIES = new Set<ServerMessage["type"]>(["counted", "run_counted", "fleet_result", "labels"]);
 
 export type RequestOptions = {
     ms: number;
@@ -25,7 +27,7 @@ export type Requests = {
 const MAX_LATE = 1000;
 
 function isReply(message: ServerMessage): message is Reply {
-    return message.type === "counted" || message.type === "fleet_result" || message.type === "labels";
+    return REPLIES.has(message.type);
 }
 
 // Matches control's answers to the requests sent, by id

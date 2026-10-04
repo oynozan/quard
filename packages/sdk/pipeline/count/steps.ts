@@ -27,6 +27,6 @@ export async function countSharedModelCall(call: ModelCall): Promise<GuardRefusa
 export function addCost(run: RunState, model: string, usage: TokenUsage | undefined): void {
     const cost = addModelCost(run, model, usage);
     if (cost > 0 && Number.isFinite(cost) && isShared(run)) {
-        activeControl()?.runs.send({ run, counter: "cost", add: cost });
+        activeControl()?.runs.send(run, [{ counter: "cost", add: cost }]);
     }
 }

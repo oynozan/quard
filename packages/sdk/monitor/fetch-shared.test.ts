@@ -6,6 +6,7 @@ import { markShared } from "../guards/limit/run-counts.ts";
 import { fakeResponses } from "../test/fake-responses.ts";
 import { fakeSockets, sentOf, type FakeSocket } from "../test/fake-socket.ts";
 import { resetAll } from "../test/reset.ts";
+import { countRun } from "../test/run-counts.ts";
 import { setActiveControl } from "../transport/link/active.ts";
 import { createControl, type Control } from "../transport/link/control.ts";
 import { createMonitorFetch } from "./fetch.ts";
@@ -39,12 +40,7 @@ function answerCounts(socket: FakeSocket, totals: Map<string, number>): void {
                 continue;
             }
             answered.add(count.id);
-            const used = (totals.get(count.counter) ?? 0) + count.add;
-            const ok = count.max === undefined || used <= count.max;
-            if (ok) {
-                totals.set(count.counter, used);
-            }
-            socket.reply({ type: "counted", id: count.id, ok, used: ok ? used : (totals.get(count.counter) ?? 0) });
+            socket.reply(countRun(totals, count));
         }
     };
     const send = socket.send.bind(socket);
@@ -75,7 +71,11 @@ describe("model calls of a run that spans processes", () => {
 
         expect(refused.status).toBe(403);
         expect(fake.bodies).toHaveLength(1);
-        expect(sentOf(socket, "run_count").map(({ counter, add, max }) => [counter, add, max])).toEqual([
+        expect(
+            sentOf(socket, "run_count").flatMap(({ counts }) =>
+                counts.map(({ counter, add, max }) => [counter, add, max]),
+            ),
+        ).toEqual([
             ["steps", 1, 3],
             ["cost", 0, undefined],
             ["cost", 0.75, undefined],

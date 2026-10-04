@@ -30,7 +30,7 @@ function sharedCall(): ModelCall {
 }
 
 const runCounts = (socket: FakeSocket) =>
-    sentOf(socket, "run_count").map(({ counter, add, max }) => ({ counter, add, max }));
+    sentOf(socket, "run_count").flatMap(({ counts }) => counts.map(({ counter, add, max }) => ({ counter, add, max })));
 
 function rules() {
     return takeEvents().flatMap((event) => (event.type === "decision" ? [[event.rule, event.mode]] : []));
@@ -39,8 +39,8 @@ function rules() {
 // Answers the step count and the cost read, in the order they were sent
 function answer(socket: FakeSocket, steps: { ok: boolean; used: number }, cost: number): void {
     const [step, read] = sentOf(socket, "run_count");
-    socket.reply({ type: "counted", id: step?.id as string, ...steps });
-    socket.reply({ type: "counted", id: read?.id as string, ok: true, used: cost });
+    socket.reply({ type: "run_counted", id: step?.id as string, ok: steps.ok, used: [steps.used] });
+    socket.reply({ type: "run_counted", id: read?.id as string, ok: true, used: [cost] });
 }
 
 beforeEach(() => {
@@ -140,7 +140,7 @@ describe("addCost", () => {
 
         addCost(run, "gpt-5.4-mini", USAGE);
         const [sent] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: sent?.id as string, ok: true, used: 3.75 });
+        socket.reply({ type: "run_counted", id: sent?.id as string, ok: true, used: [3.75] });
         await vi.advanceTimersByTimeAsync(0);
 
         expect(runCounts(socket)).toEqual([{ counter: "cost", add: 0.75, max: undefined }]);

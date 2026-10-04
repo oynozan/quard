@@ -95,15 +95,21 @@ describe("countRuns through control", () => {
         ];
 
         const counted = countRuns(call, list, control, []);
-        const [calls, amount] = sentOf(socket, "run_count");
-        expect([calls, amount].map((sent) => [sent?.runId, sent?.counter, sent?.add, sent?.max])).toEqual([
-            [call.runId, "calls:payInvoice", 1, 1],
-            [call.runId, "amount:payInvoice:amount", 80, 100],
+        const sent = sentOf(socket, "run_count");
+        expect(sent.map(({ runId, counts }) => ({ runId, counts }))).toEqual([
+            {
+                runId: call.runId,
+                counts: [
+                    { counter: "calls:payInvoice", add: 1, max: 1 },
+                    { counter: "amount:payInvoice:amount", add: 80, max: 100 },
+                ],
+            },
         ]);
-        socket.reply({ type: "counted", id: calls?.id as string, ok: true, used: 1 });
-        socket.reply({ type: "counted", id: amount?.id as string, ok: false, used: 90 });
+        // Control adds neither, since the amount would pass its cap
+        socket.reply({ type: "run_counted", id: sent[0]?.id as string, ok: false, used: [0, 90] });
 
         expect(await counted).toMatchObject({ rule: "max-amount-per-run", mode: "block", reason: "limit_reached" });
+        expect(call.run.counters.get("calls:payInvoice")).toBe(0);
         expect(call.run.counters.get("amount:payInvoice:amount")).toBe(90);
     });
 
@@ -113,9 +119,9 @@ describe("countRuns through control", () => {
 
         const counted = countRuns(makeAskableCall({}), [{ ...CALLS, mode: "observe" }], control, []);
         const [count] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: 2 });
+        socket.reply({ type: "run_counted", id: count?.id as string, ok: true, used: [2] });
 
-        expect(count?.max).toBeUndefined();
+        expect(count?.counts).toEqual([{ counter: "calls:payInvoice", add: 1 }]);
         expect(await counted).toBeUndefined();
         expect(decisionsOf(takeEvents())).toMatchObject([{ rule: "max-calls-per-run", mode: "observe" }]);
     });
