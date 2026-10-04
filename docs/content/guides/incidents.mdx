@@ -1,6 +1,8 @@
 # Incidents
 
-When a guard blocks or flags something harmful, Quard opens an incident. The incident page shows the path from where untrusted content came in to where the harm was done or stopped, a verdict, and a replay that tests the cause.
+When a guard blocks a tool call, or would have blocked it in observe mode, Quard opens an incident for that run. A run has at most one incident. The incident page shows the path from where untrusted content came in to where the harm was done or stopped, a verdict, and a replay that tests the cause.
+
+Quard finds the verdict and writes the AI explanation on its own, in the background. Replay runs only when you start it.
 
 Until Quard opens its first incident, the list stays in place and reads **No incidents yet**.
 
@@ -21,20 +23,55 @@ Until Quard opens its first incident, the list stays in place and reads **No inc
 | Broken tool   | A tool returned wrong data                                                            |
 | Missing guard | No guard was in place to stop the harmful call                                        |
 
+A bad handoff needs the messages between agents, which Quard does not record yet, so no incident is filed as one today.
+
 ## Incident page
 
 ![An incident](/images/guides/incident.webp)
 
-1. **Incident.** What happened, when the incident opened and the status of its run. **Open run** opens the full run.
+1. **Incident.** What happened, when the incident opened and the status of its run. **Open run** opens the full run. The replay button starts [replay](#replay).
 2. **Path from entry point to damage.** Every step from where untrusted content came in to the harmful call, read left to right. **Entry point** is where untrusted content came in. **Handoff** is where it passed to another agent. **Turning point** is the model call that decided to act on it. **Damage** is the harmful call. Each step shows its agent and origin.
-3. **Replay results.** Replay reruns the turning-point model call in rounds of 5 with the suspect content and 5 without it, up to 20 each. It never runs real tools. The line at the top says where the replay stands. Each round shows how many reruns were harmful on each side and the p value so far. The cost covers every model call made for this incident, up to a $5 cap. **Setup** names the model, the call that counts as harmful and the content left out. **Table** lists each round with its cost.
+3. **Replay results.** Replay reruns the turning-point model call in rounds of 5 with the suspect content and 5 without it, up to 20 each. The line at the top says where the replay stands. Each round shows how many reruns were harmful on each side and the p value so far. The cost covers every model call made for this incident, up to a $5 cap. **Setup** names the model, the call that counts as harmful and the content left out. **Table** lists each round with its cost.
 4. **Verdict.** The category and the missing guard. **observe only** means the guard exists but only records. For a bad handoff, it also says what went wrong. **Agent versions** lists the version of each agent involved.
-5. **AI explanation.** A short explanation in plain words, written by an AI using your own provider key. It only explains: the verdict comes from labels, value tracing and replay.
+5. **AI explanation.** A short explanation in plain words, written by an AI using your own OpenAI key. It only explains: the verdict comes from labels, value tracing and replay.
 
-Replay stops as soon as the answer is clear:
+Right after an incident opens, Quard is still finding its verdict, and the page says so. If the blocked call's events never reach Quard, it stops after 5 minutes and the page says the verdict could not be found.
 
-- **Confirmed**: harm is clearly more common with the suspect content than without it.
-- **Not confirmed**: even if every remaining rerun went the right way, the test could not pass.
-- **Could not reproduce**: none of the first 10 reruns with the content was harmful.
+## Replay
+
+Replay tests whether the suspect content caused the harm. It reruns the turning-point model call with the content and without it, and counts how often the model asks for the same harmful call. It never runs real tools: each rerun only reads which tool call the model asks for.
+
+- **Start it.** Click the replay button at the top of the incident page. Replay then runs in rounds until the answer is clear or the cost cap is reached. The page updates while it runs.
+- **Cost cap.** Every model call made for an incident counts toward a $5 cap, the AI explanation included. Replay stops before a round would pass it. The button then offers **Continue with $5 more**, which keeps the rounds so far.
+- **Button turned off.** While replay runs, and once the answer is clear, the button is turned off. Hover it to see why.
+- **Your key.** Replay and the AI explanation use the OpenAI key set on the worker as `OPENAI_API_KEY`. Without it, there is no explanation, and replay fails and says so.
+
+| Status              | What it means                                                                |
+| ------------------- | ---------------------------------------------------------------------------- |
+| Not started         | No one has started replay yet                                                |
+| Replaying           | Replay is running                                                            |
+| Confirmed           | Harm is clearly more common with the suspect content than without it         |
+| Not confirmed       | Even if every remaining rerun went the right way, the test could not pass    |
+| Could not reproduce | None of the first 10 reruns with the content was harmful                     |
+| Cap reached         | Replay stopped at the cost cap. **Continue with $5 more** goes on from there |
+| Limited             | Replay can't run for this incident. The page says why                        |
+| Failed              | Replay hit an error, such as a missing key. Fix it, then start replay again  |
 
 Replay cannot show a cause that triggers harm only rarely, that the removed content was the only cause, or how a different model version would behave.
+
+### How replay rebuilds the call
+
+Replay needs the turning-point request as your agent sent it. While the SDK uploads events to Quard, it records the request of each model call, redacted like every event.
+
+- A request that continues an earlier response with `previous_response_id` is rebuilt from the requests recorded before it.
+- Masked values, such as IBANs and emails, are replaced with stand-ins in the same format, built from the stored hash. An IBAN stand-in has a valid checksum, and an email keeps its domain.
+- The side without the suspect content keeps the tool call but replaces its result with `[Removed for replay]`.
+- Hosted web search is left out of the rerun.
+
+### When replay is limited
+
+Replay is **limited**, and does not run, when:
+
+- **The request was not recorded.** Uploads were off, or the request was larger than 512 KiB. Agents that resend the whole history on every call can pass that size in long runs.
+- **Earlier history was not recorded.** The request continues an earlier response that Quard has no request for, or uses a `conversation`.
+- **The suspect content is not a tool result** in the turning-point request, such as text from the user or from a hosted web search.

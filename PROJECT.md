@@ -130,7 +130,7 @@ All **Claude's pick**, except the parts already set up in `web/`.
 - TypeScript 5.9 or 6.x, pinned in each package.json, because npm's `latest` tag is now 7.0. Not 7.0 yet: it has no programmatic API, and typescript-eslint needs one.
 - Hono for `webhook` and `control`.
 - Postgres 18 as the only database. Plain SQL migrations in `db/migrations`. Kysely for typed queries.
-- pg-boss for the job queue, on the same Postgres.
+- The job queue is a Postgres table on the same Postgres, with no queue library. See [Services](#services).
 - Zod for schemas, shared through `packages/shared`.
 - Vitest for tests. Coverage must be 100% for lines, branches, functions and statements in every package, every service and `web/`. CI fails below that.
 - tsdown to build the SDK.
@@ -533,8 +533,16 @@ Decided by the spec, Q16 and Q17.
 - Labels show at once whether untrusted content shaped a harmful action. Value tracing finds where each value in that action first appeared.
 - The **verdict** names the entry point, the turning point, the damage and the missing guard. It is filed as bad input, bad reasoning, bad handoff, broken tool or missing guard.
 - Across agents, the verdict names more. It names the entry agent and the handoff that carried the untrusted content. It also names the turning-point agent and the agent that did the damage.
-- Bad handoffs are split into three kinds: wrong information sent, a constraint dropped in the message, or a correct message misread.
+- Bad handoffs are split into three kinds: wrong information sent, a constraint dropped in the message, or a correct message misread. The finder can't name one until M4 records the messages between agents.
 - The finder runs in `services/worker`.
+
+### Incidents
+
+Decided on 2026-10-04.
+
+- Quard opens an incident for a run when a guard blocks a tool call, or would have blocked it in observe mode. A run has at most one incident. `webhook` opens it in the same transaction that stores the decision. (**Claude's pick**)
+- The verdict and the AI reviewer's note run on their own when an incident opens. Replay runs only when someone clicks the replay button on the incident page. (**Owner**)
+- When the blocked call's events have not arrived yet, the finder tries again every 5 s. After 5 minutes it stops and says the events never arrived.
 
 ### Replay
 
@@ -546,17 +554,31 @@ Q16, **Claude's pick**. Replay tests the suspect content by rerunning the turnin
     - **not confirmed**: even if every remaining rerun went the right way, the test could not pass by 20 each
     - **could not reproduce**: 0 harmful runs in the first 10 with the content
 - A rerun counts as harmful when the model asks for the same damaging tool call: same tool, same key value after normalizing.
-- The cap is $5 per incident. It covers every model call the finder makes, replay and AI reviewer included. When the cap is hit, the finder reports the counts so far and offers to continue with a higher cap.
+- The cap is $5 per incident. It covers every model call the finder makes, replay and AI reviewer included. Replay stops before a round would pass the cap and reports the counts so far. The replay button then offers to continue with $5 more, and the rounds so far are kept. (**Owner**)
 
 Replay rules:
 
 - Use the exact recorded model and settings.
-- Never run real tools. When the model repeats a recorded tool call, reuse the recorded result.
+- Never run real tools. Each rerun is one model call, and the tool calls it asks for are only read.
 - Resend the full recorded input with `store: false`. Never use `previous_response_id`, which would bring the suspect content back.
 - Hosted MCP tools get `require_approval: "always"` and are never approved. The approval request counts as the model's action.
-- Hosted web search is left out. Content that only came from a hosted search can't be rebuilt, so the verdict says "replay limited: URL-only evidence".
-- Hashed values are replaced with stand-ins in a valid format, built from the hash. An IBAN gets a valid checksum, and an email keeps its domain.
+- Hosted web search tools are left out of the request.
+- Hashed values are replaced with stand-ins in a valid format, built from the stored hash. An IBAN gets a valid checksum, and an email keeps its domain.
+- The "without" side replaces the suspect tool result with `[Removed for replay]`. The tool call itself stays.
 - Warm the prompt cache with one call per side, then send the rest in parallel. Skip batch APIs in v1.
+
+**The recorded request.** A Responses result does not include its input, so the SDK records the request of each model call for replay.
+
+- It is recorded only while uploads to `webhook` are on, and only up to 512 KiB. Agents that resend the whole history on every call pass that size in long runs.
+- Only the fields that shape the answer are kept: the model, instructions, input, tools, tool choice and the sampling and output settings, plus `previous_response_id` and `conversation`. Never `stream`, `store`, `metadata`, `user` or `include`.
+- It is redacted like every event, so secrets are removed and IBANs, cards and emails are masked. Values of fields named like secrets become `…`, and replay repairs tool schemas cut this way.
+- A request chained with `previous_response_id` is rebuilt from the run: the earlier request's full input, the tool calls its response asked for, then this request's input.
+
+**Limited replay.** Replay does not run, and the incident says why, when:
+
+- the turning-point request was not recorded, because uploads were off or it passed 512 KiB
+- earlier history was not recorded: the request chains to a response Quard has no request for, or uses `conversation`
+- the suspect content is not a tool result in the turning-point request, such as content that only came from a hosted web search
 
 What replay can't show:
 
@@ -568,8 +590,9 @@ What replay can't show:
 
 Q17, **Claude's pick**. After an incident, an AI writes a short plain-words explanation of the verdict.
 
-- It uses the team's own provider key, the one their agents already use.
+- It uses the team's own provider key, the one their agents already use, set on the worker as `OPENAI_API_KEY`. Replay uses the same key. Without it, the note is skipped, and replay fails with a message that asks for the key.
 - The default model is `gpt-6.1-sol`, at about $0.10 to $0.20 per explanation.
+- It reads the verdict with IBANs and emails replaced by placeholders, such as `[IBAN 1]`.
 - It only explains. The verdict comes from labels, value tracing and replay.
 
 ## AI inside Quard
@@ -664,7 +687,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 
 ### Storage
 
-- Postgres 18 is the only database. It holds runs, steps, messages, labels, guard decisions, approvals, memory labels, labeled chunks for review, the value index for search and the job queue.
+- Postgres 18 is the only database. It holds runs, steps, messages, labels, guard decisions, approvals, memory labels, labeled chunks for review, the value index for search, and incidents, whose rows are also the job queue.
 - ClickHouse can come later if volume demands it.
 
 ### Retention
@@ -681,6 +704,8 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - IBANs, card numbers and emails become keyed hashes plus a mask, such as `DE89…3000`. The email domain stays visible.
 - The user and password in a URL, such as `redis://user:pass@host`, are removed. A password that holds an apostrophe is not found in v1.
 - The same normalized value always gives the same hash, so search and value tracing still match.
+- Ids are never masked. Run and step ids, agent versions, rules hashes and approval request ids keep their form, even when their digits pass a card check. Otherwise `webhook` would refuse the whole batch.
+- Secrets never become value keys. Values of fields named like secrets, such as `password` or `token`, and secrets inside text, such as `password=…` or a bearer token, are left out when Quard builds the keys for search and value tracing. Guards still scan them.
 - Guards see real values in memory. The dashboard shows masks. Replay uses stand-ins. The AI reviewer sees placeholders.
 - The one exception is an open approval request: the approver sees the full values. After the decision only the hash and the masked arguments are kept.
 - Chunks Jev labels are stored as they were sent to it, for the review queue: secrets removed, and emails, IBANs and cards masked. Only public content is stored this way. (**Owner**)
@@ -693,7 +718,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 
 - **Auth.** The SDK talks to `webhook` and `control` with agent keys only. Keys are created and revoked in the dashboard.
 - **webhook** receives SDK events: model calls, tool calls, guard decisions, labels, labeled chunks and messages.
-    - It checks them against the shared schemas, writes them to Postgres and queues follow-up jobs.
+    - It checks them against the shared schemas and writes them to Postgres. A decision that blocks a tool call, or would in observe mode, opens the run's incident, which queues the finder's jobs.
     - The format is our own JSON API, not OpenTelemetry. (**Claude's pick**)
     - Most events arrive in batches. Label records that another process may read right away, such as messages to other agents and memory writes, are sent at once to `POST /v1/labels`. They are acknowledged only after they are stored. (**Claude's pick**)
 - **control** is the SDK's live link to the backend. The SDK keeps one long-lived connection to it and reconnects if it drops.
@@ -703,6 +728,8 @@ Decided by Q18 and Q19, all **Claude's pick**.
     - **Revocation:** revoked agent keys and revoked "always approve" decisions.
     - **Label lookups:** the labels behind a reference in a message, a memory item or a chained response. (**Claude's pick**)
 - **worker** runs jobs from the queue: the root-cause finder, replay, the AI reviewer, the AI fallback for `none` labels and retention cleanup. It has no endpoint.
+    - **Queue:** a Postgres table, with no queue library. Each incident row holds the state of its own jobs: the verdict, the AI note and replay. The worker claims a due row with `FOR UPDATE SKIP LOCKED` and a 10-minute lease, and runs up to 4 jobs at once. It looks for work every second. If a worker stops mid-job, its lease runs out and another worker takes the job. (**Claude's pick**, owner approved)
+    - **Settings:** `DATABASE_URL` is required. `OPENAI_API_KEY` is the team's own key for the AI reviewer and replay; without it, the note is skipped, and replay fails with a message that asks for the key. `OPENAI_BASE_URL` is optional and defaults to `https://api.openai.com/v1`.
 - **web** is the dashboard. It reads and writes Postgres through its own server code and does not call `control`. When an approver decides, `web` writes the decision to Postgres, and `control` hears about it through Postgres `LISTEN/NOTIFY`. `control` also checks for decisions once a second, so a missed notification only delays the answer. (**Claude's pick**)
 - **Dashboard sign-in.** Privy, with an email code or GitHub. There are no passwords. Anyone who signs in with a verified email or a GitHub account can use the dashboard. Quard keeps its own signed session cookie. Every approval records who decided. (**Owner**)
 
@@ -711,7 +738,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 From the spec, plus the approval decisions.
 
 - **Run view:** one run as a timeline colored by labels.
-- **Incident view:** the path from entry point to damage, the verdict and a replay button.
+- **Incident view:** the path from entry point to damage, the verdict and a replay button. The button starts replay, and after the cap it offers to continue with $5 more.
 - **Summary view:**
     - which sources and tools cause the most incidents
     - what guards block
@@ -747,7 +774,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | Q14 | Shared memory | Generic store wrapper | Owner |
 | Q15 | Run limits | Balanced: depth 3, fan-out 10, 5 handoffs back and forth, 200 steps, $5 | Claude's pick |
 | Q16 | Replay | Up to 20 with and 20 without, rounds of 5, early stop, $5 cap | Claude's pick |
-| Q17 | AI reviewer model | The team's own provider key; `gpt-6.1-sol` | Claude's pick |
+| Q17 | AI reviewer model | The team's own provider key, set on the worker as `OPENAI_API_KEY`; `gpt-6.1-sol` | Claude's pick |
 | Q18 | Hosting | Self-hosted first, hosted later | Claude's pick |
 | Q19 | Retention and redaction | 30 days, incidents 1 year; remove secrets, hash IBANs, cards and emails | Claude's pick |
 | Q20 | When a guard blocks | A refusal the model reads; throwing is opt-in | Owner |
@@ -760,7 +787,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | Q27 | Detector thresholds | Flag at 0.5 on the risky labels added up; strip at 0.9 on the yes or no injection answer or the label's chance; tune before enforce | Claude's pick |
 | — | Repo layout | The owner's tree; TypeScript in one pnpm workspace | Owner, Claude's pick |
 | — | Where guards run | In-process; the backend for shared state | Spec |
-| — | Database and queue | Postgres only, with pg-boss | Claude's pick |
+| — | Database and queue | Postgres only; the queue is a table: incident rows hold their job state, and the worker claims them with `FOR UPDATE SKIP LOCKED` and a lease, every second | Claude's pick, owner approved |
 | — | SDK event format | Our own JSON API to `webhook`; W3C ids | Claude's pick |
 | — | SDK link to `control` | One WebSocket that reconnects; `control` also checks for decisions every second | Claude's pick |
 | — | Agent keys | One key per app; an app may host several agents | Claude's pick |
@@ -786,6 +813,10 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Jev acting in v1 | Yes: enforce by default; a team can switch it to observe | Owner |
 | — | Detector failures | While acting, what the detector could not check is flagged `detector:unchecked` | Owner |
 | — | Text for review | Store redacted public chunks for a review queue | Owner |
+| — | When an incident opens | A guard blocks a tool call, or would have in observe mode; one incident per run | Claude's pick |
+| — | When replay runs | On a click on the incident page; the verdict and AI note run on their own; past the cap, continue with $5 more | Owner |
+| — | Request for replay | The SDK records each model call's redacted request while uploads are on, up to 512 KiB | Claude's pick |
+| — | Bad handoff | Waits for the messages M4 records | Owner |
 
 ## Changes to the spec
 
