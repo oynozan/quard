@@ -27,6 +27,12 @@ export const RULES: RulesSnapshot = {
 
 export const IBAN_VALUE: FleetValue = { field: "iban", kind: "iban", key: `iban:GB33…5555#${"e".repeat(32)}` };
 export const DOMAIN_VALUE: FleetValue = { field: "url", kind: "domain", key: "domain:evil.com" };
+// An x402 payee, kept in clear like a domain
+export const WALLET_VALUE: FleetValue = {
+    field: "payTo",
+    kind: "wallet",
+    key: "wallet:0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+};
 
 export function helloMessage(fields: Partial<HelloMessage> = {}): HelloMessage {
     return { type: "hello", sdk: "0.0.0", host: "box-1", pid: 4242, rules: RULES, ...fields };
