@@ -39,9 +39,7 @@ export function createDelivery(ctx: Context): Delivery {
         await settle(ctx, connection, ask, placement);
     }
 
-    // Only one call runs an approve once. The claim follows the stored order, not
-    // this registry's: the call that waits longest and still beats goes first,
-    // wherever it is connected. The others keep waiting until it ran, then ask again.
+    // One call runs an approve once, the first in the stored line and not in this registry's order
     async function once(waiters: Waiter[], decision: RequestDecision): Promise<void> {
         // A call with no recent beat may be gone, so it waits until it beats again
         const since = ctx.now().getTime() - APPROVAL_STALE_MS;

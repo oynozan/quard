@@ -8,8 +8,7 @@ import { askMessage } from "../test/messages.ts";
 import { ask } from "./ask.ts";
 import { createDelivery } from "./deliver.ts";
 
-// An approve once belongs to the call that waits longest on its request,
-// as long as that call still beats
+// An approve once goes to the request's own call while it beats, then to the call that waits longest
 
 const DANA = "dana@acme.com";
 // Far older than the stale limit
@@ -127,6 +126,34 @@ describe("delivery of an approve once to identical calls on one request", () => 
         await delivery.check();
         expect(joined.decided()).toEqual([]);
         expect(joined.asked()[1]?.requestId).not.toBe(requestId);
+    });
+
+    it("runs the request's own call before a call from another run that came over with a longer wait", async () => {
+        const { project, ctx, delivery } = await setup();
+        const argsHash = freshHash();
+        const fromRun = (runId: string) => askMessage({ argsHash, runId });
+        // C opens the first request and B joins it, then C's connection drops while it still beats
+        const c = await asking(ctx, project, fromRun("c".repeat(32)));
+        const b = await asking(ctx, project, fromRun("b".repeat(32)));
+        const earlier = String(c.asked()[0]?.requestId);
+        ctx.registry.remove(c.connection);
+        await decideApproval(test.db, project.projectId, earlier, "once", DANA);
+        await delivery.check();
+        // A opens the next request, and B moves there once C came back and ran the first
+        const a = await asking(ctx, project, fromRun("a".repeat(32)));
+        const requestId = String(a.asked()[0]?.requestId);
+        await asking(ctx, project, c.message);
+        await delivery.check();
+        expect(b.asked().map((asked) => asked.requestId)).toEqual([earlier, requestId]);
+
+        await decideApproval(test.db, project.projectId, requestId, "once", DANA);
+        await delivery.check();
+
+        expect(a.decided()).toEqual([{ type: "decided", askId: a.message.askId, answer: "once", requestId }]);
+        expect(b.decided()).toEqual([]);
+        await delivery.check();
+        expect(b.asked()).toHaveLength(3);
+        expect(b.asked()[2]?.requestId).not.toBe(requestId);
     });
 
     it("runs a joined call once the call ahead of it stopped beating", async () => {
