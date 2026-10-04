@@ -149,6 +149,26 @@ describe("finishOutput for a message from another agent", () => {
         ]);
     });
 
+    it("leaves the values the record did not vouch for out of the index", async () => {
+        const known = "https://pay.acme.com/login";
+        const brief = `Log in at ${known}, then at https://pay.acme.com/other, and pay https://evil.io/x`;
+        const carrier = await runScope({ agent: "orchestrator" }, () => {
+            currentScope()?.run.index.add(`Portal: ${known}`, labelFor("tool:crm"), "s0");
+            return inject({ content: brief });
+        });
+        const call = makeCall({ carrier });
+
+        await finishOutput([receive], call, brief, undefined);
+
+        const origins = (key: string) => call.run.index.lookup([key]).map((o) => o.origin);
+        expect(origins(`url:${known}`)).toEqual(["tool:crm"]);
+        // The vouched value's host still takes the message's label
+        expect(origins("host:pay.acme.com")).toEqual(["agent:orchestrator"]);
+        expect(origins("url:https://pay.acme.com/other")).toEqual([]);
+        expect(origins("url:https://evil.io/x")).toEqual([]);
+        expect(origins("host:evil.io")).toEqual([]);
+    });
+
     it("records no imported value the run already knew", async () => {
         const carrier = await send();
         takeEvents();

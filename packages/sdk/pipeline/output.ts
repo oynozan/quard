@@ -98,6 +98,20 @@ function indexText(
     }
 }
 
+// Values a verified message holds that its record did not vouch for.
+// The sender's model wrote them, so they stay model-generated here.
+function unvouchedKeys(text: string, message: Received | undefined): string[] {
+    if (message?.verified !== true) {
+        return [];
+    }
+    const vouched = new Set(message.values.map((value) => value.key));
+    const found = extractValues(text);
+    const isVouched = (value: (typeof found)[number]) => vouched.has(`${value.type}:${value.value}`);
+    // A host a vouched value shares still takes the message's label
+    const kept = new Set(found.filter(isVouched).flatMap((value) => value.keys));
+    return found.flatMap((value) => (isVouched(value) ? [] : value.keys.filter((key) => !kept.has(key))));
+}
+
 // A message from another agent first brings in the labels its values had
 // in the sender's run, so a web-derived IBAN stays web-derived here
 function indexOutput(call: GuardCall, output: unknown, label: Label, message?: Received): void {
@@ -107,8 +121,9 @@ function indexOutput(call: GuardCall, output: unknown, label: Label, message?: R
         const label = { origin, kind: originKind(origin), trust, sensitivity, flags };
         indexText(call, value, label, stepId, { exclude, keepEarlier: true }, true);
     }
-    const options = { exclude: echoedKeys(call), keepEarlier: message !== undefined };
-    indexText(call, textOf(output), label, call.stepId, options);
+    const text = textOf(output);
+    const exclude = new Set([...echoedKeys(call), ...unvouchedKeys(text, message)]);
+    indexText(call, text, label, call.stepId, { exclude, keepEarlier: message !== undefined });
 }
 
 // For an "agent" source: who sent the message and what the sender vouched for
