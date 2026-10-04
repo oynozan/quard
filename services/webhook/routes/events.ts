@@ -26,7 +26,8 @@ export function eventRoutes(deps: EventDeps): Hono {
             }
             if (batch.data.dropped !== undefined) {
                 console.warn(
-                    `webhook: an SDK in project ${projectId} dropped ${batch.data.dropped} events from a full buffer`,
+                    `webhook: an SDK in project ${projectId} dropped ${batch.data.dropped} events ` +
+                        "(a full buffer, or values that could not be sent as JSON)",
                 );
             }
             // Config errors belong to no run; they are logged until the dashboard shows them

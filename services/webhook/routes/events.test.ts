@@ -131,7 +131,9 @@ describe("POST /v1/events", () => {
 
         await post({ ...rawBatch("5".repeat(32)), dropped: 3 });
 
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining("dropped 3 events"));
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining("dropped 3 events (a full buffer, or values that could not be sent as JSON)"),
+        );
         warn.mockRestore();
     });
 
