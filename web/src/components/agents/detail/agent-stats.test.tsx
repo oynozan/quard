@@ -26,6 +26,11 @@ describe("AgentStats", () => {
         expect(value("Est. cost").textContent).toBe("$1,234.50");
     });
 
+    it("shows a cost below a cent instead of $0.00", () => {
+        render(<AgentStats stats={{ ...stats, costUsd24h: 0.003075 }} />);
+        expect(value("Est. cost").textContent).toBe("$0.0031");
+    });
+
     it("flags asks and blocks with a glyph when there were any", () => {
         render(<AgentStats stats={stats} />);
         expect(value("Asked").querySelector(".text-warning svg")).toBeTruthy();

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { CrossGlyph, WarningGlyph } from "@/components/icons/glyphs";
 import type { AgentStats as Stats } from "@/lib/data/agents";
-import { formatInt, formatShare, formatUsd } from "@/lib/format";
+import { formatCost, formatInt, formatShare } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const STAT_GRID = "grid grid-cols-4 gap-2 max-[760px]:grid-cols-2";
@@ -44,7 +44,7 @@ export function AgentStats({ stats }: { stats: Stats }) {
                     <Counter>{stats.influencedShare === null ? "—" : formatShare(stats.influencedShare)}</Counter>
                 </Tile>
                 <Tile label="Est. cost">
-                    <Counter>{stats.costKnown ? formatUsd(stats.costUsd24h) : "—"}</Counter>
+                    <Counter>{stats.costKnown ? formatCost(stats.costUsd24h) : "—"}</Counter>
                 </Tile>
             </dl>
         </section>
