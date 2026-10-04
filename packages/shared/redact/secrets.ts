@@ -8,11 +8,11 @@ export type SecretSpan = Span & { name: string };
 const PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
     // The user and password in scheme://user:pass@host. As URL parsers
     // read it, the host starts after the last @ and the password after
-    // the first :, so both may hold an @. First, so they win over a
-    // token that starts in the same place.
-    ["url-credentials", /(?<=:\/\/)(?<!'[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s/?#"`<>\\:]*:[^\s/?#"`<>\\]*(?=@)/g],
-    // A URL that opens right after a quote ends at the next quote
-    ["url-credentials", /(?<='[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s/?#"'`<>\\:]*:[^\s/?#"'`<>\\]*(?=@)/g],
+    // the first :, so both may hold an @. Both stop at a quote, a comma
+    // or a URL delimiter, so the match never leaves the URL. Known limit:
+    // a password with a quote or comma is not found. First, so it wins
+    // over a token that starts in the same place.
+    ["url-credentials", /(?<=:\/\/)[^\s/?#"'`<>\\:,]*:[^\s/?#"'`<>\\,]*(?=@)/g],
     ["quard-agent-key", /\bqk_(?:live|test)_[A-Za-z0-9]{16,}/g],
     ["sk-api-key", /\bsk-(?:proj-|svcacct-|admin-|ant-)?[A-Za-z0-9_-]{20,}/g],
     ["aws-access-key", /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g],

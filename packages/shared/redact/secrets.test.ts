@@ -32,6 +32,10 @@ describe("findSecrets", () => {
         ["a URL with a user and no password", "ssh://git@github.com/acme/app"],
         ["a user and password with no scheme", "user:hunter2@cache.acme.com"],
         ["an email as a URL's user, with a port and no password", "smtp://jane@acme.com:587 or bob@acme.com"],
+        // Known limit: the user and password stop at a quote or comma
+        ["a URL whose password holds a quote", "postgres://u:it's@db.acme.com/main"],
+        ["a URL whose password holds a comma", "redis://u:p,w@cache.acme.com"],
+        ["a URL whose user holds a quote", "it's at redis://o'brien:it's@cache.acme.com, ask jane@acme.com"],
     ])("skips %s", (_, text) => {
         expect(findSecrets(text)).toEqual([]);
     });
@@ -46,7 +50,6 @@ describe("findSecrets", () => {
     it.each([
         ["smtp://jane@acme.com:hunter2@smtp.acme.com:587", "jane@acme.com:hunter2"],
         ["imaps://me.x@gmail.com:hunter2@imap.gmail.com", "me.x@gmail.com:hunter2"],
-        ["postgres://u:it's@db.acme.com/main", "u:it's"],
     ])("finds the user and password in %s", (text, value) => {
         const start = text.indexOf(value);
 
@@ -135,17 +138,33 @@ describe("removeSecrets", () => {
         ],
         ["smtp://jane@acme.com:hunter2@smtp.acme.com:587", "smtp://…@smtp.acme.com:587"],
         ["imaps://me.x@gmail.com:hunter2@imap.gmail.com", "imaps://…@imap.gmail.com"],
-        ["postgres://u:it's@db.acme.com/main", "postgres://…@db.acme.com/main"],
-        [
-            "it's at redis://o'brien:it's@cache.acme.com, ask jane@acme.com",
-            "it's at redis://…@cache.acme.com, ask jane@acme.com",
-        ],
-        // A URL that opens right after a quote ends at the next quote
+        // A URL inside quotes or a list ends at the next quote or comma
         ["['amqp://u:s3cret@mq.acme.com','jane@acme.com']", "['amqp://…@mq.acme.com','jane@acme.com']"],
         [
             "{'url':'smtp://jane@acme.com:pw@smtp.acme.com','cc':'bob@acme.com'}",
             "{'url':'smtp://…@smtp.acme.com','cc':'bob@acme.com'}",
         ],
+        ["['DSN redis://u:pw@cache.acme.com','jane@acme.com']", "['DSN redis://…@cache.acme.com','jane@acme.com']"],
+        [
+            "{'url':'at redis://u:pw@cache.acme.com','to':'jane@acme.com'}",
+            "{'url':'at redis://…@cache.acme.com','to':'jane@acme.com'}",
+        ],
+        ["{url:redis://u:pw@cache.acme.com,to:jane@acme.com}", "{url:redis://…@cache.acme.com,to:jane@acme.com}"],
+        ["redis://u:pw@cache.acme.com,jane@acme.com", "redis://…@cache.acme.com,jane@acme.com"],
+        [
+            "INSERT INTO hosts VALUES ('DSN redis://u:pw@cache.acme.com','jane@acme.com')",
+            "INSERT INTO hosts VALUES ('DSN redis://…@cache.acme.com','jane@acme.com')",
+        ],
+        [
+            "INSERT INTO hosts VALUES (1,redis://u:pw@cache.acme.com,jane@acme.com)",
+            "INSERT INTO hosts VALUES (1,redis://…@cache.acme.com,jane@acme.com)",
+        ],
+        [
+            "['via smtp://jane@acme.com:pw@smtp.acme.com','bob@acme.com']",
+            "['via smtp://…@smtp.acme.com','bob@acme.com']",
+        ],
+        ['"via imaps://me.x@gmail.com:pw@imap.gmail.com",bob@acme.com', '"via imaps://…@imap.gmail.com",bob@acme.com'],
+        ["smtp://jane@acme.com:pw@smtp.acme.com,bob@acme.com", "smtp://…@smtp.acme.com,bob@acme.com"],
     ])("removes the user and password in %s", (text, expected) => {
         expect(removeSecrets(text)).toBe(expected);
     });

@@ -28,9 +28,14 @@ describe("redactText", () => {
     it.each([
         ["smtp://jane@acme.com:hunter2@smtp.acme.com:587", "smtp://…@smtp.acme.com:587"],
         ["imaps://me.x@gmail.com:hunter2@imap.gmail.com", "imaps://…@imap.gmail.com"],
-        ["postgres://u:it's@db.acme.com/main", "postgres://…@db.acme.com/main"],
     ])("removes the whole user and password of %s, with no part left in clear", (text, expected) => {
         expect(redactText(text)).toBe(expected);
+    });
+
+    it("stops a URL's user and password at a quote, so the next email is only masked", () => {
+        expect(redactText("['DSN redis://u:pw@cache.acme.com','jane@acme.com']")).toBe(
+            "['DSN redis://…@cache.acme.com','j…@acme.com']",
+        );
     });
 
     it("changes nothing the second time", () => {
