@@ -43,7 +43,8 @@ function canonical(value: unknown, parents: Set<object>): string | undefined {
     parents.add(plain);
     let text: string;
     if (Array.isArray(plain)) {
-        text = `[${plain.map((item) => canonical(item, parents) ?? "null").join(",")}]`;
+        // Array.from visits holes too, which JSON writes as null
+        text = `[${Array.from(plain, (item) => canonical(item, parents) ?? "null").join(",")}]`;
     } else {
         const fields = Object.keys(plain)
             .sort()

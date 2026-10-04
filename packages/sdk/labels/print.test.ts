@@ -24,6 +24,9 @@ describe("printOf", () => {
 
         expect(printOf({ a: 1, b: undefined, f: () => 1 })).toBe(printOf({ a: 1 }));
         expect(printOf([undefined, Number.NaN])).toBe(printOf([null, null]));
+        const holes: unknown[] = [];
+        holes[1] = 1;
+        expect(printOf(holes)).toBe(printOf([null, 1]));
         expect(printOf({ at })).toBe(printOf(JSON.parse(JSON.stringify({ at }))));
     });
 
