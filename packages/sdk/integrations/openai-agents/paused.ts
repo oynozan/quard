@@ -1,11 +1,14 @@
-import { RunState as SdkState } from "@openai/agents";
+import { RunState as SdkState, StreamedRunResult } from "@openai/agents";
 import { findCall } from "../../context/registry.ts";
 import type { RunState } from "../../context/run.ts";
 import type { Scope } from "../../context/scope.ts";
 
-// A run that stopped for the SDK's own approval (needsApproval): the
-// frame it stopped in, and the root scope that records its end
-export type Paused = { root: Scope; frame: Scope };
+// The frame a run stopped in, and the root scope that records its end
+export type Resume = { root: Scope; frame: Scope };
+
+// A run that stopped for the SDK's own approval (needsApproval). Only a
+// run this integration started can be gone back into.
+export type Paused = { run: RunState; resume?: Resume };
 
 const byState = new WeakMap<object, Paused>();
 // A state rebuilt from a string is a new object; its calls lead to the run
@@ -19,8 +22,20 @@ export function notePause(result: unknown, paused: Paused): boolean {
         return false;
     }
     byState.set(state, paused);
-    byRun.set(paused.root.run, paused);
+    byRun.set(paused.run, paused);
     return true;
+}
+
+// Notes a pause once the run is over; for a stream, once it completes
+export function notePauseLater(result: unknown, paused: Paused): void {
+    if (result instanceof StreamedRunResult) {
+        result.completed.then(
+            () => notePause(result, paused),
+            () => undefined,
+        );
+        return;
+    }
+    notePause(result, paused);
 }
 
 function callRun(item: { rawItem: unknown }): RunState | undefined {
@@ -38,17 +53,17 @@ export function pausedOf(input: unknown): Paused | undefined {
 }
 
 // The first resume goes back into the paused run, which then ends again
-export function takePaused(paused: Paused | undefined): Paused | undefined {
-    if (paused === undefined || resumed.has(paused)) {
+export function takePaused(paused: Paused | undefined): Resume | undefined {
+    if (paused?.resume === undefined || resumed.has(paused)) {
         return undefined;
     }
     resumed.add(paused);
-    return paused;
+    return paused.resume;
 }
 
 // Any other run that resumes the state brings the paused run's labels
 export function carryLabels(paused: Paused | undefined, run: RunState): void {
-    if (paused !== undefined && paused.root.run !== run) {
-        run.index.absorb(paused.root.run.index);
+    if (paused !== undefined && paused.run !== run) {
+        run.index.absorb(paused.run.index);
     }
 }

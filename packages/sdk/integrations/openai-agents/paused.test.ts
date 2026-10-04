@@ -21,8 +21,7 @@ function stateWith(rawItems: object[]): RunState<unknown, Agent> {
 
 describe("notePause", () => {
     it("notes only a result with interruptions and a state", () => {
-        const scope = newScope();
-        const paused = { root: scope, frame: scope };
+        const paused = { run: newScope().run };
 
         expect(notePause("done", paused)).toBe(false);
         expect(notePause({ interruptions: [], state: {} }, paused)).toBe(false);

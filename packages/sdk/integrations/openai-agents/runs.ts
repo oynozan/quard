@@ -2,7 +2,7 @@ import { RunState, Runner, StreamedRunResult, type Agent } from "@openai/agents"
 import { currentScope, finishRun, newScope, withScope } from "../../context/scope.ts";
 import { unwrapBlocked } from "./blocked.ts";
 import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
-import { carryLabels, notePause, pausedOf, takePaused, type Paused } from "./paused.ts";
+import { carryLabels, notePause, notePauseLater, pausedOf, takePaused, type Paused } from "./paused.ts";
 import { noteSdkTools } from "./sdk-tools.ts";
 
 type Run = (this: Runner, agent: Agent, input: unknown, options?: unknown) => Promise<unknown>;
@@ -39,7 +39,7 @@ function startRun<T>(agent: Agent, paused: Paused | undefined, call: () => Promi
         };
         follow().then(
             (result) => {
-                if (!notePause(result, { root, frame })) {
+                if (!notePause(result, { run: root.run, resume: { root, frame } })) {
                     finishRun(root);
                 }
                 resolve(result);
@@ -58,10 +58,20 @@ function inFrame<T>(agent: Agent, input: unknown, call: () => Promise<T>): Promi
     if (parent === undefined) {
         return startRun(agent, paused, call);
     }
-    const frame = isFrame(parent) ? toolFrame(parent, agent.name) : topFrame(parent, agent.name);
+    if (isFrame(parent)) {
+        // An agent run as a tool resumes through its parent's state
+        const frame = toolFrame(parent, agent.name);
+        noteSdkTools(frame.run, agent);
+        return withScope(frame, () => unwrapBlocked(call()));
+    }
+    const frame = topFrame(parent, agent.name);
     carryLabels(paused, frame.run);
     noteSdkTools(frame.run, agent);
-    return withScope(frame, () => unwrapBlocked(call()));
+    return withScope(frame, () => unwrapBlocked(call())).then((result) => {
+        // The quard scope ends this run, so a later resume only brings its labels
+        notePauseLater(result, { run: frame.run });
+        return result;
+    });
 }
 
 // A handoff switches the agent of the frame the run loop runs in, and a

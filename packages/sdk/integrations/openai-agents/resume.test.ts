@@ -107,6 +107,32 @@ describe("a paused run's state resumed somewhere else", () => {
         expect(untrustedBlocks(events)).toHaveLength(1);
     });
 
+    it("brings the labels of a run paused inside a quard scope into the run it resumes in", async () => {
+        const { mail, sent, runner } = mailRun();
+        const first = await quard.run({ agent: "app" }, () => runner.run(mail, "Send the invoice."));
+
+        await runner.run(mail, await approveAll(mail, first.state, false));
+
+        expect(sent).not.toHaveBeenCalled();
+        expect(runIds(events).size).toBe(2);
+        expect(untrustedBlocks(events)).toHaveLength(1);
+    });
+
+    it("brings the labels of a streamed run paused inside a quard scope", async () => {
+        const { mail, sent, runner } = mailRun();
+        const first = await quard.run({ agent: "app" }, async () => {
+            const streamed = await runner.run(mail, "Send the invoice.", { stream: true });
+            await streamed.completed;
+            return streamed;
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+
+        await runner.run(mail, await approveAll(mail, first.state, false));
+
+        expect(sent).not.toHaveBeenCalled();
+        expect(untrustedBlocks(events)).toHaveLength(1);
+    });
+
     it("brings the labels into a new run when the state resumes a second time", async () => {
         const { mail, sent, runner } = mailRun(2);
         const first = await runner.run(mail, "Send the invoice.");

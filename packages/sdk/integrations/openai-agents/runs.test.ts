@@ -107,6 +107,21 @@ describe("a run() inside a quard scope", () => {
     });
 });
 
+describe("a streamed run() inside a quard scope", () => {
+    it("passes a failed stream on to the app", async () => {
+        const { orchestrator, client } = handoffAgents();
+        const runner = quardRunner({ client });
+        await runner.run(orchestrator, "Pay invoice 114.");
+
+        const failed = quard.run({ agent: "app" }, async () => {
+            const result = await runner.run(orchestrator, "Again.", { stream: true });
+            await result.completed;
+        });
+
+        await expect(failed).rejects.toThrow();
+    });
+});
+
 describe("a resumed run", () => {
     it("goes on in the same Quard run with the agent it stopped at", async () => {
         const send = tool({
