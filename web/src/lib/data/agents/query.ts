@@ -7,10 +7,12 @@ import {
     agentRoster,
     agentStats,
     agentVersions,
+    incidentsForAgent,
     modelCallBuckets,
 } from "@quard/db";
 import { cache } from "react";
 import { HOUR } from "@/lib/time";
+import { agentIncidentOf } from "../incidents/live/incident";
 import { projectScope } from "../scope";
 import { timelineOf } from "./live/calls";
 import { linksOf } from "./live/links";
@@ -49,7 +51,7 @@ export const getAgent = cache(async (name: string): Promise<AgentDetail | null> 
     const now = Date.now();
     const window = rosterWindow(now);
     const hours = hoursWindow(now);
-    const [roster, stats, buckets, groups, links, messages, versions] = await Promise.all([
+    const [roster, stats, buckets, groups, links, messages, versions, incidents] = await Promise.all([
         agentRoster(db, project.id, window),
         agentStats(db, project.id, name, { since: window.dayAgo }),
         modelCallBuckets(db, project.id, { ...hours, bucketMs: HOUR, agent: name }),
@@ -58,6 +60,7 @@ export const getAgent = cache(async (name: string): Promise<AgentDetail | null> 
         agentMessageLinks(db, project.id, { since: window.since, agent: name }),
         // One more than the page lists, for the tools before the oldest one listed
         agentVersions(db, project.id, name, { limit: VERSIONS + 1 }),
+        incidentsForAgent(db, project.id, name),
     ]);
     const row = roster.find((item) => item.agent === name);
     return {
@@ -66,7 +69,7 @@ export const getAgent = cache(async (name: string): Promise<AgentDetail | null> 
         activity: activityOf(buckets, hours.since),
         links: linksOf(links, messages),
         versions: versionsOf(versions, VERSIONS),
-        incidents: [],
+        incidents: incidents.map((item) => agentIncidentOf(item, name)),
         timeline: timelineOf(groups),
     };
 });

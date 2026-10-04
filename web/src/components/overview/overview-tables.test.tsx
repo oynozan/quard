@@ -174,6 +174,23 @@ describe("IncidentsSection", () => {
         expect(bodyRows().map((row) => cellsOf(row)[2])).toEqual(["Replaying", "confirmed"]);
     });
 
+    it("names the run and leaves the cause blank while the finder works", () => {
+        const finding = {
+            ...INCIDENTS[0],
+            title: "Finding the root cause",
+            category: null,
+            entryPoint: null,
+            damage: null,
+            entryAgent: null,
+            damageAgent: null,
+        };
+        render(<IncidentsSection incidents={[finding]} now={NOW} />);
+
+        const [name, cause] = cellsOf(bodyRows()[0]);
+        expect(name).toBe(`Finding the root causeRun ${finding.runId.slice(0, 8)}`);
+        expect(cause).toBe("—");
+    });
+
     it("keeps its header row with one quiet line before the first incident", () => {
         render(<IncidentsSection incidents={[]} now={NOW} />);
 

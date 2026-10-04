@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { createProject, ingestBatch } from "@quard/db";
+import { createProject, ingestBatch, listIncidents, saveVerdict } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -15,6 +15,7 @@ import {
     tool,
     WEB_PAGE,
 } from "../../../../test/agents/events";
+import { storedVerdict } from "../../../../test/incidents/rows";
 import { DAY, NOW } from "../../../../test/time";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
@@ -53,7 +54,7 @@ afterAll(async () => {
 });
 
 // A fresh project with runs from just now back to 40 days ago
-async function fleet(): Promise<void> {
+async function fleet(): Promise<string> {
     const projectId = await createProject(test.db, "Agents");
     vi.stubEnv("QUARD_PROJECT_ID", projectId);
     const delegate = [{ callId: "c1", name: "delegate", arguments: "{}" }];
@@ -85,6 +86,7 @@ async function fleet(): Promise<void> {
             finish(OLD, "archive", ago(D40 - 2)),
         ]),
     );
+    return projectId;
 }
 
 const node = (name: string, state: string, model: string | null, runs24h: number, secondsAgo: number) => ({
@@ -250,6 +252,28 @@ describe("agents from Postgres", () => {
         expect((await getAgent("helper"))?.links).toEqual([
             { ...link("support", "helper", 0, D3 - 2), delegations: 0, handoffs: 1 },
         ]);
+    });
+
+    it("lists the incidents an agent took part in, once their verdict is found", async () => {
+        const projectId = await fleet();
+        const [incident] = await listIncidents(test.db, projectId, { limit: 1 });
+        expect((await getAgent("billing"))?.incidents).toEqual([]);
+
+        const verdict = storedVerdict();
+        await saveVerdict(test.db, projectId, incident.id, {
+            ...verdict,
+            entry: { ...verdict.entry, agent: "orchestrator" },
+        });
+
+        expect((await getAgent("billing"))?.incidents).toEqual([
+            {
+                id: incident.id,
+                title: "payInvoice with input from acme-billing.net",
+                roles: ["turning", "damage"],
+                openedAt: NOW - 26_000,
+            },
+        ]);
+        expect((await getAgent("orchestrator"))?.incidents.map((row) => row.roles)).toEqual([["entry"]]);
     });
 
     it("counts only the last 24 hours, but links and calls from further back", async () => {

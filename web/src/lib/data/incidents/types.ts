@@ -1,35 +1,17 @@
+import type { MissingGuard } from "@quard/db";
 import type { RunRow } from "../runs/types";
-import type { Incident, IncidentCategory, Label, PathNode, ReplayStatus } from "../types";
+import type { Incident, IncidentCategory, PathNode, ReplayStatus } from "../types";
+
+export type { MissingGuard };
 
 // The three kinds of bad handoff the root-cause finder tells apart.
 export type HandoffFault = "wrong information sent" | "constraint dropped" | "correct message misread";
 
-export type VerdictPoint = {
-    stepId: string;
-    agent: string;
-    title: string;
-    detail: string;
-    label: Label;
-    at: number;
-};
-
-export type AcrossAgents = {
-    entryAgent: string;
-    // The handoff that carried the untrusted content, if one did.
-    handoff: { stepId: string; from: string; to: string; summary: string } | null;
-    turningAgent: string;
-    damageAgent: string;
-};
-
 export type Verdict = {
     category: IncidentCategory;
-    entryPoint: VerdictPoint;
-    turningPoint: VerdictPoint;
-    damage: VerdictPoint;
-    // The guard that would have stopped it, in plain words. Null when the guards worked.
-    missingGuard: string | null;
-    // Only when more than one agent took part.
-    acrossAgents: AcrossAgents | null;
+    // The guard that would have stopped it. Null when the guards worked.
+    missingGuard: MissingGuard | null;
+    // Needs messages between agents (M4), so it is always null for now
     handoffFault: HandoffFault | null;
     // The agent versions involved, so the incident ties to the version that caused it.
     versions: { agent: string; version: string }[];
@@ -52,11 +34,8 @@ export type ReplayRound = {
 
 export type Replay = {
     status: ReplayStatus;
-    // A round is running right now.
-    inProgress: boolean;
     rounds: ReplayRound[];
     threshold: number;
-    maxPerSide: number;
     // The exact recorded model and settings are reused.
     model: string;
     // A rerun counts as harmful when it asks for this same call with the same key value.
@@ -66,11 +45,8 @@ export type Replay = {
     // Every model call the finder made so far, AI reviewer included.
     costUsd: number;
     capUsd: number;
-    capReached: boolean;
-    // "Replay limited: URL-only evidence" when content only came from hosted search.
-    limited: boolean;
-    limitedReason: string | null;
-    startedAt: number;
+    // Why replay is limited or failed, in plain words
+    reason: string | null;
 };
 
 export type ReviewerNote = {
@@ -80,12 +56,24 @@ export type ReviewerNote = {
     paragraphs: string[];
 };
 
-export type IncidentDetail = {
-    incident: Incident;
+// What the root-cause finder found, and what came after the verdict
+export type IncidentFindings = {
     verdict: Verdict;
     // From the entry point to the damage, in time order.
     path: PathNode[];
     replay: Replay;
     reviewer: ReviewerNote | null;
+    // Why there is no note, shown when reviewer is null
+    reviewerStatus: string;
+};
+
+export type IncidentDetail = {
+    incident: Incident;
     run: RunRow;
+    // Why the finder failed. Null while it works or once it found the verdict.
+    findError: string | null;
+    // Null until the verdict is found
+    findings: IncidentFindings | null;
+    // The worker is finding the verdict, writing the note or replaying, so the page reloads
+    working: boolean;
 };

@@ -6,10 +6,7 @@ import { NOW } from "../../../../test/time";
 import IncidentsPage, { metadata } from "./page";
 
 vi.mock("@/lib/data/scope", () => ({ requestTime: async () => NOW }));
-vi.mock("@/lib/data/incidents/query", async (importOriginal) => {
-    const real = await importOriginal<typeof import("@/lib/data/incidents/query")>();
-    return { ...real, listIncidents: vi.fn(real.listIncidents) };
-});
+vi.mock("@/lib/data/incidents/query", () => ({ listIncidents: vi.fn(async () => []) }));
 
 async function showPage(searchParams: Record<string, string | string[]> = {}) {
     return render(await IncidentsPage({ params: Promise.resolve({}), searchParams: Promise.resolve(searchParams) }));

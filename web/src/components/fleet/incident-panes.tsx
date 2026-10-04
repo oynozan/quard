@@ -15,7 +15,7 @@ export function IncidentPanes({ fleet }: { fleet: FleetData | null }) {
     const tools: BarItem[] = (fleet?.incidentsByTool ?? []).map((row) => ({ label: row.tool, value: row.count }));
     const counts = (items: BarItem[]) => (fleet ? items.map((item) => item.value) : null);
     const total = sum(sources.map((item) => item.value));
-    const untrusted = sum(bySource.filter((row) => row.label.trust === "untrusted").map((row) => row.count));
+    const untrusted = sum(bySource.filter((row) => row.trust === "untrusted").map((row) => row.count));
 
     return (
         <section aria-label="Where incidents start">

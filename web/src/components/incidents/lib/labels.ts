@@ -3,18 +3,27 @@ import type { IncidentCategory, PathRole, ReplayStatus } from "@/lib/data/types"
 export type Tone = "on" | "off" | "context" | "warning" | "danger";
 
 // Shared with the overview, so a status reads the same everywhere
+// Amber when someone has to act: continue past the cap, or start again
 export const REPLAY_TONE: Record<ReplayStatus, Tone> = {
+    "not started": "off",
     running: "on",
     confirmed: "danger",
     "not confirmed": "context",
     "could not reproduce": "context",
+    "cap reached": "warning",
+    limited: "context",
+    failed: "warning",
 };
 
 export const REPLAY_WORD: Record<ReplayStatus, string> = {
+    "not started": "Not started",
     running: "Replaying",
     confirmed: "Confirmed",
     "not confirmed": "Not confirmed",
     "could not reproduce": "Could not reproduce",
+    "cap reached": "Cap reached",
+    limited: "Limited",
+    failed: "Failed",
 };
 
 export const CATEGORIES: IncidentCategory[] = [

@@ -2,21 +2,20 @@ import { SectionHeading } from "@/components/kit/headings";
 import { Badge } from "@/components/kit/labels";
 import { TextLink } from "@/components/kit/links";
 import { Absent, DetailList, DetailRow } from "@/components/kit/detail/detail-list";
-import type { Verdict } from "@/lib/data/incidents/types";
+import type { MissingGuard as Missing, Verdict } from "@/lib/data/incidents/types";
 import { sentenceCase } from "../lib/labels";
 import { Disclosure } from "./disclosure";
 
-// A rule name stands alone; otherwise the first clause says what was missing.
-function MissingGuard({ text }: { text: string }) {
-    const [first, ...rest] = text.split(" ");
-    const isRule = first.includes(".");
-    const clause = rest.join(" ").split(",")[0];
-    const observe = text.includes("observe mode");
+// The tool and its rule, a badge when the rule only records, then what was missing
+function MissingGuard({ guard }: { guard: Missing }) {
     return (
-        <span className="inline-flex flex-wrap items-center justify-end gap-x-[6px] gap-y-1" title={text}>
-            <span className="mono">{first}</span>
-            {isRule ? null : <span>{clause}</span>}
-            {observe ? <Badge>observe only</Badge> : null}
+        <span className="flex flex-col items-end gap-1">
+            <span className="inline-flex flex-wrap items-center justify-end gap-x-[6px] gap-y-1">
+                <span className="mono">{guard.tool}</span>
+                {guard.rule ? <span className="mono text-ink-2">{guard.rule}</span> : null}
+                {guard.observe ? <Badge>observe only</Badge> : null}
+            </span>
+            <span className="text-[12px] text-ink-muted">{guard.text}</span>
         </span>
     );
 }
@@ -32,7 +31,7 @@ export function VerdictBlock({ verdict }: { verdict: Verdict }) {
                 </DetailRow>
                 <DetailRow term="Missing guard">
                     {verdict.missingGuard ? (
-                        <MissingGuard text={verdict.missingGuard} />
+                        <MissingGuard guard={verdict.missingGuard} />
                     ) : (
                         <Absent>None, guards held</Absent>
                     )}

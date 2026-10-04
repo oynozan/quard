@@ -34,4 +34,9 @@ describe("ReviewerNote", () => {
         expect(within(pane).getByRole("status").textContent).toBe("No explanation yet");
         expect(pane.textContent).toBe("AI reviewernot the verdictNo explanation yet");
     });
+
+    it("says why there is no note when told", () => {
+        render(<ReviewerNote note={null} empty="Skipped: the worker has no provider key" />);
+        expect(screen.getByRole("status").textContent).toBe("Skipped: the worker has no provider key");
+    });
 });

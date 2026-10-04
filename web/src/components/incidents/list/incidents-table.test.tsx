@@ -71,6 +71,36 @@ describe("IncidentsTable", () => {
         expect(within(row).getAllByRole("cell")[6].getAttribute("title")).toBe("3 Oct");
     });
 
+    it("shows dashes for the verdict while the finder works, and counts it in no category", async () => {
+        const finding = {
+            ...INCIDENTS[0],
+            id: "inc_119",
+            title: "Finding the root cause",
+            category: null,
+            entryPoint: null,
+            damage: null,
+            entryAgent: null,
+            damageAgent: null,
+            replay: "not started" as const,
+        };
+        show("all", [finding, ...INCIDENTS]);
+        const row = screen.getByRole("link", { name: "Finding the root cause" }).closest("tr") as HTMLElement;
+        const cells = within(row).getAllByRole("cell");
+        expect(cells.map((cell) => cell.textContent)).toEqual([
+            "Finding the root cause",
+            "—",
+            "—",
+            "—",
+            "—",
+            "Not started",
+            "3 min",
+        ]);
+        expect(cells[2].getAttribute("title")).toBe("—");
+        fireEvent.click(screen.getByRole("combobox", { name: "Category" }));
+        await act(async () => {});
+        expect(screen.getByRole("option", { name: "Bad input (1)" })).toBeTruthy();
+    });
+
     it("names the agent once when one agent did both", () => {
         show();
         const row = screen.getByRole("link", { name: "Customer list sent to an unlisted domain" }).closest("tr");

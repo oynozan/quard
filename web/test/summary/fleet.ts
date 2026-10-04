@@ -55,12 +55,10 @@ export const HEATMAP = heatmapOf([
     [5, 8, 5],
 ]);
 
-const web = { origin: "web page", trust: "untrusted", sensitivity: "public" } as const;
-
 export const SOURCES: FleetData["incidentsBySource"] = [
-    { origin: "web page", label: web, count: 1200 },
-    { origin: "user", label: { origin: "user", trust: "trusted", sensitivity: "internal" }, count: 2 },
-    { origin: "email", label: { ...web, origin: "email" }, count: 3 },
+    { origin: "web page", trust: "untrusted", count: 1200 },
+    { origin: "user", trust: "trusted", count: 2 },
+    { origin: "email", trust: "untrusted", count: 3 },
 ];
 
 export const TOOLS: FleetData["incidentsByTool"] = [{ tool: "send_payment", count: 1205 }];

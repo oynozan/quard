@@ -38,16 +38,24 @@ describe("formatP", () => {
 describe("word maps", () => {
     it("names every replay status and gives each a tone", () => {
         expect(REPLAY_WORD).toEqual({
+            "not started": "Not started",
             running: "Replaying",
             confirmed: "Confirmed",
             "not confirmed": "Not confirmed",
             "could not reproduce": "Could not reproduce",
+            "cap reached": "Cap reached",
+            limited: "Limited",
+            failed: "Failed",
         });
         expect(REPLAY_TONE).toEqual({
+            "not started": "off",
             running: "on",
             confirmed: "danger",
             "not confirmed": "context",
             "could not reproduce": "context",
+            "cap reached": "warning",
+            limited: "context",
+            failed: "warning",
         });
     });
 

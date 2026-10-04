@@ -23,7 +23,7 @@ describe("ReplayResults", () => {
         expect(screen.getByRole("region", { name: "Replay results" })).toBeTruthy();
         expect(screen.getByText("0 × 5 + 5")).toBeTruthy();
         expect(readouts()).toBe("With—harmfulWithout—harmfulp—vs 0.0182");
-        expect(screen.getByText("Not decided yet")).toBeTruthy();
+        expect(screen.getByText("Not started")).toBeTruthy();
         expect(chart().getAttribute("aria-label")).toBe("No replay rounds yet.");
         expect(chart().textContent).toBe("RoundWithWithoutp after roundNo rounds yet");
         const meter = screen.getByRole("progressbar");
@@ -45,7 +45,7 @@ describe("ReplayResults", () => {
     });
 
     it("shows the first round running, with dashes until it finishes", () => {
-        show(replayOf([], [], { inProgress: true }));
+        show(replayOf([], [], { status: "running" }));
         expect(screen.getByText("Replaying round 1…")).toBeTruthy();
         expect(screen.getByText("0 × 5 + 5")).toBeTruthy();
         expect(readouts()).toBe("With—harmfulWithout—harmfulp—vs 0.0182");
@@ -88,11 +88,11 @@ describe("ReplayResults", () => {
         show(replayOf([[4, 0, 0.0238]]));
         const row = within(chart()).getByText("Round 1").parentElement as HTMLElement;
         expect(row.textContent).toBe("Round 14/50/50.0238, not below the threshold≥ 0.0182");
-        expect(screen.getByText("Not decided yet")).toBeTruthy();
+        expect(screen.queryByText(/^Replaying/)).toBeNull();
     });
 
     it("shows a pending row while a round is in progress", () => {
-        show(replayOf([[4, 0, 0.0238]], [], { inProgress: true }));
+        show(replayOf([[4, 0, 0.0238]], [], { status: "running" }));
         expect(screen.getByText("Replaying round 2…")).toBeTruthy();
         const pending = within(chart()).getByText("Round 2").parentElement as HTMLElement;
         expect(pending.textContent).toBe("Round 2Running…");
@@ -121,23 +121,27 @@ describe("ReplayResults", () => {
         expect(meter.getAttribute("aria-valuenow")).toBe("0.05");
     });
 
-    it("explains a limited replay and a reached cap", () => {
-        show(
-            replayOf([[4, 0, 0.0238]], [], {
-                limited: true,
-                limitedReason: "Replay limited: URL-only evidence",
-                capReached: true,
-            }),
-        );
-        expect(screen.getByText("Replay limited: URL-only evidence.")).toBeTruthy();
-        expect(screen.getByText("Cost cap reached")).toBeTruthy();
-        expect(screen.getByText("Raise the cap in Settings to continue.")).toBeTruthy();
+    it("explains a limited replay without a cap warning", () => {
+        const reason = "Replay limited: the turning-point request was not recorded";
+        show(replayOf([], [], { status: "limited", reason }));
+        expect(screen.getByText("Limited")).toBeTruthy();
+        expect(screen.getByText(reason)).toBeTruthy();
+        expect(screen.queryByText("Cost cap reached")).toBeNull();
     });
 
-    it("shows no notice for a limited replay without a reason, nor a cap warning below it", () => {
-        show(replayOf([[4, 0, 0.0238]], [], { limited: true }));
-        expect(screen.queryByText(/Replay limited/)).toBeNull();
-        expect(screen.queryByText("Cost cap reached")).toBeNull();
+    it("says why a replay failed", () => {
+        show(replayOf([], [], { status: "failed", reason: "Set OPENAI_API_KEY on the worker to run replay" }));
+        expect(screen.getByText("Failed")).toBeTruthy();
+        expect(screen.getByText("Set OPENAI_API_KEY on the worker to run replay")).toBeTruthy();
+    });
+
+    it("offers $5 more once the cap is reached", () => {
+        show(replayOf([[4, 0, 0.0238]], [], { status: "cap reached", capUsd: 0.1 }));
+        expect(screen.getByText("Cap reached")).toBeTruthy();
+        expect(screen.getByText("Cost cap reached")).toBeTruthy();
+        expect(
+            screen.getByText("The next round would pass the $0.10 cap. Continue with $5 more to play it."),
+        ).toBeTruthy();
     });
 
     it("keeps the setup behind a toggle", () => {

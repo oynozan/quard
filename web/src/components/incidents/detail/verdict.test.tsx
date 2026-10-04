@@ -1,30 +1,19 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Verdict, VerdictPoint } from "@/lib/data/incidents/types";
+import type { MissingGuard, Verdict } from "@/lib/data/incidents/types";
 import { VerdictBlock } from "./verdict";
 
-const point: VerdictPoint = {
-    stepId: "s1",
-    agent: "billing",
-    title: "pay_invoice",
-    detail: "",
-    label: { origin: "supplier-portal.example", trust: "untrusted", sensitivity: "public" },
-    at: 0,
-};
-
 function verdictOf(extra: Partial<Verdict>): Verdict {
-    return {
-        category: "bad input",
-        entryPoint: point,
-        turningPoint: point,
-        damage: point,
-        missingGuard: null,
-        acrossAgents: null,
-        handoffFault: null,
-        versions: [],
-        ...extra,
-    };
+    return { category: "bad input", missingGuard: null, handoffFault: null, versions: [], ...extra };
 }
+
+const OBSERVED: MissingGuard = {
+    text: 'The action rule "iban:from" on payInvoice is in observe mode, so it only recorded "would block"',
+    tool: "payInvoice",
+    guard: "action",
+    rule: "iban:from",
+    observe: true,
+};
 
 // The value cell next to a term
 function valueOf(term: string) {
@@ -41,20 +30,17 @@ describe("VerdictBlock", () => {
         expect(screen.queryByRole("button", { name: "Agent versions" })).toBeNull();
     });
 
-    it("shows a rule name alone and marks a rule in observe mode", () => {
-        const text =
-            "pay_invoice.iban-source runs in observe mode, so nothing enforces that the IBAN comes from supplier records";
-        render(<VerdictBlock verdict={verdictOf({ missingGuard: text })} />);
-        const guard = valueOf("Missing guard").firstElementChild as HTMLElement;
-        expect(guard.getAttribute("title")).toBe(text);
-        expect(guard.textContent).toBe("pay_invoice.iban-sourceobserve only");
+    it("shows the tool and rule, marks a rule in observe mode, then says what was missing", () => {
+        render(<VerdictBlock verdict={verdictOf({ missingGuard: OBSERVED })} />);
+        expect(valueOf("Missing guard").textContent).toBe(`payInvoiceiban:fromobserve only${OBSERVED.text}`);
+        expect(screen.getByText("iban:from").className).toContain("mono");
     });
 
-    it("shows the tool and the first clause of what was missing", () => {
-        const text = "pay_invoice has no per-run amount cap, so the user's 2,000 EUR limit lived only in the prompt";
-        render(<VerdictBlock verdict={verdictOf({ missingGuard: text })} />);
-        const guard = valueOf("Missing guard").firstElementChild as HTMLElement;
-        expect(guard.textContent).toBe("pay_invoicehas no per-run amount cap");
+    it("shows the tool alone when no rule exists", () => {
+        const text = "payInvoice has no action, egress or approval guard";
+        const guard = { text, tool: "payInvoice", guard: null, rule: null, observe: false };
+        render(<VerdictBlock verdict={verdictOf({ missingGuard: guard })} />);
+        expect(valueOf("Missing guard").textContent).toBe(`payInvoice${text}`);
         expect(screen.queryByText("observe only")).toBeNull();
     });
 

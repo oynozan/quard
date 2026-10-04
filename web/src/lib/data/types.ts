@@ -67,17 +67,27 @@ export type ApprovalRequest = {
 };
 
 export type IncidentCategory = "bad input" | "bad reasoning" | "bad handoff" | "broken tool" | "missing guard";
-export type ReplayStatus = "confirmed" | "not confirmed" | "could not reproduce" | "running";
+// "running" only while the worker reruns the turning point
+export type ReplayStatus =
+    | "not started"
+    | "running"
+    | "confirmed"
+    | "not confirmed"
+    | "could not reproduce"
+    | "cap reached"
+    | "limited"
+    | "failed";
 
+// The verdict fields are null while the root-cause finder works, or when it failed
 export type Incident = {
     id: string;
     runId: string;
     title: string;
-    category: IncidentCategory;
-    entryPoint: string;
-    damage: string;
-    entryAgent: string;
-    damageAgent: string;
+    category: IncidentCategory | null;
+    entryPoint: string | null;
+    damage: string | null;
+    entryAgent: string | null;
+    damageAgent: string | null;
     replay: ReplayStatus;
     openedAt: number;
 };

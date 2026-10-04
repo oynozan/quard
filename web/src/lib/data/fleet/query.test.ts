@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { createProject, ingestBatch } from "@quard/db";
+import { createProject, ingestBatch, listIncidents, saveVerdict } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { block, delegate, itemsOf, modelCall, runOf, stepOf, webPage } from "../../../../test/summary/events";
+import { storedVerdict } from "../../../../test/incidents/rows";
 import { emptyFleet, START_AT } from "../../../../test/summary/fleet";
 import { DAY, HOUR, MINUTE, NOW, SECOND } from "../../../../test/time";
 
@@ -154,6 +155,46 @@ describe("getFleet", () => {
             { from: "planner", to: "researcher", delegations: 2, untrusted: 1, untrustedShare: 0.5 },
         ]);
         expect(blocksHeatmap.total).toBe(0);
+    });
+
+    it("counts incidents with a verdict by entry source, damaging tool and agent", async () => {
+        const id = await project("Main");
+        await ingestBatch(
+            test.db,
+            id,
+            itemsOf(
+                block(runOf(21), TODAY + HOUR, "action"),
+                block(runOf(22), TODAY + 2 * HOUR, "action"),
+                // Opened before the window, and one still being found
+                block(runOf(23), START_AT - DAY, "action"),
+                block(runOf(24), TODAY + 3 * HOUR, "action"),
+            ),
+        );
+        const [, second, first, old] = await listIncidents(test.db, id, { limit: 10 });
+        const verdict = storedVerdict();
+        await saveVerdict(test.db, id, second.id, verdict);
+        await saveVerdict(test.db, id, old.id, verdict);
+        await saveVerdict(test.db, id, first.id, {
+            ...verdict,
+            entry: { ...verdict.entry, agent: "support", origin: "user", trust: "trusted" },
+            turning: { ...verdict.turning, agent: "support" },
+            damage: { ...verdict.damage, tool: "sendEmail" },
+        });
+
+        const { incidentsBySource, incidentsByTool, agentPoints } = await getFleet();
+
+        expect(incidentsBySource).toEqual([
+            { origin: "user", trust: "trusted", count: 1 },
+            { origin: "web:acme-billing.net", trust: "untrusted", count: 1 },
+        ]);
+        expect(incidentsByTool).toEqual([
+            { tool: "payInvoice", count: 1 },
+            { tool: "sendEmail", count: 1 },
+        ]);
+        expect(agentPoints).toEqual([
+            { agent: "billing", entry: 1, turning: 1 },
+            { agent: "support", entry: 1, turning: 1 },
+        ]);
     });
 
     it("stops at the sign-in redirect for people who are not signed in", async () => {

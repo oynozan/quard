@@ -2,21 +2,23 @@ import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OverviewData } from "@/lib/data/overview";
 import type { RunRow } from "@/lib/data/runs/types";
-import type { ApprovalRequest } from "@/lib/data/types";
+import type { ApprovalRequest, Incident } from "@/lib/data/types";
 import { openRequests } from "../../../test/approvals-overview/fixtures";
 import { stubResizeObserver } from "../../../test/overview/browser";
-import { NEW_INSTALL, overview, runRow } from "../../../test/overview/fixtures";
+import { INCIDENTS, NEW_INSTALL, overview, runRow } from "../../../test/overview/fixtures";
 import { DAY, NOW } from "../../../test/time";
 import OverviewPage from "./page";
 
 const data = vi.hoisted(() => ({
     getOverview: vi.fn<(now: number) => Promise<OverviewData>>(),
     listRuns: vi.fn<(filter: { limit: number }) => Promise<RunRow[]>>(),
+    listIncidents: vi.fn<(limit: number) => Promise<Incident[]>>(),
     openApprovalRequests: vi.fn<() => Promise<ApprovalRequest[]>>(),
     openApprovalCount: vi.fn<() => Promise<number>>(),
 }));
 vi.mock("@/lib/data/overview", () => ({ getOverview: data.getOverview }));
 vi.mock("@/lib/data/runs/query", () => ({ listRuns: data.listRuns }));
+vi.mock("@/lib/data/incidents/query", () => ({ listIncidents: data.listIncidents }));
 vi.mock("@/lib/data/scope", () => ({ requestTime: async () => NOW }));
 vi.mock("@/lib/data/approvals", () => ({
     openApprovalRequests: data.openApprovalRequests,
@@ -32,6 +34,7 @@ beforeEach(() => {
     stubResizeObserver();
     data.getOverview.mockResolvedValue(overview());
     data.listRuns.mockResolvedValue(RUNS);
+    data.listIncidents.mockResolvedValue([]);
     data.openApprovalRequests.mockResolvedValue([]);
     data.openApprovalCount.mockResolvedValue(0);
 });
@@ -82,6 +85,18 @@ describe("OverviewPage", () => {
 
         expect(region("Approvals waiting").getByRole("heading", { level: 2 }).textContent).toBe("Approvals waiting4");
         expect(region("Approvals waiting").getAllByRole("row")).toHaveLength(5);
+    });
+
+    it("shows the six newest incidents from the database", async () => {
+        data.listIncidents.mockResolvedValue(INCIDENTS);
+        render(await OverviewPage());
+
+        expect(data.listIncidents).toHaveBeenCalledWith(6);
+        const links = region("Incidents")
+            .getAllByRole("link")
+            .map((link) => link.getAttribute("href"))
+            .filter((href) => href !== "/incidents");
+        expect(links).toEqual(INCIDENTS.map((incident) => `/incidents/${incident.id}`));
     });
 
     it("keeps the approvals and incidents tables, empty, with nothing open, and the decision log under them", async () => {

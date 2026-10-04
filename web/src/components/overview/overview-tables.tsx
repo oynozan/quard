@@ -183,13 +183,15 @@ export function IncidentsSection({ incidents, now }: { incidents: Incident[]; no
                                     <NameCell
                                         icon={<Siren size={18} strokeWidth={0.75} />}
                                         name={incident.title}
-                                        sub={`${incident.entryAgent} → ${incident.damageAgent} · ${incident.entryPoint}`}
+                                        sub={
+                                            incident.entryPoint
+                                                ? `${incident.entryAgent} → ${incident.damageAgent} · ${incident.entryPoint}`
+                                                : `Run ${shortId(incident.runId)}`
+                                        }
                                     />
                                 </RowLink>
                             </Td>
-                            <Td>
-                                <Badge>{incident.category}</Badge>
-                            </Td>
+                            <Td>{incident.category ? <Badge>{incident.category}</Badge> : <Absent>—</Absent>}</Td>
                             <Td>
                                 <span className="inline-flex items-center gap-2 text-[12px] text-ink-2">
                                     <StatusSquare tone={REPLAY_TONE[incident.replay]} />

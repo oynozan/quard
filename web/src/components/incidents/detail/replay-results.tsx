@@ -16,8 +16,7 @@ import { RoundCells } from "./round-cells";
 const ROW = "grid grid-cols-[72px_auto_auto_minmax(0,1fr)] items-center gap-x-[18px] max-[560px]:gap-x-3";
 
 function statusWord(replay: Replay): string {
-    if (replay.inProgress) return `Replaying round ${replay.rounds.length + 1}…`;
-    if (replay.status === "running") return "Not decided yet";
+    if (replay.status === "running") return `Replaying round ${replay.rounds.length + 1}…`;
     return REPLAY_WORD[replay.status];
 }
 
@@ -29,7 +28,7 @@ function summary(replay: Replay): string {
 
 export function ReplayResults({ replay }: { replay: Replay }) {
     const last = replay.rounds.at(-1);
-    const pending = replay.inProgress ? replay.rounds.length + 1 : null;
+    const pending = replay.status === "running" ? replay.rounds.length + 1 : null;
     const rows = replay.rounds.map((round) => ({
         key: String(round.round),
         cells: [
@@ -75,7 +74,7 @@ export function ReplayResults({ replay }: { replay: Replay }) {
             }
         >
             <p aria-live="polite" className="mb-4 inline-flex items-center gap-2 text-[13px] text-ink">
-                {replay.inProgress ? <Spinner /> : <StatusSquare tone={REPLAY_TONE[replay.status]} />}
+                {pending ? <Spinner /> : <StatusSquare tone={REPLAY_TONE[replay.status]} />}
                 {statusWord(replay)}
             </p>
 
@@ -102,9 +101,13 @@ export function ReplayResults({ replay }: { replay: Replay }) {
 
             <CostBlock replay={replay} />
 
-            {replay.limited && replay.limitedReason ? <Notice className="mt-4">{replay.limitedReason}.</Notice> : null}
-            {replay.capReached ? (
-                <WarningRule className="mt-4" title="Cost cap reached" note="Raise the cap in Settings to continue." />
+            {replay.reason ? <Notice className="mt-4">{replay.reason}</Notice> : null}
+            {replay.status === "cap reached" ? (
+                <WarningRule
+                    className="mt-4"
+                    title="Cost cap reached"
+                    note={`The next round would pass the ${formatCost(replay.capUsd)} cap. Continue with $5 more to play it.`}
+                />
             ) : null}
 
             <Disclosure label="Setup" className="mt-4">

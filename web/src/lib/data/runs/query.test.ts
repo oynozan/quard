@@ -1,9 +1,10 @@
 // @vitest-environment node
+import { createHash } from "node:crypto";
 import { addWaiter, createProject, ingestBatch, openApprovalRequest } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ASKED_STEP, askInput, waitingRun } from "../../../../test/approvals-overview/live";
-import { attack, scoredFetch, signatureMatch } from "../../../../test/runs/events";
+import { at, attack, item, scoredFetch, signatureMatch } from "../../../../test/runs/events";
 
 const requireSession = vi.hoisted(() => vi.fn(async () => ({ sub: "did:privy:1", email: null, github: null, exp: 0 })));
 vi.mock("@/lib/auth/session", () => ({ requireSession }));
@@ -59,6 +60,21 @@ describe("runs from Postgres", () => {
         expect(pay?.args[0]?.valueLabel.appearances[0]?.label.origin).toBe("web:acme-billing.net");
         expect(requireSession).toHaveBeenCalled();
         expect(await getRun("f".repeat(32))).toBeNull();
+    });
+
+    it("links a run to the incident its blocked call opened", async () => {
+        const projectId = await createProject(test.db, "Linked");
+        vi.stubEnv("QUARD_PROJECT_ID", projectId);
+        const QUIET = "d".repeat(32);
+        await ingestBatch(test.db, projectId, [
+            ...attack(RUN, "billing"),
+            item({ type: "run_started", runId: QUIET, agent: "support", at: at(0), origins: {} }),
+        ]);
+
+        const id = `inc_${createHash("md5").update(`${projectId}:${RUN}`).digest("hex").slice(0, 16)}`;
+        expect((await getRun(RUN))?.summary.incidentId).toBe(id);
+        expect((await getRun(QUIET))?.summary.incidentId).toBeNull();
+        vi.stubEnv("QUARD_PROJECT_ID", "");
     });
 
     it("filters by agent, status and words, and limits the list", async () => {

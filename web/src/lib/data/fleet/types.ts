@@ -1,5 +1,5 @@
 import type { LimitName } from "../runs/types";
-import type { GuardMode, GuardType, Label } from "../types";
+import type { GuardMode, GuardType, Trust } from "../types";
 
 export type GuardBlockSeries = { guard: GuardType; values: number[]; total: number };
 
@@ -64,7 +64,7 @@ export type RunLimitCount = {
 export type FleetData = {
     startAt: number;
     endAt: number;
-    incidentsBySource: { origin: string; label: Label; count: number }[];
+    incidentsBySource: { origin: string; trust: Trust; count: number }[];
     incidentsByTool: { tool: string; count: number }[];
     blocksByGuard: BlocksByGuard;
     blocksHeatmap: BlocksHeatmap;

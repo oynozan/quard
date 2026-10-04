@@ -6,7 +6,7 @@ import { formatCost } from "../lib/labels";
 import { ReviewerText } from "./reviewer-text";
 
 // The AI reviewer explains the verdict in plain words and never decides it
-export function ReviewerNote({ note }: { note: Note | null }) {
+export function ReviewerNote({ note, empty = "No explanation yet" }: { note: Note | null; empty?: string }) {
     return (
         <section aria-label="AI reviewer">
             <SectionHeading title="AI explanation" />
@@ -23,7 +23,7 @@ export function ReviewerNote({ note }: { note: Note | null }) {
                     </div>
                 ) : (
                     <p role="status" className="px-3 py-6 text-center text-[12px] text-ink-muted">
-                        No explanation yet
+                        {empty}
                     </p>
                 )}
             </Pane>

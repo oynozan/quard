@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Siren } from "lucide-react";
+import { Absent } from "@/components/kit/detail/detail-list";
 import { DataTable, NameCell, TableState, Td, Th, Tr } from "@/components/kit/data-table";
 import { Badge, StatusSquare } from "@/components/kit/labels";
 import { RowChevron, RowLink } from "@/components/kit/links";
@@ -48,7 +49,7 @@ export function IncidentsTable({ incidents, now, initialCategory }: Props) {
     const [query, setQuery] = useState("");
 
     const counts = useMemo(() => {
-        const map = new Map<string, number>();
+        const map = new Map<string | null, number>();
         for (const item of incidents) map.set(item.category, (map.get(item.category) ?? 0) + 1);
         return map;
     }, [incidents]);
@@ -163,9 +164,12 @@ export function IncidentsTable({ incidents, now, initialCategory }: Props) {
 }
 
 function IncidentRow({ incident, now }: { incident: Incident; now: number }) {
+    // Before the verdict is found, its cells show a dash
+    const entry = incident.entryPoint ?? "—";
+    const damage = incident.damage ?? "—";
     const agents =
         incident.entryAgent === incident.damageAgent
-            ? incident.entryAgent
+            ? (incident.entryAgent ?? "—")
             : `${incident.entryAgent} → ${incident.damageAgent}`;
     return (
         <Tr interactive>
@@ -174,14 +178,12 @@ function IncidentRow({ incident, now }: { incident: Incident; now: number }) {
                     <NameCell icon={<Siren size={18} strokeWidth={0.75} />} name={incident.title} />
                 </RowLink>
             </Td>
-            <Td>
-                <Badge>{incident.category}</Badge>
+            <Td>{incident.category ? <Badge>{incident.category}</Badge> : <Absent>—</Absent>}</Td>
+            <Td className="truncate text-[12px] text-ink-2" title={entry}>
+                <span className="mono">{entry}</span>
             </Td>
-            <Td className="truncate text-[12px] text-ink-2" title={incident.entryPoint}>
-                <span className="mono">{incident.entryPoint}</span>
-            </Td>
-            <Td className="truncate text-[12px] text-ink-2" title={incident.damage}>
-                {incident.damage}
+            <Td className="truncate text-[12px] text-ink-2" title={damage}>
+                {damage}
             </Td>
             <Td className="truncate text-[12px] text-ink-2" title={agents}>
                 <span className="mono">{agents}</span>
