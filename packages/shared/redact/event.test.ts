@@ -84,4 +84,46 @@ describe("redactEvent", () => {
             toolCalls: [{ callId: "c", name: "payInvoice", arguments: '{"iban":"DE89…3000"}' }],
         });
     });
+
+    it("keeps ids whose digits pass as a card number", () => {
+        const card = "4111111111111111";
+        const decision: RunEvent = {
+            type: "decision",
+            runId: `${card}abcdefabcdefabcd`,
+            stepId: card,
+            agent: card,
+            at: base.at,
+            tool: "payInvoice",
+            guard: "action",
+            rule: card,
+            decision: "block",
+            mode: "block",
+            enforced: true,
+            rules: card,
+            request: `apr_${card}`,
+        };
+        expect(redactEvent(redactor, decision)).toEqual({ ...decision, agent: "4111…1111", rule: "4111…1111" });
+        const model: RunEvent = {
+            type: "model_call",
+            ...base,
+            parentStepId: card,
+            model: "m",
+            toolCalls: [],
+            agentVersion: card,
+            status: "ok",
+            durationMs: 1,
+        };
+        expect(redactEvent(redactor, model)).toEqual(model);
+    });
+
+    it("still redacts id fields that are not plain ids", () => {
+        const odd: RunEvent = {
+            type: "run_finished",
+            runId: "4111 1111 1111 1111",
+            agent: "a",
+            at: base.at,
+            status: "completed",
+        };
+        expect(redactEvent(redactor, odd)).toEqual({ ...odd, runId: "4111…1111" });
+    });
 });
