@@ -1,8 +1,8 @@
 # Guards
 
-A guard wraps a tool and checks every call to it. When the check fails, the tool never runs.
+A guard wraps a tool and checks every call to it. When the check fails, the tool never runs. The x402 guard wraps an x402 client instead, and checks every payment it makes.
 
-## The five kinds
+## The six kinds
 
 | Guard    | Wrap it around                                                            | What it checks                                                                                                                                                                    | Results                      |
 | -------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
@@ -11,8 +11,9 @@ A guard wraps a tool and checks every call to it. When the check fails, the tool
 | Approval | High-stakes tools                                                         | Nothing: it always asks a person first                                                                                                                                            | Run or block                 |
 | Egress   | Tools that send data out: email, HTTP posts, uploads                      | Where the data goes and how sensitive it is. Internal data may only go to allowed destinations, never to one that first appeared in untrusted content                             | Allow, block or ask a person |
 | Limit    | Any tool                                                                  | Calls, amounts and cost per run, agent or day, and a new value suddenly used by many agents. On a send or delegate tool, also delegation depth, fan-out and loops                 | Allow or block               |
+| x402     | An [x402](/concepts/payments) payment client                              | Each payment before it is signed: USD caps per payment, run and day, paid hosts, payees first seen in untrusted content, and new payees paid by many runs                         | Allow, block or ask a person |
 
-A source guard runs after its tool returns, before the agent sees the output. The others run before the call.
+A source guard runs after its tool returns, before the agent sees the output. The x402 guard runs before the wallet signs a payment. The others run before the call.
 
 ## What happens on every call
 

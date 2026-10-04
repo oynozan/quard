@@ -52,7 +52,7 @@ Quard also traces values. For each argument of a tool call, it lists every place
 
 ### Guards
 
-A guard wraps a tool and checks every call to it. There are five kinds:
+A guard wraps a tool and checks every call to it. There are six kinds:
 
 | Guard    | Wrap it around                                                    | What it does                                                                              |
 | -------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -61,6 +61,7 @@ A guard wraps a tool and checks every call to it. There are five kinds:
 | Approval | High-stakes tools                                                 | Always asks a person first                                                                |
 | Egress   | Tools that send data out: email, uploads, HTTP posts              | Keeps internal data away from destinations that are not allowed                           |
 | Limit    | Any tool                                                          | Caps calls, amounts and cost per run, agent or day                                        |
+| x402     | An x402 payment client                                            | Checks each payment before it is signed: caps, paid hosts and untrusted payees            |
 
 A blocked call never reaches the tool. The agent gets a short refusal that says what was stopped and why.
 
