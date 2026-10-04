@@ -23,6 +23,7 @@ describe("quard", () => {
             "toBaggage",
             "configure",
             "memory",
+            "x402Fetch",
         ]);
     });
 });
