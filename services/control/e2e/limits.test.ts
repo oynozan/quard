@@ -1,7 +1,10 @@
 import { dayCounts, markValueKnown, quarantineList } from "@quard/db";
+import { newRunId } from "@quard/shared";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { guard, isGuardRefusal, quard, type RunEvent } from "../../../packages/sdk/index.ts";
+import { startSharing } from "../../../packages/sdk/context/shared-run.ts";
+import { currentScope, type Scope } from "../../../packages/sdk/context/scope.ts";
 import { dayUsed } from "../../../packages/sdk/guards/limit/daily.ts";
 import { resetAll } from "../../../packages/sdk/test/reset.ts";
 import { activeControl } from "../../../packages/sdk/transport/link/active.ts";
@@ -146,5 +149,44 @@ describe("the fleet check through control", { timeout: 30_000 }, () => {
 
         expect(await pay()).toBe("paid");
         expect(rawPay).toHaveBeenCalledTimes(5);
+    });
+});
+
+describe("per-run limits of a run that spans processes", { timeout: 30_000 }, () => {
+    it("leaves the call count as it was when control refuses the amount", async () => {
+        await linkSdk();
+        const runId = newRunId();
+        const rawPay = vi.fn(async (_input: { amount: number }) => "paid");
+        const payInvoice = guard(rawPay, {
+            type: "limit",
+            name: "payInvoice",
+            maxCallsPerRun: 5,
+            maxAmountPerRun: { field: "amount", max: 1000 },
+        });
+        const share = () => startSharing((currentScope() as Scope).run);
+
+        // Two run states with one id, as if in two processes
+        await quard.run({ agent: "billing", runId }, async () => {
+            await payInvoice({ amount: 900 });
+            share();
+        });
+        const refused = await quard.run({ agent: "billing", runId }, async () => {
+            share();
+            return payInvoice({ amount: 200 });
+        });
+
+        expect(reasonOf(refused)).toBe("limit_reached");
+        expect(rawPay).toHaveBeenCalledTimes(1);
+        const rows = await test.db
+            .selectFrom("run_counters")
+            .select(["counter", "used"])
+            .where("project_id", "=", project.projectId)
+            .where("run_id", "=", runId)
+            .orderBy("counter")
+            .execute();
+        expect(rows).toEqual([
+            { counter: "amount:payInvoice:amount", used: 900 },
+            { counter: "calls:payInvoice", used: 1 },
+        ]);
     });
 });
