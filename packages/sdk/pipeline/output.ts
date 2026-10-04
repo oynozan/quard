@@ -100,8 +100,8 @@ function indexText(
 }
 
 // Values a verified, trusted message holds that its record did not vouch
-// for. The sender's model wrote them, so they stay model-generated here.
-// In an untrusted message they take its untrusted label.
+// for. The sender's model wrote them, so they stay model-generated here
+// and in later tool output. In an untrusted message they take its label.
 function madeUpKeys(text: string, label: Label, message: Received | undefined): string[] {
     if (message?.verified !== true || label.trust !== "trusted") {
         return [];
@@ -117,11 +117,12 @@ function indexOutput(call: GuardCall, output: unknown, label: Label, message?: R
         // Only the value's own key: its host and domain take the message's label
         const exclude = new Set(extractValues(value).flatMap((found) => found.keys.filter((other) => other !== key)));
         const label = { origin, kind: originKind(origin), trust, sensitivity, flags };
-        indexText(call, value, label, stepId, { exclude, keepEarlier: true }, true);
+        indexText(call, value, label, stepId, { exclude, keepEarlier: true, vouched: true }, true);
     }
     const text = textOf(output);
-    const exclude = new Set([...echoedKeys(call), ...madeUpKeys(text, label, message)]);
-    indexText(call, text, label, call.stepId, { exclude, keepEarlier: message !== undefined });
+    // The index leaves made-up keys out of trusted output, this one too
+    call.run.index.markMadeUp(madeUpKeys(text, label, message));
+    indexText(call, text, label, call.stepId, { exclude: echoedKeys(call), keepEarlier: message !== undefined });
 }
 
 // For an "agent" source: who sent the message and what the sender vouched for
