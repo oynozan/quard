@@ -35,7 +35,7 @@ What Quard keeps, and for how long.
 
 ![Retention](/images/guides/settings-retention.webp)
 
-1. **Retention.** Runs are kept for 30 days by default. Runs tied to an incident are kept for 1 year, so their verdict and replay keep working. Memory labels are kept, so shared memory keeps its labels in later runs. The fleet's first-seen index is kept for 1 year, so old values don't look new again. Approval arguments are kept only until the request is answered.
+1. **Retention.** Runs are kept for 30 days by default. Runs tied to an incident are kept for 1 year, so their verdict and replay keep working. Memory labels are kept, so shared memory keeps its labels in later runs. The fleet's first-seen index is kept for 1 year, so old values don't look new again. Approval arguments are kept only until the request is answered. The worker deletes the rest every hour; see [Retention](/concepts/retention).
 2. **Redaction.** IBANs, card numbers, emails and secrets are never stored in clear. Secrets are removed before anything leaves your app. IBANs, cards and emails become keyed hashes plus a mask, such as `DE89…3000`, so search and value tracing still work. The hash key belongs to your install and never leaves it.
 
 ## Rules from code

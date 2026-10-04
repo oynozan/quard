@@ -9,6 +9,7 @@ const meta: MetaRecord = {
     "multi-agent": "Multi-agent",
     "run-limits": "Run limits",
     "shared-memory": "Shared memory",
+    retention: "Retention",
 };
 
 export default meta;

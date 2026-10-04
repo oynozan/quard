@@ -1,0 +1,47 @@
+# Retention
+
+Quard deletes old data on its own. The worker runs a cleanup when it starts and then every hour. It works through one project at a time and deletes in small batches, so it never holds up the rest of the database.
+
+## What is kept, and for how long
+
+| Data                     | Kept for                                    |
+| ------------------------ | ------------------------------------------- |
+| Runs                     | 30 days after their last event, per project |
+| Runs tied to an incident | 1 year after the incident opened            |
+| Messages between agents  | As long as runs                             |
+| Approval requests        | As long as their run                        |
+| Revoked "always approve" | As long as runs, after the revoke           |
+| Memory labels            | Kept                                        |
+| Fleet first-seen index   | 1 year after a value was last used          |
+| Day counters for limits  | 2 days after their day                      |
+| Closed app connections   | 30 days after they closed                   |
+
+A run takes everything recorded for it along when it goes: its steps, events, labels, guard decisions, payments, messages to other agents and its incident.
+
+The settings page shows the same numbers. See [Settings](/guides/settings#retention).
+
+## Runs tied to an incident
+
+A run with an incident stays for a year after the incident opened, even when the project keeps runs for less. That way the verdict and replay keep working. After the year, the run and its incident are deleted together. If the project keeps runs for longer than a year, the run and its incident stay for that long.
+
+## Memory labels
+
+Memory labels are never deleted with runs. Shared memory can be read again months later, and its labels have to still be there, or the content would come back as untrusted.
+
+## Fleet first-seen index
+
+The [fleet check](/guides/summary#quarantine) remembers when it first saw each IBAN, email, domain or wallet. A value is forgotten a year after its last use, so a value you use every week never looks new again. A value in quarantine stays until someone marks it as known. Older uses of a value are deleted after the project's run window, except the newest one and the uses of a value in quarantine.
+
+## Change how long runs are kept
+
+Each project keeps runs for 30 days unless you change it. The setting is the `retention_days` column on the project, in your own Postgres:
+
+```sql
+UPDATE projects SET retention_days = 90 WHERE name = 'Acme';
+```
+
+The next cleanup uses the new number.
+
+## More than one worker
+
+Several workers can run at once. Each runs the cleanup on its own, and a row two workers pick is only deleted once.
