@@ -1,0 +1,45 @@
+# Hosted tools
+
+Some tools run inside the model provider's service, such as OpenAI's hosted web search and hosted MCP servers. They run during the model call, so Quard can't stop them mid-call. The monitor shapes the request before it leaves, and checks what comes back.
+
+Rules for a hosted tool use the name the model uses: `web_search`, or the MCP tool's name. Set them in code with `hostedTools`, or in the [policy file](/concepts/run-limits#changing-the-limits) under `guards`. A tool listed in the policy file ignores its code rules.
+
+```ts
+quard.configure({
+    hostedTools: {
+        web_search: [{ type: "source", origin: "web", allowDomains: ["*.acme.com"], blockDomains: ["evil.com"] }],
+        create_issue: [{ type: "limit", maxCallsPerRun: 3 }],
+        delete_repo: [{ type: "approval" }],
+    },
+});
+```
+
+## Hosted web search
+
+- The monitor asks the API for the source list of each search. It keeps any `include` values you set.
+- An enforced `allowDomains` list becomes the search's `allowed_domains` filter. Your own filter is narrowed to the domains both lists allow.
+- Each site the search opened, listed or cited becomes untrusted web content, such as `web:docs.acme.com`. So the run is marked influenced, and value tracing finds those URLs and domains.
+- Quard never sees the page text, so that content is flagged `unscanned`.
+- Each site is checked against `allowDomains` and `blockDomains`. The search already ran, so a blocked site is flagged, not stopped.
+
+Values copied from the page text are found nowhere in the run, so they show as model-generated. For page scanning and exact tracing, run search as your own tool, wrapped with a `source` guard.
+
+## Hosted MCP
+
+The monitor sets `require_approval: "always"` on every hosted MCP server in the request. The API then asks before each MCP tool runs, and Quard decides.
+
+The monitor never sends the follow-up request itself. `quard.mcpApprovals()` answers each approval request in a response with Quard's decision, and you send the answers in your next request:
+
+```ts
+const res = await client.responses.create({ model, input, tools });
+const answers = await quard.mcpApprovals(res);
+if (answers.length > 0) {
+    await client.responses.create({ model, previous_response_id: res.id, input: answers, tools });
+}
+```
+
+- Each request meets the same checks as a guarded call: permission, then the `limit`, `action`, `egress` and `approval` rules on its tool name.
+- A blocked call is refused, with the reason the model reads. So is a request the monitor never saw.
+- An `approval` rule, or a rule that asks, waits for a person, as on [Approvals](/guides/approvals). The block checks run again after the answer.
+- Each request is decided once. Asking again gives the same answers.
+- What an MCP tool returned becomes untrusted content from its server, such as `mcp:github`, flagged `unscanned`.
