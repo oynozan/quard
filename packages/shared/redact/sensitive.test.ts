@@ -74,6 +74,12 @@ describe("maskSensitive", () => {
         expect(maskSensitive(text, all)).toBe("send via smtp://[secret removed by Quard]@smtp.acme.com:587");
     });
 
+    it("masks a URL's user and password in a quoted list and leaves the next email alone", () => {
+        expect(maskSensitive("['DSN redis://u:pw@cache.acme.com','jane@acme.com']", all)).toBe(
+            "['DSN redis://[secret removed by Quard]@cache.acme.com','jane@acme.com']",
+        );
+    });
+
     it("masks a whole token even when a card number sits inside it", () => {
         const token = ["eyJhbGciOiJI", "eyJzdWIiOiIx", "4242424242424242"].join(".");
 
