@@ -1,6 +1,7 @@
-import { requestReplay } from "@quard/db";
+import { createProject, ingestBatch, requestReplay } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { chunkLabel, item, started } from "../../../db/test/events.ts";
 import { storeAttack } from "../test/db.ts";
 import { OPENAI, payingModel } from "../test/model.ts";
 import { runNextJob } from "./jobs.ts";
@@ -17,7 +18,16 @@ afterAll(async () => {
 
 beforeEach(async () => {
     await test.db.deleteFrom("incidents").execute();
+    await test.db.deleteFrom("chunk_labels").execute();
 });
+
+// A chunk labeled none, waiting for the AI fallback
+async function storeNone(): Promise<string> {
+    const projectId = await createProject(test.db, "Acme");
+    const chunk = item(chunkLabel({ label: "none", probabilities: { none: 0.7 }, score: 0 }));
+    await ingestBatch(test.db, projectId, [item(started()), chunk]);
+    return chunk.id;
+}
 
 describe("runNextJob", () => {
     it("finds nothing to do when no job is due", async () => {
@@ -46,5 +56,19 @@ describe("runNextJob", () => {
             .execute();
 
         expect(await runNextJob({ db: test.db, openai: undefined })).toMatch(new RegExp(`^replay ${id}: failed: `));
+    });
+
+    it("labels chunks the detector called none once no incident job is due", async () => {
+        const eventId = await storeNone();
+        const { id } = await storeAttack(test.db);
+
+        expect(await runNextJob({ db: test.db, openai: undefined })).toBe(`find ${id}: verdict: bad input`);
+        expect(await runNextJob({ db: test.db, openai: undefined })).toBe(
+            `review ${id}: skipped: OPENAI_API_KEY is not set`,
+        );
+        expect(await runNextJob({ db: test.db, openai: undefined })).toBe(
+            `fallback ${eventId}: skipped: OPENAI_API_KEY is not set`,
+        );
+        expect(await runNextJob({ db: test.db, openai: undefined })).toBeUndefined();
     });
 });

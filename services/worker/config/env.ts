@@ -2,7 +2,8 @@ import type { OpenAiConfig } from "../openai/call.ts";
 
 export type WorkerConfig = {
     databaseUrl: string;
-    // Unset without OPENAI_API_KEY: the reviewer is skipped and replay can't run
+    // Unset without OPENAI_API_KEY: the reviewer and the label fallback are
+    // skipped, and replay can't run
     openai: OpenAiConfig | undefined;
 };
 
