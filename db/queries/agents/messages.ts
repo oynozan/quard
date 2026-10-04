@@ -9,8 +9,8 @@ export type AgentMessageRow = {
     handoffs: number;
     // Messages a receive guard took in
     messages: number;
-    // Of those messages, ones that name the sender's step: delegations
-    // across processes
+    // Delegations across processes among those messages: one per run and
+    // sender's step named, however many messages name it
     delegated: number;
     // Ones with untrusted content, or that no record vouched for
     untrusted: number;
@@ -40,6 +40,8 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
             ),
             "m.to_agent as receiver",
             "m.kind",
+            "m.run_id",
+            "m.parent_step_id",
             sql<boolean>`(m.parent_step_id IS NOT NULL)`.as("named_step"),
             sql<boolean>`(m.trust = 'untrusted' OR NOT m.verified)`.as("untrusted"),
             "m.at",
@@ -54,7 +56,10 @@ export async function agentMessageLinks(db: Db, projectId: string, options: Link
             "t.receiver as to",
             sql<number>`(count(*) FILTER (WHERE t.kind <> 'message'))::int`.as("handoffs"),
             sql<number>`(count(*) FILTER (WHERE t.kind = 'message'))::int`.as("messages"),
-            sql<number>`(count(*) FILTER (WHERE t.kind = 'message' AND t.named_step))::int`.as("delegated"),
+            // Once per run and step, like a delegation made in one process
+            sql<number>`(count(DISTINCT (t.run_id, t.parent_step_id)) FILTER (WHERE t.kind = 'message' AND t.named_step))::int`.as(
+                "delegated",
+            ),
             sql<number>`(count(*) FILTER (WHERE t.untrusted))::int`.as("untrusted"),
             sql<Date>`max(t.at)`.as("lastAt"),
         ])

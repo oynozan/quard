@@ -181,6 +181,23 @@ describe("agentMessageLinks", () => {
         ]);
     });
 
+    it("counts a delegation once per run, step and receiver, as in one process", async () => {
+        const projectId = await projectWith(
+            [...runs(), tool(r1, "orchestrator", s1, "2026-10-03T12:00:01.000Z")],
+            [
+                row(r1, "message", "orchestrator", "billing", "12:00:02", { parentStepId: s1 }),
+                row(r1, "message", "orchestrator", "billing", "12:00:03", { parentStepId: s1 }),
+                row(r1, "message", "orchestrator", "research", "12:00:04", { parentStepId: s1 }),
+            ],
+        );
+        const sent = { from: "orchestrator", handoffs: 0, untrusted: 0, delegated: 1 };
+
+        expect(await agentMessageLinks(test.db, projectId, { since })).toEqual([
+            { ...sent, to: "billing", messages: 2, lastAt: new Date("2026-10-03T12:00:03.000Z") },
+            { ...sent, to: "research", messages: 1, lastAt: new Date("2026-10-03T12:00:04.000Z") },
+        ]);
+    });
+
     it("counts rows from since on", async () => {
         const projectId = await projectWith(runs(), [
             { ...row(r1, "handoff", "triage", "billing", "12:00:01"), at: "2026-09-03T18:39:59.999Z" },
