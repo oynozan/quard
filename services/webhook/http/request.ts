@@ -1,17 +1,14 @@
 import { projectForKey, type Db } from "@quard/db";
+import { bearerToken } from "@quard/db/server";
 
 const MAX_ISSUES = 5;
 
 // What a failed schema check reports
 type Issues = { issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }> };
 
-function bearer(header: string | undefined): string | undefined {
-    return /^Bearer\s+(\S+)$/i.exec(header ?? "")?.[1];
-}
-
 // The project of the agent key in an Authorization header, if it is valid
 export async function projectFor(db: Db, header: string | undefined): Promise<string | undefined> {
-    const key = bearer(header);
+    const key = bearerToken(header);
     return key === undefined ? undefined : projectForKey(db, key);
 }
 

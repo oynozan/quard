@@ -1,15 +1,12 @@
 import { STATUS_CODES, type IncomingMessage, type Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { agentKeyFor, type AgentKeyMatch } from "@quard/db";
+import { bearerToken } from "@quard/db/server";
 import { CONTROL_PATH } from "@quard/shared";
 import type { WebSocketServer } from "ws";
 import { ignore } from "../common/ignore.ts";
 import type { Context } from "../server/context.ts";
 import { acceptConnection } from "./connection.ts";
-
-function bearer(header: string | undefined): string | undefined {
-    return /^Bearer\s+(\S+)$/i.exec(header ?? "")?.[1];
-}
 
 // Answers the upgrade with a plain HTTP status and no WebSocket, then drops the socket
 // even if the client keeps its side open
@@ -31,7 +28,7 @@ async function upgrade(
     if (String(request.url).split("?")[0] !== CONTROL_PATH) {
         return refuse(socket, 404);
     }
-    const key = bearer(request.headers.authorization);
+    const key = bearerToken(request.headers.authorization);
     let match: AgentKeyMatch | undefined;
     try {
         match = key === undefined ? undefined : await agentKeyFor(ctx.db, key);
