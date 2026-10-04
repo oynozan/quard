@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { combineLabels, extractValues, type ContextLabel, type Label, type OriginKind } from "@quard/shared";
+import { combineLabels, extractValues, type ContextLabel, type Label } from "@quard/shared";
 
 export type Match = "exact" | "host" | "domain";
 
@@ -34,9 +34,6 @@ export type AddOptions = {
     vouched?: boolean;
 };
 
-// Their own words may make a made-up value seen. A tool's may not.
-const OWN_WORDS = new Set<OriginKind>(["user", "system"]);
-
 function matchOf(key: string): Match {
     if (key.startsWith("host:")) {
         return "host";
@@ -57,7 +54,8 @@ export class ContentIndex {
     readonly #byKey = new Map<string, ContentRecord[]>();
     readonly #seen = new Set<string>();
     // Keys of values a model wrote that no record vouched for, such as an
-    // IBAN read back from memory. Trusted tool output never vouches for them.
+    // IBAN read back from memory. No trusted content vouches for them, not
+    // even the user's or the system's, which app code may fill with them.
     readonly #madeUp = new Set<string>();
 
     #push(entry: Omit<ContentRecord, "id" | "order">): ContentRecord {
@@ -78,7 +76,7 @@ export class ContentIndex {
             return undefined;
         }
         this.#seen.add(print);
-        const skipMadeUp = label.trust === "trusted" && !OWN_WORDS.has(label.kind) && options.vouched !== true;
+        const skipMadeUp = label.trust === "trusted" && options.vouched !== true;
         const keys = [...new Set(extractValues(text).flatMap((value) => value.keys))].filter(
             (key) =>
                 options.exclude?.has(key) !== true &&

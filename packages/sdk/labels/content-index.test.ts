@@ -148,7 +148,7 @@ describe("ContentIndex made-up keys", () => {
     const KEY = `iban:${IBAN}`;
     const origins = (index: ContentIndex) => index.lookup([KEY]).map((o) => o.origin);
 
-    it("leaves them out of trusted content other than the user's or the system's", () => {
+    it("leaves them out of trusted content", () => {
         const index = new ContentIndex();
         index.markMadeUp([KEY]);
 
@@ -158,14 +158,16 @@ describe("ContentIndex made-up keys", () => {
         expect(origins(index)).toEqual([]);
     });
 
-    it("still indexes them in the user's or the system's own words", () => {
+    // App code may put a model's note there. A person who retypes it gets asked.
+    it("leaves them out of the user's and the system's words too", () => {
         const index = new ContentIndex();
         index.markMadeUp([KEY]);
 
         index.add(`pay ${IBAN}`, labelFor("user"), "s1");
         index.add(`the supplier's IBAN is ${IBAN}`, labelFor("system"), "s2");
 
-        expect(origins(index)).toEqual(["user", "system"]);
+        expect(origins(index)).toEqual([]);
+        expect(index.size).toBe(2);
     });
 
     it("still indexes them under an untrusted label", () => {
