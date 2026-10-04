@@ -4,7 +4,7 @@ import { unitWord } from "@/components/charts/layout/format";
 import { SectionHeading } from "@/components/kit/headings";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RunLimitCount } from "@/lib/data/fleet";
-import { formatUsd, padCount } from "@/lib/format";
+import { padCount } from "@/lib/format";
 import { limitCount } from "./lib/sections";
 
 type LimitName = RunLimitCount["name"];
@@ -18,10 +18,6 @@ const NAMES: Record<LimitName, string> = {
 };
 
 const LIMITS = Object.keys(NAMES) as LimitName[];
-
-function limitText(limit: RunLimitCount): string {
-    return limit.unit === "USD" ? formatUsd(limit.limit) : `${limit.limit} ${limit.unit}`;
-}
 
 // Runs that went over each run limit, as one tile per limit
 export function RunLimits({ limits }: { limits: RunLimitCount[] | null }) {
@@ -57,8 +53,8 @@ function LimitTile({ limit, count, max }: { limit: RunLimitCount; count: number;
                 </>
             }
             limit={
-                <span className="mono block truncate" title={`Limit: ${limitText(limit)}`}>
-                    {limitText(limit)}
+                <span className="mono block truncate" title={`Rule: ${limit.rule}`}>
+                    {limit.rule}
                 </span>
             }
             meter={
@@ -106,7 +102,7 @@ function PlaceholderTile({ name, loading }: { name: LimitName; loading: boolean 
 
 type TileFrameProps = { title: string; counter: ReactNode; limit: ReactNode; meter: ReactNode };
 
-// A 136px tile with the name, the counter, and the limit over its meter
+// A 136px tile with the name, the counter, and the rule over its meter
 function TileFrame({ title, counter, limit, meter }: TileFrameProps) {
     return (
         <section

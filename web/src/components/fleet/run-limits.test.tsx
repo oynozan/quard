@@ -29,7 +29,7 @@ describe("RunLimits", () => {
         expect(tile("Depth").getByRole("heading", { level: 3 }).textContent).toBe("Depth");
         expect(tile("Depth").getByText("03")).toBeTruthy();
         expect(tile("Depth").getByText("would stop")).toBeTruthy();
-        expect(tile("Depth").getByTitle("Limit: 3 levels").textContent).toBe("3 levels");
+        expect(tile("Depth").getByTitle("Rule: max-depth").textContent).toBe("max-depth");
         expect(tile("Depth").getByRole("progressbar").getAttribute("aria-label")).toBe(
             "3 runs would stop at the depth limit in the last 30 days. The most for any limit is 6.",
         );
@@ -45,7 +45,7 @@ describe("RunLimits", () => {
         render(<RunLimits limits={LIMITS} />);
 
         expect(tile("Cost").getByText("00")).toBeTruthy();
-        expect(tile("Cost").getByTitle("Limit: $5.00").textContent).toBe("$5.00");
+        expect(tile("Cost").getByTitle("Rule: max-cost").textContent).toBe("max-cost");
     });
 
     it("keeps every tile at 00, with the meters' scale at 1, when no run went over a limit", () => {

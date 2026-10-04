@@ -77,11 +77,11 @@ export const LINKS: FleetData["untrustedLinks"] = [
 
 // Observe-mode limits count what they would stop, the block-mode loop limit what it stopped
 export const LIMITS: RunLimitCount[] = [
-    { name: "depth", limit: 3, unit: "levels", mode: "observe", wouldStop: 3, stopped: 0 },
-    { name: "fan-out", limit: 10, unit: "helpers per agent", mode: "observe", wouldStop: 1, stopped: 0 },
-    { name: "loops", limit: 5, unit: "handoffs back and forth", mode: "block", wouldStop: 0, stopped: 2 },
-    { name: "steps", limit: 200, unit: "model calls", mode: "observe", wouldStop: 6, stopped: 0 },
-    { name: "cost", limit: 5, unit: "USD", mode: "observe", wouldStop: 0, stopped: 0 },
+    { name: "depth", rule: "max-depth", mode: "observe", wouldStop: 3, stopped: 0 },
+    { name: "fan-out", rule: "max-fan-out", mode: "observe", wouldStop: 1, stopped: 0 },
+    { name: "loops", rule: "max-loops", mode: "block", wouldStop: 0, stopped: 2 },
+    { name: "steps", rule: "max-steps", mode: "observe", wouldStop: 6, stopped: 0 },
+    { name: "cost", rule: "max-cost", mode: "observe", wouldStop: 0, stopped: 0 },
 ];
 
 // Every section with something in it

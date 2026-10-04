@@ -52,8 +52,8 @@ export type WatchedValue = {
 
 export type RunLimitCount = {
     name: LimitName;
-    limit: number;
-    unit: string;
+    // The rule's name in the rules list, such as "max-depth". Its value lives in the SDK's settings.
+    rule: string;
     mode: GuardMode;
     // Runs that went over an observe-mode limit and ran anyway
     wouldStop: number;
