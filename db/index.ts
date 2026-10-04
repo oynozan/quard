@@ -125,6 +125,12 @@ export {
     projectSettings,
 } from "./queries/projects.ts";
 export type { Project, ProjectSettings } from "./queries/projects.ts";
+export { newPayees, quarantinedPayees } from "./queries/payments/payees.ts";
+export type { NewPayee, QuarantinedPayee } from "./queries/payments/payees.ts";
+export { runPayments } from "./queries/payments/run.ts";
+export type { PaymentRow, PaymentStage } from "./queries/payments/run.ts";
+export { spendBy, spendByDay } from "./queries/payments/spend.ts";
+export type { SpendBy, SpendDay, SpendGroup, SpendTotal } from "./queries/payments/spend.ts";
 export { getRun, listRuns } from "./queries/runs.ts";
 export type {
     RunDecision,
