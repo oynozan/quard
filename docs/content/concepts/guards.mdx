@@ -72,3 +72,4 @@ Guards run inside your app, so most checks keep working:
 | Label lookups                              | A label that can't be looked up counts as untrusted           |
 | Detector                                   | Keeps working, because your app calls it directly             |
 | Decision records                           | Kept and sent when the backend is back, marked as sent late   |
+| Hash key, before the SDK gets it           | Events wait for it. After 5 seconds, labels aren't stored     |

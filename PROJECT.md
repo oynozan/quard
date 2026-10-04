@@ -382,7 +382,7 @@ Decided by Q23.
 | Label lookups | A label that can't be looked up counts as untrusted |
 | Jev detector | Keeps working: the SDK calls Jev directly, not through the backend |
 | Decision records | Buffered, up to 10,000, and retried every 1 s to 60 s |
-| Uploads and label records, before the SDK has its project's hash key | Wait in the same buffer; no raw value leaves the process |
+| Uploads and label records, before the SDK has its project's hash key | Events wait in the upload buffer. Label records wait up to 5 s, then are not stored. No raw value leaves the process |
 
 If the buffer fills, the oldest allow records are dropped first, and the number lost is recorded. `webhook` stores it, and the overview shows how many events were lost in the last 24 hours. Records sent late carry `degraded: true`.
 
@@ -734,7 +734,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - The hash is HMAC-SHA-256. The install has one random 32-byte key, `QUARD_HASH_KEY`, and only the server holds it: `webhook`, `control` and `web`. It is never sent to agents or to us. (**Owner**)
 - Each project hashes with its own key, made from the install's key by `projectHashKey()` in `packages/shared`. Wherever the server hashes or redacts, such as search input, it uses the key of the request's project. (**Owner**)
 - Agents never set a hash key. The SDK gets its project's key with its agent key: `control` sends it in the `ready` message, and `webhook` serves it at `GET /v1/hash-key`, with `401 invalid_agent_key` for a bad or revoked key. Whichever answers first wins; both give the same key. (**Owner**)
-- Until the SDK has the key, uploads and label records wait in the buffer, and calls that hash for the backend wait for it. If the key can't be had, the SDK retries as it does while `webhook` is down. No raw value ever leaves the process. Without a backend nothing leaves the process, so no key is needed. (**Owner**)
+- Until the SDK has the key, events wait in the upload buffer and retry as they do while `webhook` is down. `quard.inject()`, `quard.resume()` and shared memory wait up to 5 s for it, then go on without storing their label records (`label_record_not_stored`). No raw value ever leaves the process. Without a backend nothing leaves the process, so no key is needed. (**Owner**)
 - Why: users of a hosted Quard can't be given the install's key. With it and a copy of the database, anyone could hash guessed IBANs or emails and find them in every customer's data. The agent key is now the only secret a user needs.
 - The move to project keys changes every hash once. Search misses older IBANs and emails, older memory items read back as untrusted, "always approve" grants ask again, and the fleet check sees every IBAN and email as new.
 - To rotate the install's key, add a new one and keep the old one for search until old runs expire.
