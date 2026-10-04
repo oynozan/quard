@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import { extractValues, isRunId, isStepId, newStepId } from "@quard/shared";
-import { runLimits } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import type { ContentIndex } from "../labels/content-index.ts";
 import { printOf } from "../labels/print.ts";
@@ -37,6 +36,9 @@ export type Incoming = { carrier: Carrier; found: FoundRecord | undefined };
 
 // What each resumed scope came in with, for receive guards inside it
 const resumed = new WeakMap<Scope, Incoming>();
+
+// Deeper than any depth limit, even one raised later
+const UNKNOWN_DEPTH = Number.MAX_SAFE_INTEGER;
 
 // A carrier from a channel or a baggage header string, undefined when unreadable
 export function readCarrier(value: unknown): Carrier | undefined {
@@ -128,7 +130,7 @@ export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOp
     const agent = options.agent ?? "default";
     if (known === undefined) {
         // Without the record, only the agent's own list caps its tools, and
-        // its depth counts as at the limit, so it may not delegate further
+        // its depth is past any limit, so it may not delegate further
         warn(run.runId, agent, "label_record_not_found");
     }
     // The sender's tools cap what this agent may use
@@ -139,7 +141,7 @@ export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOp
         parentStepId: checked.parentStepId,
         tools: narrowTools(granted, options.tools),
         lastStepId: undefined,
-        depth: known === undefined ? runLimits().depth : known.depth + 1,
+        depth: known === undefined ? UNKNOWN_DEPTH : known.depth + 1,
     };
     resumed.set(scope, { carrier: checked, found });
     return await withScope(scope, fn);

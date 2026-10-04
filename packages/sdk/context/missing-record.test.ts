@@ -36,7 +36,7 @@ describe("inject", () => {
 });
 
 describe("resume", () => {
-    it("counts the depth as at the limit and warns when the record is unknown or names another run", async () => {
+    it("counts the depth as past any limit and warns when the record is unknown or names another run", async () => {
         configure({ runLimits: { depth: 4 } });
         const sent = await runScope({ tools: ["pay"] }, () => inject({ content: "brief" }));
         takeEvents();
@@ -44,8 +44,9 @@ describe("resume", () => {
         const unknown = await resume({ runId: RUN_ID, labelRef: "nope" }, () => currentScope(), { agent: "billing" });
         const other = await resume({ ...sent, runId: RUN_ID }, () => currentScope());
 
-        expect(unknown).toMatchObject({ depth: 4, run: { runId: RUN_ID }, tools: undefined });
-        expect(other).toMatchObject({ depth: 4, run: { runId: RUN_ID }, tools: undefined });
+        const depth = Number.MAX_SAFE_INTEGER;
+        expect(unknown).toMatchObject({ depth, run: { runId: RUN_ID }, tools: undefined });
+        expect(other).toMatchObject({ depth, run: { runId: RUN_ID }, tools: undefined });
         expect(takeEvents().filter((event) => event.type === "warning")).toEqual([
             {
                 type: "warning",
@@ -82,5 +83,21 @@ describe("resume", () => {
             decision: "block",
             reason: "limit_reached",
         });
+    });
+
+    it("keeps blocking that delegation after the depth limit is raised", async () => {
+        configure({ runLimits: { mode: "block", depth: 2 } });
+        const delegate = guard(async (_input: { to: string }) => "sent", {
+            type: "limit",
+            name: "delegate",
+            delegateTo: "to",
+        });
+
+        const out = await resume({ runId: RUN_ID, labelRef: "nope" }, () => {
+            configure({ runLimits: { mode: "block", depth: 50 } });
+            return delegate({ to: "helper" });
+        });
+
+        expect(isGuardRefusal(out)).toBe(true);
     });
 });
