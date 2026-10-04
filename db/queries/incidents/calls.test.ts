@@ -19,8 +19,12 @@ describe("getModelCalls", () => {
     it("returns a run's model calls oldest first, with the recorded request", async () => {
         const projectId = await createProject(test.db, "Acme");
         const requestBody = { model: "gpt-5.4-mini", input: [{ role: "user", content: "Pay the invoice" }] };
-        // Object.assign, since the event schema may not declare requestBody yet
-        const later = Object.assign(modelCall("2026-10-03T12:00:04.000Z"), { stepId: "5".repeat(16), requestBody });
+        const later = {
+            ...modelCall("2026-10-03T12:00:04.000Z"),
+            stepId: "5".repeat(16),
+            requestBody,
+            outputText: ["Paying the invoice now."],
+        };
         const first = { ...modelCall(), responseId: undefined, toolCalls: [] };
         await ingestBatch(test.db, projectId, [item(started()), item(later), item(first), item(toolCall())]);
 
@@ -33,6 +37,7 @@ describe("getModelCalls", () => {
                 responseId: null,
                 toolCalls: [],
                 requestBody: null,
+                outputText: [],
                 at: new Date("2026-10-03T12:00:01.000Z"),
             },
             {
@@ -41,6 +46,7 @@ describe("getModelCalls", () => {
                 responseId: "resp_1",
                 toolCalls: [{ callId: "call_1", name: "payInvoice", arguments: '{"iban":"DE89…3000"}' }],
                 requestBody,
+                outputText: ["Paying the invoice now."],
                 at: new Date("2026-10-03T12:00:04.000Z"),
             },
         ]);

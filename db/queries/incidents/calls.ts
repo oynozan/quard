@@ -8,6 +8,8 @@ export type ModelCallRecord = {
     toolCalls: { callId: string; name: string; arguments: string }[];
     // The redacted request, kept only when the SDK uploaded it
     requestBody: Record<string, unknown> | null;
+    // The assistant texts of the response, redacted. Empty when not recorded.
+    outputText: string[];
     at: Date;
 };
 
@@ -21,6 +23,7 @@ export async function getModelCalls(db: Db, projectId: string, runId: string): P
             sql<string | null>`body->>'responseId'`.as("responseId"),
             sql<ModelCallRecord["toolCalls"]>`body->'toolCalls'`.as("toolCalls"),
             sql<Record<string, unknown> | null>`body->'requestBody'`.as("requestBody"),
+            sql<string[]>`coalesce(body->'outputText', '[]'::jsonb)`.as("outputText"),
             "at",
         ])
         .where("project_id", "=", projectId)

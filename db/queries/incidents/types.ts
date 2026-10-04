@@ -34,6 +34,19 @@ export type TracedValue = {
     })[];
 };
 
+export type HandoffFault = "wrong information sent" | "constraint dropped" | "correct message misread";
+
+// A message, handoff or agent run as a tool, from one agent to another
+export type VerdictHandoff = {
+    stepId: string;
+    kind: "message" | "handoff" | "tool";
+    from: string;
+    to: string;
+    at: string;
+    trust: Trust;
+    verified: boolean;
+};
+
 export type StoredVerdict = {
     category: IncidentCategory;
     entry: VerdictEntry;
@@ -42,6 +55,15 @@ export type StoredVerdict = {
     missingGuard: MissingGuard | null;
     values: TracedValue[];
     versions: { agent: string; version: string }[];
+    // Only when more than one agent took part. Verdicts stored before
+    // these fields lack them: read missing as null.
+    acrossAgents: {
+        entryAgent: string;
+        handoff: VerdictHandoff | null;
+        turningAgent: string;
+        damageAgent: string;
+    } | null;
+    handoffFault: HandoffFault | null;
 };
 
 export type ReplayCount = { runs: number; harmful: number };

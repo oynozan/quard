@@ -35,6 +35,8 @@ export function verdict(fields: Partial<StoredVerdict> = {}): StoredVerdict {
         missingGuard: null,
         values: [],
         versions: [],
+        acrossAgents: null,
+        handoffFault: null,
         ...fields,
     };
 }

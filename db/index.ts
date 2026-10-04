@@ -88,6 +88,8 @@ export { findMemoryRecords, findMessageRecord } from "./queries/labels/find.ts";
 export { storeLabelRecords } from "./queries/labels/store.ts";
 export { getModelCalls } from "./queries/incidents/calls.ts";
 export type { ModelCallRecord } from "./queries/incidents/calls.ts";
+export { getAgentMessages } from "./queries/incidents/messages.ts";
+export type { AgentMessageRecord } from "./queries/incidents/messages.ts";
 export { incidentCounts } from "./queries/incidents/counts.ts";
 export type { IncidentCounts } from "./queries/incidents/counts.ts";
 export { claimIncidentJob, deferIncidentJob } from "./queries/incidents/jobs.ts";
@@ -97,6 +99,7 @@ export type { ReplayRequest } from "./queries/incidents/replay.ts";
 export { failFind, saveReplay, saveReview, saveVerdict } from "./queries/incidents/save.ts";
 export type {
     ClaimedJob,
+    HandoffFault,
     IncidentCategory,
     IncidentRow,
     MissingGuard,
@@ -108,6 +111,7 @@ export type {
     StoredVerdict,
     TracedValue,
     VerdictEntry,
+    VerdictHandoff,
     VerdictPlace,
 } from "./queries/incidents/types.ts";
 export {
