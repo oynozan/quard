@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ApprovalInfo, ModelUsage, Step } from "@/lib/data/runs/types";
 import { detailValue, section } from "../../../../../test/runs-detail-list/dom";
@@ -141,6 +141,7 @@ describe("StepDrawer", () => {
             carries: [TRUSTED, UNTRUSTED],
             labelRef: "ref-1",
             untrusted: true,
+            verified: true,
             summary: "Check the sender.",
         };
         open({ kind: "handoff", link });
@@ -150,6 +151,7 @@ describe("StepDrawer", () => {
         expect(detailValue(part, "To")).toBe("researcher");
         expect(detailValue(part, "Channel")).toBe("queue");
         expect(detailValue(part, "Label reference")).toBe("ref-1");
+        expect(within(part).queryByText("Verified", { selector: "dt" })).toBeNull();
         expect(part.textContent).toContain("systemtrustedweb:acme.netuntrustedCheck the sender.");
     });
 
@@ -162,26 +164,57 @@ describe("StepDrawer", () => {
             carries: [],
             labelRef: "ref-2",
             untrusted: false,
+            verified: true,
             summary: "Plain note.",
         };
         open({ kind: "message", link });
         const part = section("Message between agents");
         expect(detailValue(part, "Kind")).toBe("Message");
-        expect(part.textContent?.endsWith("ref-2Plain note.")).toBe(true);
+        expect(detailValue(part, "Verified")).toBe("Yes");
+        expect(part.textContent?.endsWith("YesPlain note.")).toBe(true);
+    });
+
+    it("marks a message no record vouched for, without a channel, reference or repeated summary", () => {
+        const link = {
+            kind: "message" as const,
+            from: "unknown",
+            to: "billing",
+            channel: null,
+            carries: [UNTRUSTED],
+            labelRef: null,
+            untrusted: true,
+            verified: false,
+            summary: "Unverified · read as untrusted",
+        };
+        open({ kind: "message", detail: "Unverified · read as untrusted", link });
+        const part = section("Message between agents");
+        expect(within(part).queryByText("Channel", { selector: "dt" })).toBeNull();
+        expect(detailValue(part, "Label reference")).toBe("None");
+        expect(detailValue(part, "Verified")).toBe("No");
+        expect(part.querySelectorAll("p")).toHaveLength(0);
     });
 
     it("shows a memory read whose hash check passed", () => {
-        open({ kind: "memory_read", memory: { store: "notes", key: "vendor", label: TRUSTED, hashOk: true } });
+        open({ kind: "memory_read", memory: { store: "notes", op: "read", items: 2, verified: 2, label: TRUSTED } });
         const memory = section("Memory");
         expect(detailValue(memory, "Store")).toBe("notes");
-        expect(detailValue(memory, "Key")).toBe("vendor");
+        expect(detailValue(memory, "Items")).toBe("2");
         expect(detailValue(memory, "Label")).toBe("systemtrusted");
         expect(detailValue(memory, "Hash check")).toBe("Passed");
     });
 
-    it("says memory changed outside the wrapper reads as untrusted", () => {
-        open({ kind: "memory_read", memory: { store: "notes", key: "vendor", label: UNTRUSTED, hashOk: false } });
-        expect(detailValue(section("Memory"), "Hash check")).toBe("Changed · read as untrusted");
+    it("says how many items read back without a matching label", () => {
+        open({ kind: "memory_read", memory: { store: "notes", op: "read", items: 3, verified: 1, label: UNTRUSTED } });
+        expect(detailValue(section("Memory"), "Hash check")).toBe("2 of 3 unmatched");
+    });
+
+    it("says whether a memory write stored its label", () => {
+        const write = { store: "notes", op: "write" as const, items: 1, label: TRUSTED };
+        open({ kind: "memory_write", memory: { ...write, verified: 1 } });
+        expect(detailValue(section("Memory"), "Label stored")).toBe("Yes");
+        cleanup();
+        open({ kind: "memory_write", memory: { ...write, verified: 0 } });
+        expect(detailValue(section("Memory"), "Label stored")).toBe("No");
     });
 
     it("links a waiting approval to the approvals page", () => {

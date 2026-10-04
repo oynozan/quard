@@ -51,4 +51,12 @@ describe("MessageList", () => {
         );
         expect(screen.getByText("Pass the draft on").getAttribute("title")).toBe("Pass the draft on");
     });
+
+    it("leaves out a channel and a summary that are not known", () => {
+        const edge = makeEdge({ kind: "message", from: "unknown", channel: null, summary: "" });
+        const { container } = render(<MessageList edges={[edge]} startedAt={START} />);
+        fireEvent.click(screen.getByRole("button", { name: "1 message" }));
+        expect(screen.getByRole("listitem").textContent).toBe("1.5 sMessageunknownresearcher");
+        expect(container.querySelectorAll("p")).toHaveLength(0);
+    });
 });

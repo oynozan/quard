@@ -6,7 +6,7 @@ import { DrawerSection, IdentifierRow } from "@/components/kit/detail/drawer-par
 import { LabelChip } from "@/components/kit/labels";
 import { ArrowLink } from "@/components/kit/links";
 import { Drawer } from "@/components/ui/drawer";
-import type { Step } from "@/lib/data/runs/types";
+import type { MemoryAccess, Step } from "@/lib/data/runs/types";
 import { formatClock, formatCost, formatInt } from "@/lib/format";
 import { contextStyle } from "../lib/context";
 import { KIND_WORD, STATUS_TONE, STATUS_WORD, formatOffset, formatStepDuration } from "../lib/words";
@@ -138,12 +138,19 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
                         <DetailRow term="To" mono>
                             {step.link.to}
                         </DetailRow>
-                        <DetailRow term="Channel" mono>
-                            {step.link.channel}
-                        </DetailRow>
+                        {step.link.channel ? (
+                            <DetailRow term="Channel" mono>
+                                {step.link.channel}
+                            </DetailRow>
+                        ) : null}
                         <DetailRow term="Label reference" mono>
-                            {step.link.labelRef}
+                            {step.link.labelRef ?? <Absent>None</Absent>}
                         </DetailRow>
+                        {step.kind === "message" ? (
+                            <DetailRow term="Verified">
+                                {step.link.verified ? "Yes" : <StatusValue tone="danger">No</StatusValue>}
+                            </DetailRow>
+                        ) : null}
                     </DetailList>
                     {step.link.carries.length ? (
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -152,7 +159,9 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
                             ))}
                         </div>
                     ) : null}
-                    <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft">{step.link.summary}</p>
+                    {step.link.summary && step.link.summary !== step.detail ? (
+                        <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft">{step.link.summary}</p>
+                    ) : null}
                 </DrawerSection>
             ) : null}
 
@@ -162,14 +171,14 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
                         <DetailRow term="Store" mono>
                             {step.memory.store}
                         </DetailRow>
-                        <DetailRow term="Key" mono>
-                            {step.memory.key}
+                        <DetailRow term="Items" mono>
+                            {formatInt(step.memory.items)}
                         </DetailRow>
                         <DetailRow term="Label">
                             <LabelChip label={step.memory.label} />
                         </DetailRow>
-                        <DetailRow term="Hash check">
-                            {step.memory.hashOk ? "Passed" : "Changed · read as untrusted"}
+                        <DetailRow term={step.memory.op === "read" ? "Hash check" : "Label stored"}>
+                            <MemoryCheck memory={step.memory} />
                         </DetailRow>
                     </DetailList>
                 </DrawerSection>
@@ -199,5 +208,17 @@ function StepBody({ step, startedAt }: { step: Step; startedAt: number }) {
                 </DrawerSection>
             ) : null}
         </>
+    );
+}
+
+// Items whose labels did not match, or a write whose label was not stored, read back as untrusted
+function MemoryCheck({ memory }: { memory: MemoryAccess }) {
+    const missing = memory.items - memory.verified;
+    if (memory.op === "write") return missing > 0 ? <StatusValue tone="danger">No</StatusValue> : "Yes";
+    if (missing === 0) return "Passed";
+    return (
+        <StatusValue tone="danger">
+            {missing} of {memory.items} unmatched
+        </StatusValue>
     );
 }

@@ -25,7 +25,7 @@ function Node({ node, edges, startedAt }: { node: TreeNode; edges: RunEdge[]; st
             ) : null}
             {incoming ? (
                 <p
-                    title={`${EDGE_WORD[incoming.kind]} from ${incoming.from} over ${incoming.channel}`}
+                    title={`${EDGE_WORD[incoming.kind]} from ${incoming.from}${incoming.channel ? ` over ${incoming.channel}` : ""}`}
                     className="mb-[6px] flex flex-wrap items-center gap-2 text-[11px] font-light text-ink-muted"
                 >
                     <span>

@@ -54,6 +54,12 @@ describe("RunGraph", () => {
         expect(screen.queryByText("untrusted")).toBeNull();
     });
 
+    it("leaves the channel out of the note when it is not known", () => {
+        const message = makeEdge({ kind: "message", to: "research bot", channel: null });
+        render(<RunGraph graph={{ nodes: [root, child], edges: [message] }} startedAt={START} />);
+        expect(screen.getByTitle("Message from billing").textContent).toBe("Message · 1.5 s");
+    });
+
     it("leaves out a version and a model that are not known", () => {
         const bare = makeAgent({ name: "billing", version: "", model: "" });
         render(<RunGraph graph={{ nodes: [bare], edges: [] }} startedAt={START} />);

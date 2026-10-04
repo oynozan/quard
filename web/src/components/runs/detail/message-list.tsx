@@ -49,14 +49,18 @@ export function MessageList({ edges, startedAt }: { edges: RunEdge[]; startedAt:
                                     <Glyph name="chevronRight" size={11} className="opacity-60" />
                                     {edge.to}
                                 </span>
-                                <span className="mono text-[11px] text-ink-muted">{edge.channel}</span>
+                                {edge.channel ? (
+                                    <span className="mono text-[11px] text-ink-muted">{edge.channel}</span>
+                                ) : null}
                                 {edge.carries.map((label) => (
                                     <LabelChip key={label.origin} label={label} />
                                 ))}
                             </div>
-                            <p title={edge.summary} className="mt-1 line-clamp-2 leading-[1.6] text-ink-note">
-                                {edge.summary}
-                            </p>
+                            {edge.summary ? (
+                                <p title={edge.summary} className="mt-1 line-clamp-2 leading-[1.6] text-ink-note">
+                                    {edge.summary}
+                                </p>
+                            ) : null}
                         </div>
                     </li>
                 ))}

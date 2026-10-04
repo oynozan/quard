@@ -59,19 +59,23 @@ export type AgentLink = {
     kind: LinkKind;
     from: string;
     to: string;
-    channel: Channel;
+    // Null when the SDK did not say how it travelled
+    channel: Channel | null;
     carries: Label[];
-    labelRef: string;
+    labelRef: string | null;
     untrusted: boolean;
+    // False for a message no record vouched for, from "unknown"
+    verified: boolean;
     summary: string;
 };
 
 export type MemoryAccess = {
     store: string;
-    key: string;
+    op: "read" | "write";
+    items: number;
+    // Items whose stored labels matched their content. The rest read back as untrusted.
+    verified: number;
     label: Label;
-    // False when the content changed outside the wrapper, so it reads back as untrusted.
-    hashOk: boolean;
 };
 
 export type ApprovalState = "waiting" | "approved once" | "always approved" | "denied" | "no longer waiting";
@@ -135,7 +139,7 @@ export type RunEdge = {
     from: string;
     to: string;
     at: number;
-    channel: Channel;
+    channel: Channel | null;
     carries: Label[];
     untrusted: boolean;
     summary: string;

@@ -64,6 +64,7 @@ export function makeLink(fields: Partial<AgentLink> = {}): AgentLink {
         carries: [],
         labelRef: "ref",
         untrusted: false,
+        verified: true,
         summary: "",
         ...fields,
     };
