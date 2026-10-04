@@ -140,7 +140,7 @@ describe("agents from Postgres", () => {
         expect(requireSession).toHaveBeenCalled();
     });
 
-    it("adds handoffs and messages, and counts a delegation across processes once, as a message", async () => {
+    it("adds handoffs and messages, and counts a delegation across processes or by handoff once", async () => {
         await fleet();
         const row = (runId: string, kind: string, from: string, to: string, secondsAgo: number) => ({
             project_id: process.env.QUARD_PROJECT_ID!,
@@ -161,14 +161,15 @@ describe("agents from Postgres", () => {
                 // billing's process also reports orchestrator's delegation as a message
                 { ...row(NEW, "message", "orchestrator", "billing", 40), parent_step_id: S1 },
                 { ...row(NEW, "message", "billing", "orchestrator", 22), verified: false },
-                row(EARLIER, "tool", "support", "helper", D3 - 2),
+                // The SDK records an agent run as a tool on the step that started it
+                { ...row(EARLIER, "tool", "support", "helper", D3 - 2), step_id: S1 },
             ])
             .execute();
 
         expect((await getAgentGraph()).edges).toEqual([
-            { ...handed, handoffs: 1, total: 2 },
             { ...link("billing", "orchestrator", 1, 22), delegations: 0, messages: 1 },
             { ...link("orchestrator", "billing", 0, 40), delegations: 0, messages: 1 },
+            { ...link("support", "helper", 0, D3 - 2), delegations: 0, handoffs: 1 },
         ]);
     });
 
