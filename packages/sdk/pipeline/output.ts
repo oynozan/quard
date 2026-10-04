@@ -98,10 +98,11 @@ function indexText(
     }
 }
 
-// Values a verified message holds that its record did not vouch for.
-// The sender's model wrote them, so they stay model-generated here.
-function unvouchedKeys(text: string, message: Received | undefined): string[] {
-    if (message?.verified !== true) {
+// Values a verified, trusted message holds that its record did not vouch
+// for. The sender's model wrote them, so they stay model-generated here.
+// In an untrusted message they take its untrusted label.
+function unvouchedKeys(text: string, label: Label, message: Received | undefined): string[] {
+    if (message?.verified !== true || label.trust !== "trusted") {
         return [];
     }
     const vouched = new Set(message.values.map((value) => value.key));
@@ -122,7 +123,7 @@ function indexOutput(call: GuardCall, output: unknown, label: Label, message?: R
         indexText(call, value, label, stepId, { exclude, keepEarlier: true }, true);
     }
     const text = textOf(output);
-    const exclude = new Set([...echoedKeys(call), ...unvouchedKeys(text, message)]);
+    const exclude = new Set([...echoedKeys(call), ...unvouchedKeys(text, label, message)]);
     indexText(call, text, label, call.stepId, { exclude, keepEarlier: message !== undefined });
 }
 
