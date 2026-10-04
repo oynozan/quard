@@ -242,11 +242,9 @@ export type MessageRecordsTable = {
 export type MemoryLabelsTable = {
     project_id: string;
     print: string;
-    label_hash: string;
     store: string;
     run_id: string;
     agent: string;
-    trust: "trusted" | "untrusted";
     label: Json;
     value_labels: DefaultJson;
     first_written_at: DefaultTimestamp;

@@ -19,22 +19,21 @@ CREATE TABLE message_records (
 CREATE INDEX message_records_run ON message_records (project_id, run_id);
 
 -- Labels of memory items, keyed by a hash of the content. One row per
--- distinct label, so writing the same content again adds no row. They
--- outlive runs, so a later run reads them back.
+-- item: each write merges in its labels, keeping the least trusted and
+-- most sensitive, so writing again never makes an item more trusted.
+-- They outlive runs, so a later run reads them back.
 CREATE TABLE memory_labels (
     project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     print text NOT NULL CHECK (print ~ '^[0-9a-f]{64}$'),
-    -- A hash of the label and value labels, made by the query that writes
-    label_hash text NOT NULL,
+    -- The first writer's store, run and agent
     store text NOT NULL,
     run_id text NOT NULL CHECK (run_id ~ '^[0-9a-f]{32}$'),
     agent text NOT NULL,
-    trust text NOT NULL CHECK (trust IN ('trusted', 'untrusted')),
     label jsonb NOT NULL,
     value_labels jsonb NOT NULL DEFAULT '[]',
     first_written_at timestamptz NOT NULL DEFAULT now(),
     last_written_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (project_id, print, label_hash)
+    PRIMARY KEY (project_id, print)
 );
 
 -- Counters of runs that span processes: steps, cost, and per-run tool
