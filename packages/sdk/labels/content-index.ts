@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { combineLabels, extractValues, type ContextLabel, type Label } from "@quard/shared";
+import { combineLabels, extractValues, type ContextLabel, type Label, type OriginKind } from "@quard/shared";
 
 export type Match = "exact" | "host" | "domain";
 
@@ -30,7 +30,12 @@ export type AddOptions = {
     exclude?: ReadonlySet<string>;
     // Keys indexed before keep their earlier labels
     keepEarlier?: boolean;
+    // A record vouched for this content's values, so made-up keys come in too
+    vouched?: boolean;
 };
+
+// Their own words may make a made-up value seen. A tool's may not.
+const OWN_WORDS = new Set<OriginKind>(["user", "system"]);
 
 function matchOf(key: string): Match {
     if (key.startsWith("host:")) {
@@ -51,6 +56,9 @@ export class ContentIndex {
     readonly #records: ContentRecord[] = [];
     readonly #byKey = new Map<string, ContentRecord[]>();
     readonly #seen = new Set<string>();
+    // Keys of values a model wrote that no record vouched for, such as an
+    // IBAN read back from memory. Trusted tool output never vouches for them.
+    readonly #madeUp = new Set<string>();
 
     #push(entry: Omit<ContentRecord, "id" | "order">): ContentRecord {
         const id = `c${this.#records.length + 1}-${this.#tag}`;
@@ -70,14 +78,25 @@ export class ContentIndex {
             return undefined;
         }
         this.#seen.add(print);
+        const skipMadeUp = label.trust === "trusted" && !OWN_WORDS.has(label.kind) && options.vouched !== true;
         const keys = [...new Set(extractValues(text).flatMap((value) => value.keys))].filter(
-            (key) => options.exclude?.has(key) !== true && !(options.keepEarlier === true && this.#byKey.has(key)),
+            (key) =>
+                options.exclude?.has(key) !== true &&
+                !(options.keepEarlier === true && this.#byKey.has(key)) &&
+                !(skipMadeUp && this.#madeUp.has(key)),
         );
         return this.#push({ label, stepId, keys, print });
     }
 
+    markMadeUp(keys: Iterable<string>): void {
+        for (const key of keys) {
+            this.#madeUp.add(key);
+        }
+    }
+
     // Takes in what another run read, keeping its labels
     absorb(other: ContentIndex): void {
+        this.markMadeUp(other.#madeUp);
         for (const record of other.#records) {
             if (!this.#seen.has(record.print)) {
                 this.#seen.add(record.print);

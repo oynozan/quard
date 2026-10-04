@@ -143,3 +143,57 @@ describe("ContentIndex options", () => {
         expect(second.context().trust).toBe("untrusted");
     });
 });
+
+describe("ContentIndex made-up keys", () => {
+    const KEY = `iban:${IBAN}`;
+    const origins = (index: ContentIndex) => index.lookup([KEY]).map((o) => o.origin);
+
+    it("leaves them out of trusted content other than the user's or the system's", () => {
+        const index = new ContentIndex();
+        index.markMadeUp([KEY]);
+
+        index.add(`note: pay ${IBAN}`, labelFor("tool:readNote"), "s1");
+        index.add(`crm says ${IBAN}`, labelFor("mcp:crm", { "mcp:crm": { trust: "trusted" } }), "s2");
+
+        expect(origins(index)).toEqual([]);
+    });
+
+    it("still indexes them in the user's or the system's own words", () => {
+        const index = new ContentIndex();
+        index.markMadeUp([KEY]);
+
+        index.add(`pay ${IBAN}`, labelFor("user"), "s1");
+        index.add(`the supplier's IBAN is ${IBAN}`, labelFor("system"), "s2");
+
+        expect(origins(index)).toEqual(["user", "system"]);
+    });
+
+    it("still indexes them under an untrusted label", () => {
+        const index = new ContentIndex();
+        index.markMadeUp([KEY]);
+
+        index.add(`page says ${IBAN}`, labelFor("web:evil.com"), "s1");
+
+        expect(origins(index)).toEqual(["web:evil.com"]);
+    });
+
+    it("lets a record vouch for them", () => {
+        const index = new ContentIndex();
+        index.markMadeUp([KEY]);
+
+        index.add(IBAN, labelFor("tool:crm"), "s1", { vouched: true });
+
+        expect(origins(index)).toEqual(["tool:crm"]);
+    });
+
+    it("carries them into a run that takes in this one", () => {
+        const first = new ContentIndex();
+        first.markMadeUp([KEY]);
+        const second = new ContentIndex();
+
+        second.absorb(first);
+        second.add(`note: pay ${IBAN}`, labelFor("tool:readNote"), "s1");
+
+        expect(origins(second)).toEqual([]);
+    });
+});
