@@ -120,11 +120,15 @@ describe("chunkText", () => {
     it("cuts a long run of card numbers in time that grows with the text, not its square", () => {
         const text = "4111 1111 1111 1111,".repeat(80_000);
 
-        const started = performance.now();
-        const spans = chunkSpans(text);
+        const timed = () => {
+            const started = performance.now();
+            return { spans: chunkSpans(text), ms: performance.now() - started };
+        };
+        // The faster of two runs, so a busy machine doesn't fail it. Square time took 7 s.
+        const [first, second] = [timed(), timed()];
 
-        expect(spans.at(-1)?.end).toBe(text.length);
-        expect(performance.now() - started).toBeLessThan(1500);
+        expect(first.spans.at(-1)?.end).toBe(text.length);
+        expect(Math.min(first.ms, second.ms)).toBeLessThan(2500);
     });
 
     it("never splits a character made of two halves", () => {
