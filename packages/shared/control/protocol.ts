@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hashKeyText } from "../redact/project-key.ts";
 import { labelsMessage, lookupMessage, runCountedMessage, runCountMessage } from "./labels.ts";
 
 // Messages between the SDK and control. Each process keeps one WebSocket
@@ -188,7 +189,7 @@ export const readyMessage = z.object({
     // Today's per-day counts in the project, by UTC day
     counters: z.array(z.object({ tool: name, counter: z.string(), day, used: z.number() })),
     // The project's hash key, 64 hex characters. The SDK hashes with it.
-    hashKey: z.string().regex(/^[0-9a-f]{64}$/),
+    hashKey: hashKeyText,
 });
 
 export const askedMessage = z.object({ type: z.literal("asked"), askId: id, requestId });

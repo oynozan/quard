@@ -137,6 +137,8 @@ export { findUrls, normalizeUrl, urlHost } from "./normalize/url.ts";
 export { isCard, normalizeCard, replaceCards } from "./redact/cards.ts";
 export { redactEvent } from "./redact/event.ts";
 export { keyedHash, parseHashKey, projectHashKey } from "./redact/hash.ts";
+export { HASH_KEY_PATH, hashKeyReply, hashKeyText } from "./redact/project-key.ts";
+export type { HashKeyReply } from "./redact/project-key.ts";
 export { CUT, maskCard, maskEmail, maskIban } from "./redact/masks.ts";
 export { redactRecord } from "./redact/record.ts";
 export { createRedactor, redactText } from "./redact/redactor.ts";
