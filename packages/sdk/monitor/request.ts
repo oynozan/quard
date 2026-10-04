@@ -1,4 +1,4 @@
-import { textOf } from "../labels/text-of.ts";
+import { keyText } from "@quard/shared";
 import { asRecord, parseJson } from "./json.ts";
 
 export type InputText = { role: "user" | "system"; text: string } | { role: "tool"; text: string; callId: string };
@@ -29,13 +29,8 @@ function contentText(content: unknown): string {
         .join("\n");
 }
 
-// Tool results are often JSON text, so read the text inside
 function outputText(output: unknown): string {
-    if (typeof output !== "string") {
-        return contentText(output);
-    }
-    const parsed = parseJson(output);
-    return parsed !== null && typeof parsed === "object" ? textOf(parsed) : output;
+    return typeof output === "string" ? keyText(output) : contentText(output);
 }
 
 function readItem(item: unknown, request: ResponsesRequest): void {

@@ -82,6 +82,24 @@ describe("prepareEvent", () => {
         });
     });
 
+    it("builds no keys from values under secret-named fields", () => {
+        const event: RunEvent = {
+            type: "tool_call",
+            ...base,
+            tool: "callApi",
+            arguments: { url: "https://api.acme.com/x", auth: { api_key: "Xk9mP2qL7v" }, password: "Pw4ssw0rd99" },
+            status: "ok",
+            influenced: false,
+            flagged: false,
+            durationMs: 1,
+        };
+
+        expect(prepareEvent(event, redactor)).toMatchObject({
+            arguments: { url: "https://api.acme.com/x", auth: { api_key: "…" }, password: "…" },
+            keys: ["url:https://api.acme.com/x", "host:api.acme.com", "domain:acme.com"],
+        });
+    });
+
     it("redacts other events as they are", () => {
         const event: RunEvent = { type: "warning", ...base, code: "unwrapped_tool", tool: "mail jane@acme.com" };
 

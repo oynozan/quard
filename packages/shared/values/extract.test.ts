@@ -57,6 +57,16 @@ describe("extractValues", () => {
         expect(values.map((value) => value.value)).toEqual(["DE89370400440532013000", "x@evil.com"]);
     });
 
+    it("never gives a secret an ID key", () => {
+        const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I3PlFABRVrW1kM";
+        const text = `password=Xk9mP2qL7v token: Rt5yU8iO1p Bearer abc123def456ghi789 AKIAIOSFODNN7EXAMPLE ${jwt}`;
+
+        expect(extractValues(text)).toEqual([]);
+        expect(extractValues("order INV-2026-0042 password=Xk9mP2qL7v")).toEqual([
+            { type: "id", value: "inv-2026-0042", keys: ["id:inv-2026-0042"] },
+        ]);
+    });
+
     it("returns nothing for plain words, dates and amounts", () => {
         expect(extractValues("Accounts Payable, 2026-10-03, 4950.00")).toEqual([]);
     });

@@ -1,8 +1,7 @@
-import { newStepId, type ContextLabel, type ContextLabelRecord, type MemoryRecord } from "@quard/shared";
+import { newStepId, type ContextLabel, type ContextLabelRecord, type MemoryRecord, textOf } from "@quard/shared";
 import type { Scope } from "../context/scope.ts";
 import { valueHash } from "../labels/hashed.ts";
 import { printOf } from "../labels/print.ts";
-import { textOf } from "../labels/text-of.ts";
 import { vouchedLabel } from "../labels/vouched-label.ts";
 import { storeLabels } from "../transport/labels.ts";
 import { recordMemory } from "./event.ts";

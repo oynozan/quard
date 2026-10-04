@@ -3,6 +3,7 @@ import {
     extractValues,
     hostMatches,
     labelFor,
+    textOf,
     urlHost,
     type ExtractedValue,
     type Label,
@@ -11,7 +12,6 @@ import {
 import type { Carrier, Incoming } from "../../context/carrier.ts";
 import { printOf } from "../../labels/print.ts";
 import { recordValues, type ValueRecord } from "../../labels/records.ts";
-import { textOf } from "../../labels/text-of.ts";
 import type { SourceOptions } from "../options.ts";
 import { scanText, type Finding } from "./scan.ts";
 import { mapStrings, stripSuspect } from "./strip.ts";

@@ -1,10 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { extractValues, isRunId, isStepId, newStepId } from "@quard/shared";
+import { extractValues, isRunId, isStepId, newStepId, textOf } from "@quard/shared";
 import { now, record } from "../core/recorder.ts";
 import type { ContentIndex } from "../labels/content-index.ts";
 import { printOf } from "../labels/print.ts";
 import { findRecord, keptRun, saveRecord, type FoundRecord, type ValueRecord } from "../labels/records.ts";
-import { textOf } from "../labels/text-of.ts";
 import { exactOccurrences } from "../labels/value-labels.ts";
 import { vouchedLabel } from "../labels/vouched-label.ts";
 import { uploadsOn } from "../transport/configure.ts";

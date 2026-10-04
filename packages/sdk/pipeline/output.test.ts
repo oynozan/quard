@@ -70,6 +70,14 @@ describe("finishOutput", () => {
         expect(call.run.index.context()).toMatchObject({ trust: "untrusted", flagged: true });
     });
 
+    it("builds no content keys from values under secret-named fields", async () => {
+        const call = makeCall({});
+        const output = { session: { token: "Xk9mP2qL7v" }, invoice: "INV-2026-0042" };
+        await finishOutput([], call, output, undefined);
+
+        expect(takeEvents().find((event) => event.type === "content")).toMatchObject({ keys: ["id:inv-2026-0042"] });
+    });
+
     it("does not index output it has already seen", async () => {
         const call = makeCall({});
         await finishOutput([], call, "same", undefined);

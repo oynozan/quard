@@ -147,4 +147,5 @@ export { canonicalJson, plainJson } from "./values/canonical.ts";
 export { extractValues } from "./values/extract.ts";
 export type { ExtractedValue, ValueType } from "./values/extract.ts";
 export { flattenArgs, valueAtPath } from "./values/flatten.ts";
+export { keysOf, keyText, textOf, underSecret } from "./values/text-of.ts";
 export type { ArgumentValue } from "./values/flatten.ts";

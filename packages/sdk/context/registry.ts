@@ -1,6 +1,5 @@
-import { canonicalJson, extractValues, type Label, type ReasonCode } from "@quard/shared";
+import { canonicalJson, extractValues, textOf, type Label, type ReasonCode } from "@quard/shared";
 import type { GuardOptions } from "../guards/options.ts";
-import { textOf } from "../labels/text-of.ts";
 import type { RunState } from "./run.ts";
 import type { Scope } from "./scope.ts";
 

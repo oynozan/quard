@@ -1,6 +1,5 @@
-import { flattenArgs, SECRET_FIELD } from "@quard/shared";
+import { flattenArgs, keysOf, underSecret } from "@quard/shared";
 import { chunkSpans, MAX_CHUNK, type ChunkSpan } from "../../detectors/chunks.ts";
-import { keysOf } from "../../labels/text-of.ts";
 
 // A part of one text in the output. A strip takes it out.
 export type Part = { text: string; span: ChunkSpan };
@@ -12,11 +11,6 @@ export type Ask = { raw: string; parts: Part[] };
 
 // A bare number tells a detector nothing
 const NUMBER = /^[-+]?(?:\d[\d,_]*(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?$/i;
-
-// Values under a field named like a secret never leave the process
-function underSecret(path: string): boolean {
-    return path.split(/[.[\]]/).some((name) => SECRET_FIELD.test(name));
-}
 
 // Plain field names say nothing. Keys with spaces, or long ones, can
 // carry outside text, such as a map keyed by what a user typed.
@@ -42,6 +36,7 @@ function pack(items: Ask[], max: number): Ask[] {
 // keys packed together, then long values in chunks of their own. A wide
 // result takes a few requests, not one per value.
 export function asksFor(output: unknown, max = MAX_CHUNK): Ask[] {
+    // Values under a field named like a secret never leave the process
     const values = [
         ...new Set(flattenArgs(output).flatMap((item) => (underSecret(item.path) ? [] : [item.value]))),
     ].filter((value) => value.trim().length > 0 && !NUMBER.test(value.trim()));

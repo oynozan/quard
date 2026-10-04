@@ -1,5 +1,5 @@
+import { textOf } from "@quard/shared";
 import type { GuardCall, RuleResult } from "../guards/call.ts";
-import { textOf } from "../labels/text-of.ts";
 import { feedMissing, signatureFeed, signatureMode } from "../policy/state.ts";
 import { matchSignatures, type CompiledSignature } from "./matcher.ts";
 

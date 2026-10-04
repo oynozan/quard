@@ -1,4 +1,4 @@
-import { extractValues, labelFor, originKind, type Label } from "@quard/shared";
+import { extractValues, keyText, labelFor, originKind, textOf, type Label } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import { incomingMessage } from "../context/carrier.ts";
@@ -9,7 +9,6 @@ import type { GuardOptions, SourceOptions } from "../guards/options.ts";
 import { checkSource, originFor, receiveMessage, type Received } from "../guards/source/source.ts";
 import type { AddOptions } from "../labels/content-index.ts";
 import { isLabelRef } from "../labels/records.ts";
-import { textOf } from "../labels/text-of.ts";
 import { unvouchedKeys } from "../labels/unvouched.ts";
 import { currentPreset } from "../policy/state.ts";
 import { recordDecision } from "./checks.ts";
@@ -119,7 +118,8 @@ function indexOutput(call: GuardCall, output: unknown, label: Label, message?: R
         const label = { origin, kind: originKind(origin), trust, sensitivity, flags };
         indexText(call, value, label, stepId, { exclude, keepEarlier: true, vouched: true }, true);
     }
-    const text = textOf(output);
+    // Values under secret-named fields never become keys
+    const text = keyText(output);
     // The index leaves made-up keys out of trusted output, this one too
     call.run.index.markMadeUp(madeUpKeys(text, label, message));
     indexText(call, text, label, call.stepId, { exclude: echoedKeys(call), keepEarlier: message !== undefined });

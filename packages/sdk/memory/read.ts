@@ -4,6 +4,7 @@ import {
     labelFor,
     newStepId,
     originKind,
+    textOf,
     type ExtractedValue,
     type Label,
 } from "@quard/shared";
@@ -12,7 +13,6 @@ import { now, record } from "../core/recorder.ts";
 import type { Scope } from "../context/scope.ts";
 import type { AddOptions } from "../labels/content-index.ts";
 import { printOf } from "../labels/print.ts";
-import { textOf } from "../labels/text-of.ts";
 import { unvouchedKeys } from "../labels/unvouched.ts";
 import { lookupLabels } from "../transport/labels.ts";
 import { recordMemory } from "./event.ts";

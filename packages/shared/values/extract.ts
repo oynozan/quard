@@ -5,6 +5,7 @@ import { findIds } from "../normalize/identifier.ts";
 import { findPaths } from "../normalize/path.ts";
 import { cleanText } from "../normalize/text.ts";
 import { findUrls, urlHost } from "../normalize/url.ts";
+import { removeSecrets } from "../redact/secrets.ts";
 
 export type ValueType = "iban" | "email" | "url" | "host" | "path" | "id";
 
@@ -46,6 +47,7 @@ export function extractValues(text: string): ExtractedValue[] {
     }
     for (const host of findHosts(clean).filter((host) => !covered.has(host))) add("host", host, hostKeys(host));
     for (const path of findPaths(clean)) add("path", path, [`path:${path}`]);
-    for (const id of findIds(clean).filter((id) => !covered.has(id))) add("id", id, [`id:${id}`]);
+    // A secret is no ID: its key would carry it past redaction
+    for (const id of findIds(removeSecrets(clean)).filter((id) => !covered.has(id))) add("id", id, [`id:${id}`]);
     return [...found.values()];
 }

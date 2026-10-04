@@ -1,6 +1,5 @@
-import type { Label } from "@quard/shared";
+import { textOf, type Label } from "@quard/shared";
 import type { FailResult, GuardCall } from "../guards/call.ts";
-import { textOf } from "../labels/text-of.ts";
 import { signatureMode } from "../policy/state.ts";
 import { findSignatures } from "../signatures/check.ts";
 import { recordDecision } from "./checks.ts";
