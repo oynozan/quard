@@ -101,6 +101,13 @@ describe("redactor.value", () => {
         expect(redactor.value(rounded)).toBe(rounded);
     });
 
+    it("turns a BigInt into its digits, masking a card number as the same digits in text", () => {
+        const masked = redactor.value({ amount: 10n, card: 4111111111111111n, list: [5555555555554444n] });
+
+        expect(masked).toEqual({ amount: "10", card: "4111…1111", list: ["5555…4444"] });
+        expect(masked).toEqual(redactor.value({ amount: "10", card: "4111111111111111", list: ["5555555555554444"] }));
+    });
+
     it("removes whatever a secret-named field holds", () => {
         expect(redactor.value({ password: "hunter2", token: { value: "x" }, name: "Jo" })).toEqual({
             password: "…",

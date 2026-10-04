@@ -12,7 +12,7 @@ export type Redactor = {
     // A value key such as "iban:DE89...". Sensitive ones become
     // "iban:DE89…3000#<hash>", so search and tracing still match.
     key(key: string): string;
-    // Every string and card number inside a value, with secret-named fields emptied
+    // Every string, BigInt and card number inside a value, with secret-named fields emptied
     value(value: unknown): unknown;
 };
 
@@ -50,6 +50,10 @@ export function createRedactor(hashKey: Buffer): Redactor {
         }
         // JSON stores a number as the digits String() writes, so those are checked like text
         if (typeof input === "number" && isCard(String(input))) {
+            return redactText(String(input));
+        }
+        // JSON has no BigInt, so one leaves as its digits, checked like text
+        if (typeof input === "bigint") {
             return redactText(String(input));
         }
         if (input === null || typeof input !== "object") {
