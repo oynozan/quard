@@ -1,11 +1,22 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { tool, type FunctionTool, type ToolInputParameters, type ToolOptions } from "@openai/agents";
-import { GuardBlockedError } from "../../core/refusal.ts";
+import {
+    tool,
+    type FunctionTool,
+    type ToolInputParameters,
+    type ToolOptions,
+    type ToolOutputSchema,
+} from "@openai/agents";
+import { GuardBlockedError, isGuardRefusal } from "../../core/refusal.ts";
 import type { GuardOptions } from "../../guards/options.ts";
 import { guardWithSignal } from "../../pipeline/guard.ts";
 import { quardGuardrail } from "./guardrail.ts";
+import { outputCheck } from "./output-schema.ts";
 
-export type GuardedToolOptions<TParameters extends ToolInputParameters, Context> = ToolOptions<TParameters, Context> & {
+export type GuardedToolOptions<
+    TParameters extends ToolInputParameters,
+    Context,
+    TOutputSchema extends ToolOutputSchema | undefined = undefined,
+> = ToolOptions<TParameters, Context, TOutputSchema> & {
     // Each guard takes the tool's name, the name the model sees
     guard: GuardOptions | GuardOptions[];
 };
@@ -25,16 +36,21 @@ function signalOf(details: unknown): AbortSignal | undefined {
 }
 
 // Like the SDK's tool(), with every call run through guard()
-export function guardedTool<TParameters extends ToolInputParameters = undefined, Context = unknown>(
-    options: GuardedToolOptions<TParameters, Context>,
-): FunctionTool<Context, TParameters> {
-    const { guard: guards, execute, outputGuardrails = [], ...rest } = options;
+export function guardedTool<
+    TParameters extends ToolInputParameters = undefined,
+    Context = unknown,
+    TOutputSchema extends ToolOutputSchema | undefined = undefined,
+>(options: GuardedToolOptions<TParameters, Context, TOutputSchema>): FunctionTool<Context, TParameters> {
+    const { guard: guards, execute, outputGuardrails = [], outputSchema: _schema, ...rest } = options;
     const run = execute as Execute;
+    const output = outputCheck(options, () => created.name);
     const created = tool({
         ...rest,
+        ...(output.schema === undefined ? {} : { outputSchema: output.schema }),
         execute: async (input: unknown, context: unknown, details: unknown) => {
             try {
-                return await extras.run({ context, details }, () => guarded(signalOf(details), [input]));
+                const result = await extras.run({ context, details }, () => guarded(signalOf(details), [input]));
+                return isGuardRefusal(result) ? result : output.check(result, context, details);
             } catch (error) {
                 // Quard's guardrail stops the run with it
                 if (error instanceof GuardBlockedError) {

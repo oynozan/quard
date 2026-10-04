@@ -58,6 +58,7 @@ Takes the SDK's `tool()` options, plus `guard`: the options of one guard or a li
 
 - Every call runs through `guard()`. Only the input is checked. `execute` still gets the run context and the call details.
 - A block becomes a tool guardrail rejection from the `quard` guardrail. The model reads Quard's refusal text as the tool result, and `result.toolOutputGuardrailResults` holds the refusal.
+- With `outputSchema`, real results are checked against it, as the SDK does. A refusal is not, so the model still reads it.
 - With `onBlock: "throw"`, the run stops and `run()` rejects with `GuardBlockedError`. Its `cause` is the SDK's `ToolCallError`. A streamed run gives the same error through `result.completed`, its events and `result.error`.
 - An approval guard waits inside the call for the answer from the dashboard, as anywhere else. The SDK's own `needsApproval` still works beside it.
 - When the SDK gives up on a call, on the tool's `timeoutMs`, an aborted run or a sibling call that failed, the wait stops. The request is dropped and the tool never runs.
