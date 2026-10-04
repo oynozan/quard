@@ -20,7 +20,7 @@ export async function reviewChunk(
         .where("project_id", "=", projectId)
         .where("event_id", "=", eventId)
         .executeTakeFirst();
-    return result.numUpdatedRows > 0n;
+    return Number(result.numUpdatedRows) > 0;
 }
 
 const count = (filter: string) => sql<number>`count(*) FILTER (WHERE ${sql.raw(filter)})::int`;
