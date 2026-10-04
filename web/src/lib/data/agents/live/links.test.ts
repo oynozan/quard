@@ -81,6 +81,25 @@ describe("linksOf", () => {
         ]);
     });
 
+    it("counts a delegation two messages name once, as in one process", () => {
+        const across = linksOf(
+            [],
+            [{ ...talk("orchestrator", "billing", 0, 2, 1, 5), delegated: 1, delegatedMessages: 2 }],
+        );
+
+        expect(across).toEqual(linksOf([delegation("orchestrator", "billing", 1, 1, 5)], []));
+        expect(across[0]).toMatchObject({ delegations: 1, messages: 0, total: 1, untrustedShare: 1 });
+    });
+
+    it("keeps the messages that are no delegation", () => {
+        const [link] = linksOf(
+            [],
+            [{ ...talk("orchestrator", "billing", 1, 5, 0, 5), delegated: 2, delegatedMessages: 3 }],
+        );
+
+        expect(link).toMatchObject({ delegations: 2, handoffs: 1, messages: 2, total: 5 });
+    });
+
     it("adds handoffs and messages to the link of the same two agents, busiest first", () => {
         const links = linksOf(
             [delegation("orchestrator", "billing", 2, 0, 5), delegation("orchestrator", "support", 1, 1, 50)],
