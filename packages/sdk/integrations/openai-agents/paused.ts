@@ -2,6 +2,7 @@ import { RunState as SdkState, StreamedRunResult } from "@openai/agents";
 import { findCall } from "../../context/registry.ts";
 import type { RunState } from "../../context/run.ts";
 import type { Scope } from "../../context/scope.ts";
+import { beforeStreamEnd } from "./stream-end.ts";
 
 // The frame a run stopped in, and the root scope that records its end
 export type Resume = { root: Scope; frame: Scope };
@@ -26,13 +27,10 @@ export function notePause(result: unknown, paused: Paused): boolean {
     return true;
 }
 
-// Notes a pause once the run is over; for a stream, once it completes
+// Notes a pause once the run is over; for a stream, as it ends
 export function notePauseLater(result: unknown, paused: Paused): void {
     if (result instanceof StreamedRunResult) {
-        result.completed.then(
-            () => notePause(result, paused),
-            () => undefined,
-        );
+        beforeStreamEnd(result, () => notePause(result, paused));
         return;
     }
     notePause(result, paused);

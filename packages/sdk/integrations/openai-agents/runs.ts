@@ -4,6 +4,7 @@ import { unwrapBlocked } from "./blocked.ts";
 import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
 import { carryLabels, notePause, notePauseLater, pausedOf, takePaused, type Paused } from "./paused.ts";
 import { noteSdkTools } from "./sdk-tools.ts";
+import { beforeStreamEnd } from "./stream-end.ts";
 
 type Run = (this: Runner, agent: Agent, input: unknown, options?: unknown) => Promise<unknown>;
 
@@ -19,37 +20,39 @@ export function followProvider(provider: object): void {
 
 // A run() outside any quard scope starts a Quard run, or goes back into
 // the run it stopped in. The run ends with the result, or for a stream,
-// when the stream completes. A run stopped for the SDK's approval does
-// not end until a resumed run does.
+// when the stream ends. A run stopped for the SDK's approval does not
+// end until a resumed run does.
 function startRun<T>(agent: Agent, paused: Paused | undefined, call: () => Promise<T>): Promise<T> {
     const back = takePaused(paused);
     const root = back?.root ?? newScope({ agent: agent.name });
     const frame = topFrame(back?.frame ?? root, agent.name);
     carryLabels(paused, root.run);
     noteSdkTools(root.run, agent);
-    return new Promise<T>((resolve, reject) => {
-        const follow = async () => {
-            const result = await withScope(frame, () => unwrapBlocked(call()));
+    const end = (result: unknown) => {
+        if (!notePause(result, { run: root.run, resume: { root, frame } })) {
+            finishRun(root);
+        }
+    };
+    const fail = (error: unknown) => {
+        finishRun(root, { error });
+    };
+    return withScope(frame, () => unwrapBlocked(call())).then(
+        (result) => {
             if (result instanceof StreamedRunResult) {
-                // The caller reads the stream while the run goes on
-                resolve(result);
-                await result.completed;
+                // The caller reads the stream while the run goes on. The
+                // pause is noted before the caller can see the stream end.
+                beforeStreamEnd(result, () => end(result));
+                result.completed.then(undefined, fail);
+            } else {
+                end(result);
             }
             return result;
-        };
-        follow().then(
-            (result) => {
-                if (!notePause(result, { run: root.run, resume: { root, frame } })) {
-                    finishRun(root);
-                }
-                resolve(result);
-            },
-            (error: unknown) => {
-                finishRun(root, { error });
-                reject(error);
-            },
-        );
-    });
+        },
+        (error: unknown) => {
+            fail(error);
+            throw error;
+        },
+    );
 }
 
 function inFrame<T>(agent: Agent, input: unknown, call: () => Promise<T>): Promise<T> {

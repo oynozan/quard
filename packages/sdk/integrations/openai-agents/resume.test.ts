@@ -88,6 +88,41 @@ describe("a run resumed after the SDK's needsApproval", () => {
     });
 });
 
+async function drain(stream: AsyncIterable<unknown>): Promise<void> {
+    for await (const _event of stream) {
+        // Reads the stream to its end
+    }
+}
+
+describe("a streamed run resumed as soon as it completes", () => {
+    it.each([
+        ["after awaiting completed", false, true],
+        ["after reading the stream, then awaiting completed", true, true],
+        ["after reading the stream only", true, false],
+    ])("goes on in the Quard run it stopped in, %s", async (_when, read, awaited) => {
+        const { mail, sent, runner } = mailRun();
+
+        const first = await runner.run(mail, "Send the invoice.", { stream: true });
+        if (read) {
+            await drain(first);
+        }
+        if (awaited) {
+            await first.completed;
+        }
+        // No await between the end of the stream and the resume
+        first.state.getInterruptions().forEach((item) => first.state.approve(item));
+        const second = await runner.run(mail, first.state);
+
+        expect(second.finalOutput).toBe("I did not send it.");
+        expect(sent).not.toHaveBeenCalled();
+        expect(runIds(events).size).toBe(1);
+        expect(events.filter((event) => event.type === "run_started")).toHaveLength(1);
+        expect(events.at(-1)).toMatchObject({ type: "run_finished" });
+        const egress = decisionsOf(events).filter((event) => event.guard === "egress");
+        expect(egress).toContainEqual(expect.objectContaining({ rule: "untrusted-destination", decision: "block" }));
+    });
+});
+
 describe("a paused run's state resumed somewhere else", () => {
     function untrustedBlocks(list: readonly RunEvent[]) {
         return decisionsOf(list).filter(
@@ -125,9 +160,9 @@ describe("a paused run's state resumed somewhere else", () => {
             await streamed.completed;
             return streamed;
         });
-        await new Promise((resolve) => setImmediate(resolve));
 
-        await runner.run(mail, await approveAll(mail, first.state, false));
+        first.state.getInterruptions().forEach((item) => first.state.approve(item));
+        await runner.run(mail, first.state);
 
         expect(sent).not.toHaveBeenCalled();
         expect(untrustedBlocks(events)).toHaveLength(1);
