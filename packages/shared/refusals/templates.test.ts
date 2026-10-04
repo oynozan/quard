@@ -22,6 +22,7 @@ const ALL: ReasonCode[] = [
     "approval_timed_out",
     "daily_limit_reached",
     "value_quarantined",
+    "call_aborted",
 ];
 
 describe("refusalText", () => {
@@ -58,5 +59,11 @@ describe("refusalText", () => {
         expect(
             refusalText({ guard: "egress", tool: "sendEmail", reason: "sensitive_data", field: "secret" }),
         ).toContain("the data to send holds a sensitive value (secret).");
+    });
+
+    it("says a cancelled call did not run", () => {
+        expect(refusalText({ guard: "abort", tool: "payInvoice", reason: "call_aborted" })).toBe(
+            "Blocked by the abort guard: the call was cancelled before it ran. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.",
+        );
     });
 });

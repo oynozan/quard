@@ -21,7 +21,8 @@ export type ReasonCode =
     | "backend_unavailable"
     | "approval_timed_out"
     | "daily_limit_reached"
-    | "value_quarantined";
+    | "value_quarantined"
+    | "call_aborted";
 
 const REASONS: Record<ReasonCode, (field: string) => string> = {
     permission_denied: () => "this agent is not allowed to use this tool",
@@ -47,6 +48,7 @@ const REASONS: Record<ReasonCode, (field: string) => string> = {
     daily_limit_reached: () => "a daily limit for this tool was reached",
     value_quarantined: (field) =>
         `the ${field} value is new and many runs used it at once, so it is blocked everywhere`,
+    call_aborted: () => "the call was cancelled before it ran",
 };
 
 export type RefusalInput = {
