@@ -84,8 +84,8 @@ function watch(runner: Runner): void {
             noteSdkTools(current.run, to);
         }
     });
-    runner.on("agent_tool_start", (_context, _agent, _tool, { toolCall }) => {
-        startToolCall(toolCall);
+    runner.on("agent_tool_start", (_context, _agent, tool, { toolCall }) => {
+        startToolCall(toolCall, tool);
     });
 }
 

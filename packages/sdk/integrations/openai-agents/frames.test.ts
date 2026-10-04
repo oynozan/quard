@@ -104,7 +104,7 @@ describe("startToolCall", () => {
     // In an async chain of its own, as the SDK runs each tool call
     async function frameInCall(parent: Scope, toolCall: object): Promise<Scope> {
         await Promise.resolve();
-        startToolCall(toolCall);
+        startToolCall(toolCall, {});
         return toolFrame(parent, "researcher");
     }
 

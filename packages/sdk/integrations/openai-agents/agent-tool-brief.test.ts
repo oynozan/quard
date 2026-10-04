@@ -1,3 +1,4 @@
+import { tool } from "@openai/agents";
 import type { RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -32,7 +33,7 @@ function neverSeenBlocks(): string[] {
     );
 }
 
-function agents() {
+function payTool() {
     const rawPay = vi.fn(async (_input: { iban: string }) => "paid");
     const payInvoice = guardedTool({
         name: "payInvoice",
@@ -41,6 +42,11 @@ function agents() {
         execute: rawPay,
         guard: { type: "action", rules: [{ field: "iban", neverSeen: true, onFail: "block" }] },
     });
+    return { rawPay, payInvoice };
+}
+
+function agents() {
+    const { rawPay, payInvoice } = payTool();
     const getSupplier = guardedTool({
         name: "getSupplier",
         description: "Look a supplier up",
@@ -97,6 +103,28 @@ describe("an agent run as a tool", () => {
         });
 
         await quardRunner({ client }).run(orchestrator, "Pay invoice 114.");
+
+        expect(rawPay).toHaveBeenCalledTimes(1);
+        expect(neverSeenBlocks()).toEqual([]);
+    });
+
+    it("leaves the input of a run that a plain tool starts as the app's own", async () => {
+        const { rawPay, payInvoice } = payTool();
+        const payer = testAgent("payer", { tools: [payInvoice] });
+        const { client } = scriptedClient({
+            orchestrator: [{ calls: [{ name: "payFromDb", args: {} }] }, { text: "Done." }],
+            payer: [{ calls: [PAY] }, { text: "Paid." }],
+        });
+        const runner = quardRunner({ client });
+        // The IBAN comes from the app's own records, not from a model
+        const payFromDb = tool({
+            name: "payFromDb",
+            description: "Pay the invoice on file",
+            parameters: z.object({}),
+            execute: async () => (await runner.run(payer, `Pay invoice 114 to ${IBAN}.`)).finalOutput,
+        });
+
+        await runner.run(testAgent("orchestrator", { tools: [payFromDb] }), "Pay the invoice on file.");
 
         expect(rawPay).toHaveBeenCalledTimes(1);
         expect(neverSeenBlocks()).toEqual([]);

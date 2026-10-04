@@ -3,7 +3,7 @@ import type { RunState } from "../../context/run.ts";
 import { addFrameworkTools } from "../../monitor/framework-tools.ts";
 
 // A tool from Agent.asTool() is a function tool with on()
-function isAgentTool(tool: object): boolean {
+export function isAgentTool(tool: object): boolean {
     const item = tool as { type?: unknown; on?: unknown };
     return item.type === "function" && typeof item.on === "function";
 }
