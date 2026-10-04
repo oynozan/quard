@@ -1,4 +1,4 @@
-import type { IncidentDetail, VerdictPoint } from "@/lib/data/incidents";
+import type { IncidentDetail, VerdictPoint } from "@/lib/data/incidents/types";
 import type { Label, PathNode, PathRole } from "@/lib/data/types";
 import { replayOf } from "../incidents-search/replay";
 import { MINUTE, SECOND } from "../time";
