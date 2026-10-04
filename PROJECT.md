@@ -651,7 +651,7 @@ Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner*
 
 - A chunk's risk is the sum of the chances of its risky labels. Content with a chunk whose risk reaches the flag threshold gets a flag named after the most likely risky label, such as `detector:payment_fraud`. A value from flagged content no longer counts as coming from its origin, and never-seen rules ask a person about it.
 - The other labels change nothing. They show what agents read, in the run view and the review queue.
-- The exact wording Jev reads is in `packages/sdk/detectors/labels.ts`.
+- The exact wording Jev reads is in `packages/shared/labels/detector.ts`.
 
 ### AI fallback
 

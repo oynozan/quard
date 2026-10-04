@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LABEL_NAME } from "../labels/detector.ts";
 
 // Events the SDK records for each run. M2 sends them to webhook.
 
@@ -133,7 +134,7 @@ export const warningEvent = z.object({
     reason: z.string().max(200).optional(),
 });
 
-const labelName = z.string().regex(/^[a-z][a-z_]{0,39}$/);
+const labelName = z.string().regex(LABEL_NAME);
 
 // A chunk of public content and the label a detector gave it. The text
 // is redacted, and kept so people can check the label.
@@ -141,6 +142,8 @@ export const chunkLabelEvent = z.object({
     type: z.literal("chunk_label"),
     ...base,
     tool: z.string(),
+    // The origin of the content the chunk came from
+    origin: z.string().min(1),
     detector: z.string().min(1),
     // Where the chunk sits in the content, from 0
     chunk: z.number().int().min(0),
@@ -244,6 +247,7 @@ export type ModelCallEvent = z.infer<typeof modelCallEvent>;
 export type ToolCallEvent = z.infer<typeof toolCallEvent>;
 export type DecisionEvent = z.infer<typeof decisionEvent>;
 export type ContentEvent = z.infer<typeof contentEvent>;
+export type ChunkLabelEvent = z.infer<typeof chunkLabelEvent>;
 export type WarningEvent = z.infer<typeof warningEvent>;
 export type ConfigErrorEvent = z.infer<typeof configErrorEvent>;
 export type MessageEvent = z.infer<typeof messageEvent>;

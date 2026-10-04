@@ -153,7 +153,7 @@ describe("detectContent", () => {
 
         const chunks = takeEvents().filter((event) => event.type === "chunk_label");
         expect(chunks).toMatchObject([
-            { tool: "testTool", detector: "fake", chunk: 0, text: "News", label: "article", score: 0.05 },
+            { tool: "testTool", origin: "web:news.example.com", detector: "fake", chunk: 0, text: "News", score: 0.05 },
             { chunk: 1, text: LONG, label: "article" },
             {
                 chunk: 2,

@@ -108,7 +108,7 @@ What it does:
 What is recorded:
 
 - Each result is a decision event: `score` is the highest risk of any chunk, and `reason` lists the labels the detector gave, plus `unchecked` when a chunk failed.
-- Each answered chunk is a `chunk_label` event: the redacted text the detector saw, its label, the chance of each label, its `score` and, from Jev, its `injection` answer. They are kept with the run, so people can check the labels.
+- Each answered chunk is a `chunk_label` event: the redacted text the detector saw, the origin of its content, its label, the chance of each label, its `score` and, from Jev, its `injection` answer. They are kept with the run, so people can check the labels.
 
 The labels, with what each one means, are in [labels.ts](../../detectors/labels.ts):
 

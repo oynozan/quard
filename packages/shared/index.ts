@@ -1,5 +1,6 @@
 export { readPort } from "./config/port.ts";
 export {
+    chunkLabelEvent,
     configErrorEvent,
     contentEvent,
     decisionEvent,
@@ -15,6 +16,7 @@ export {
     warningEvent,
 } from "./events/schema.ts";
 export type {
+    ChunkLabelEvent,
     ConfigErrorEvent,
     ContentEvent,
     DecisionEvent,
@@ -94,6 +96,8 @@ export type { LabelsMessage, LookupMessage, RunCount, RunCountedMessage, RunCoun
 export type { UploadBatch, UploadItem } from "./events/upload.ts";
 export { isRunId, isStepId, newEventId, newRunId, newStepId } from "./ids/ids.ts";
 export { combineLabels } from "./labels/combine.ts";
+export { DETECTOR_LABELS, isRiskyLabel, LABEL_NAME, LABEL_NAMES } from "./labels/detector.ts";
+export type { DetectorLabel } from "./labels/detector.ts";
 export { labelFor, originKind } from "./labels/mapping.ts";
 export {
     contentPrint,

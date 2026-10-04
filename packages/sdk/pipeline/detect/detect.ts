@@ -136,6 +136,7 @@ export async function detectContent(call: GuardCall, shown: Shown, enforced: boo
                     agent,
                     at: now(),
                     tool,
+                    origin: shown.label.origin,
                     detector: detector.name,
                     chunk,
                     text: result.sent,
