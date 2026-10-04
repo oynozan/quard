@@ -50,6 +50,7 @@ Returns an SDK `Runner`. It takes the SDK's run config, plus `client`: an OpenAI
 - A handoff passes control on, so it keeps the delegation depth. An agent run as a tool is one level deeper, below the model call that asked for it.
 - Each switch is recorded as a `handoff` event: from, to, `via: "handoff"` or `"tool"`, and the run's context label.
 - A run stopped by the SDK's own `needsApproval` stays open. Resumed from `result.state`, or from a state rebuilt in the same process, it goes on in the same Quard run with the agent it stopped at. So the approved call's guards still see everything the run read. A streamed run can be resumed as soon as it asks for approval, before its stream ends.
+- A streamed run that asks for approval and then fails, for example while saving to a session, can still be resumed, as the SDK allows. Outside `quard.run()`, its Quard run is recorded as failed, and a resume goes on in it with everything the run read.
 - A run that stopped inside `quard.run()` ends with that scope. A state resumed in another run, or a second time, brings the labels of the run it stopped in.
 
 ## guardedTool(options)

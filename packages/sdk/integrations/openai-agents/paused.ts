@@ -56,7 +56,9 @@ export function notePause(result: unknown, paused: Paused): boolean {
 // A stream's state is noted as soon as the stream exists, so a resume
 // that comes before the stream ends still goes back into the run. The
 // first resume takes over the run's end. Else, as the stream ends, a run
-// that did not stop gives back what its note replaced and finishes.
+// that did not stop gives back what its note replaced and finishes. A
+// run that stopped and then failed finishes, but keeps its note, since
+// the SDK still lets the app resume its state.
 export function noteStream(result: Stream, paused: Paused, finish: Finish = () => undefined): void {
     const { state } = result;
     const prior = { state: byState.get(state), run: byRun.get(paused.run) };
@@ -65,8 +67,10 @@ export function noteStream(result: Stream, paused: Paused, finish: Finish = () =
         if (resumed.has(paused)) {
             return;
         }
-        putBack(byState, state, paused, prior.state);
-        putBack(byRun, paused.run, paused, prior.run);
+        if (!stopped(result)) {
+            putBack(byState, state, paused, prior.state);
+            putBack(byRun, paused.run, paused, prior.run);
+        }
         finish(failure);
     };
     beforeStreamEnd(result, () => {
