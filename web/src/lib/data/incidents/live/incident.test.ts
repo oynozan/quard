@@ -17,7 +17,13 @@ describe("incidentOf", () => {
             damageAgent: "billing",
             replay: "not started",
             openedAt: at(6).getTime(),
+            seen: false,
         });
+    });
+
+    it("counts an incident as seen once someone opened its page", () => {
+        expect(incidentOf(incidentRow({ seenAt: at(7) })).seen).toBe(true);
+        expect(incidentOf(pendingRow({ seenAt: at(7) })).seen).toBe(true);
     });
 
     it("gives every category its own title, and says when the call ran", () => {
@@ -41,6 +47,7 @@ describe("incidentOf", () => {
             entryAgent: null,
             damageAgent: null,
             replay: "not started",
+            seen: false,
         });
         expect(incidentOf(pendingRow({ findState: "failed" })).title).toBe("Root cause not found");
     });

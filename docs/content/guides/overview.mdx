@@ -2,26 +2,116 @@
 
 The overview is the home page. It shows how your agents are doing right now and what needs your attention.
 
+The page reloads its data every 5 seconds while its tab is in view, and at once when you come back to the tab. It also reloads when new events reach Quard. **Live** with a green square means the dashboard is connected to Quard's event stream. **Offline** with a hollow square means that connection dropped. The blinking green cell at the end of the model calls chart and the decision log is gone while offline.
+
+Times on the overview are in UTC, and so are the days in the charts.
+
 ## Activity
 
 ![The top of the overview](/images/guides/overview-top.webp)
 
-1. **Model calls.** Model calls across all agents over the last 24 hours, in 10-minute columns. The greeting above it says how many agents are running.
-2. **Runs.** Runs started in the last 24 hours, with a bar for each hour and the count for the last hour.
-3. **Guarded tools.** How many of the tools your agents used in the last 24 hours are wrapped with a guard. A tool without a guard can only be recorded, never stopped.
-4. **Block rate.** The share of guarded tool calls that a guard blocked, per day over the last 30 days. A day above the dashed line, at 2%, is worth a look.
-5. **Guard decisions.** Calls blocked, and calls that asked a person, in the last 24 hours.
+1. **Greeting.** Good morning, afternoon or evening, by the UTC hour, and how many agents are running. An agent counts as running when it sent an event in the last two minutes in a run that has not ended.
+2. **Model calls readout.** The label says how much time one column covers, usually 10 minutes. The number beside it is the total of model calls in the last 24 hours. **Live** shows the connection, and **Table** switches the chart to a table.
+3. **Model calls chart.** Model calls across all agents over the last 24 hours, one column of green cells per 10 minutes, oldest on the left. **now** marks the right end. On a narrow screen one column can cover 20 minutes or more, and the readout says so.
+4. **Runs.** The big number counts runs started in the last 24 hours. The bars under it show runs started per hour. **now** beside **Per hour** counts the runs started in the current hour.
+5. **Guarded tools.** How many of the tools your agents used in the last 24 hours have a guard. **Guarded / seen** gives both numbers, and the bar fills by that share. A tool without a guard can only be recorded, never stopped.
+6. **Block rate.** The share of tool calls blocked each day over the last 30 days. **Today** is today's rate. The dashed amber line is **Review at**, set at 2%. Where the trace rises above it, its cells turn amber, and the highest day above it gets a label with its rate and date. A day above the line is worth a look.
+7. **Guard decisions.** Calls a guard blocked, and calls that asked a person, in the last 24 hours. Rules in [observe mode](/concepts/guards#block-mode-and-observe-mode) only record, so their decisions are not counted here.
 
-The overview updates itself every few seconds while it is open. Before your first run, every chart and list here is drawn empty.
+Small counts show two digits, so 2 reads `02`.
 
 ## What needs attention
 
 ![The lists on the overview](/images/guides/overview-lists.webp)
 
-1. **Approvals waiting.** Up to five calls waiting for a person, with the count of every open request beside the title. **Influenced by** shows an untrusted origin that a value in the call came from. **No longer waiting** means the process that asked has stopped, but the request is still open. Click a row to answer it on the Approvals page.
-2. **Recent runs.** The latest runs, with their status, a strip of their guard decisions, their cost and when they started. Click a row to open the run.
-3. **Incidents.** The latest incidents, with their cause and the state of their replay.
-4. **Decision log.** The latest guard decisions of the last 24 hours: the time, the guard and its decision, the agent, the tool and the reason.
-5. **Agents and guards.** The agents that ran in the last 30 days, and whether each is running or idle. Below them, how many decisions each kind of guard made in the last 24 hours.
+1. **Approvals waiting.** Up to five calls that wait for a person, still-waiting ones first. The count beside the title is every open request, which can be more than five. **Call** names the tool, the agent and the short run id. **Influenced by** shows an untrusted origin that a value in the call came from, or **Trusted sources only**. **Waiting** says how long the call has waited. **No longer waiting** means the process that asked stopped, but the request is still open. **Review** opens it on the Approvals page.
+2. **Recent runs.** The 6 newest runs. Each shows the agent that started it, the short run id, how many agents and steps it has, its status, a strip of its guard decisions, its cost and when it started. The strip has 24 cells: grey for calls a guard allowed, amber for calls that asked a person and red for calls it blocked, in proportion. **None yet** means the run has no guard decisions. A cost of **—** means the price of one of its models is unknown. **Spend** is what the run paid in settled [x402 payments](/concepts/payments): **None** when it paid nothing, and **Unknown** when it paid in a token with no known US dollar value. See [Spend](/guides/runs#spend).
+3. **Incidents.** The 6 newest incidents. Under the title: the agent where untrusted content came in, an arrow to the agent that made the harmful call, and the entry point. **Cause** is the incident's category. **Replay** is the state of its replay.
+4. **Decision log.** The 12 latest guard decisions of the last 24 hours, oldest at the top and newest at the bottom, like terminal output. See [Decision log lines](#decision-log-lines).
+5. **Agents.** The agents that sent events in the last 30 days, running ones first. **Running** counts them, and the bar fills by that share. A green square means running, and a hollow square means idle.
+6. **Guards.** How many decisions each guard made in the last 24 hours. Rules in observe mode count here too.
 
-**View all** beside a list opens its full page.
+The count beside **Recent runs** and **Incidents** is how many rows the list shows, at most 6. The full pages have the rest.
+
+## What the parts mean
+
+Status squares, origin chips and other shared marks are explained in [Common controls](/guides/getting-started#common-controls). Run statuses are in [Find a run](/guides/runs#find-a-run), and incident causes and replay states in [Incidents](/guides/incidents#incident-list).
+
+### Incident titles
+
+While Quard is still finding an incident's cause, its title reads **Finding the root cause** and **Cause** shows **—**. If Quard could not find it, the title reads **Root cause not found**. Both show the short run id instead of the agents. See [Incidents](/guides/incidents) for how the cause is found.
+
+### Decision log lines
+
+Each line reads left to right:
+
+| Part            | What it shows                                                                                                               |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Time            | When the guard decided, in UTC, with seconds                                                                                |
+| Square          | Grey for allow and pass, amber for flag, strip and ask, red for block                                                       |
+| Guard and words | The guard and its decision, such as `action block` or `source pass`                                                         |
+| Agent           | The agent that made the call                                                                                                |
+| Tool            | The tool it called. A [run limit](/concepts/run-limits) on model calls shows the model here                                 |
+| Reason          | Why, such as `amount over cap`. A rule in observe mode shows what it would have done, such as `would block · limit reached` |
+
+A rule in observe mode lets the call run, so its line shows **allow**, or **pass** for a source guard, with the would-be decision in the reason.
+
+The log leaves out allows from the permission check and from limit guards, since nearly every call gets them. It also leaves out the x402 guard's decisions. A refused payment shows on its [run page](/guides/runs#payments).
+
+### Guard names
+
+The **Guards** list always shows these seven, with 0 when a guard decided nothing. Any other guard follows them.
+
+| Guard      | What it checks                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------- |
+| source     | Content coming in from outside. See [Guards](/concepts/guards#the-six-kinds)                                |
+| action     | Arguments of tools that change something                                                                    |
+| egress     | Where data is sent and how sensitive it is                                                                  |
+| limit      | Calls and amounts per run or per day, run limits and the [fleet check](/guides/summary#quarantine)          |
+| approval   | Calls that always ask a person                                                                              |
+| permission | Whether this agent may use this tool in this run. See [Guards](/concepts/guards#what-happens-on-every-call) |
+| signature  | Tool input matched against the attack signature feed                                                        |
+
+The [x402 guard](/concepts/payments) shows as `x402` after the seven once it has decided something. It checks each payment against several rules, so one payment adds several decisions.
+
+The list leaves out the permission allow that every call the model asks for gets.
+
+## What you can click
+
+Clickable rows, chart tables and hover readouts work as on every page. See [Common controls](/guides/getting-started#common-controls).
+
+| Area              | Element               | What it does                                                                                                     |
+| ----------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Model calls       | **Table** / **Chart** | Switches between the chart and a table of each column's start time and model calls                               |
+| Model calls       | The chart             | Hover a column to see its calls and time range. The scale shows on the left while you hover                      |
+| Model calls       | Keys on the chart     | Tab to the chart, then Left and Right move a column, Home and End jump to the ends, and Escape clears            |
+| Block rate        | **Table** / **Chart** | Switches to a table of each day, newest first, with its rate and whether it went over the line                   |
+| Block rate        | The chart             | Hover a day, or use the same keys, to see its rate and date. The square in the readout turns amber over the line |
+| Guard decisions   | A count               | Hover it to see the number in short form, such as 1.2K                                                           |
+| Approvals waiting | **View all**          | Opens the [Approvals](/guides/approvals) page                                                                    |
+| Approvals waiting | A row                 | Opens that request on the Approvals page, where you can answer it                                                |
+| Approvals waiting | An origin chip        | Hover it to see its origin, trust and sensitivity                                                                |
+| Recent runs       | **View all**          | Opens the [Runs](/guides/runs) page                                                                              |
+| Recent runs       | A row                 | Opens the [run](/guides/runs#read-a-run)                                                                         |
+| Recent runs       | **Unknown** spend     | Hover it to see the part of the spend with a known value                                                         |
+| Incidents         | **View all**          | Opens the [Incidents](/guides/incidents) page                                                                    |
+| Incidents         | A row                 | Opens the [incident](/guides/incidents#incident-page)                                                            |
+
+The decision log, the agents and the guards are not links. To open an agent, use the [Agents](/guides/agents) page.
+
+## Before your first run
+
+Every part stays in place, drawn empty:
+
+- The greeting has no agent count, such as "Good morning."
+- The model calls chart reads "No model calls in the last 24 hours", and its total is **—**.
+- **Runs**, **Guarded tools** and **Guard decisions** show `00`.
+- **Block rate** reads "No guarded tool calls in the last 30 days", and **Today** is **—**.
+- The lists read "No approvals waiting", "No runs yet", "No incidents yet" and "No guard decisions in the last 24 hours".
+- **Agents** shows **Running 0 / 0**, and **Guards** lists the seven guards at 0.
+
+The same notes show later whenever a part has nothing in its time window.
+
+## If the page fails to load
+
+The overview says "The overview could not be loaded" and that guards keep running. Your agents' guards run in their own processes, so they still work. **Try again** loads the page again.

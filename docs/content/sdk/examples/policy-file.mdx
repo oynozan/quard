@@ -1,0 +1,156 @@
+import { Steps } from "nextra/components";
+
+# 14. The policy file
+
+Your team watched a payment rule for a week and now wants it to block, without waiting for a deploy. Guard rules can live in a JSON policy file instead of code, and Quard rereads the file while the app runs. This example writes a file that only observes payments over 1000 EUR and sends a payment. Then it rewrites the file to block them and sends the same payment again, in the same process.
+
+## Run it
+
+```sh
+node sandbox/14-policy-file.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows. With [the local backend](/sdk/examples#the-local-backend) set up, it also prints where to see the rules in the dashboard.
+
+## Step by step
+
+<Steps>
+
+### Write the policy file
+
+```ts
+// A real app keeps the file next to its code. This one is temporary.
+const folder = mkdtempSync(join(tmpdir(), "quard-policy-"));
+const policyFile = join(folder, "quard.policy.json");
+
+// The same shape as packages/sdk/examples/policy/quard.policy.json
+function writePolicy(version: number, mode: "observe" | "block"): void {
+    const policy = {
+        version,
+        guards: {
+            payInvoice: [{ type: "action", mode, rules: [{ field: "amount", max: 1000 }] }],
+        },
+    };
+    writeFileSync(policyFile, JSON.stringify(policy, null, 4));
+}
+```
+
+A policy file has a `version`, which you choose, and `guards`: each tool name maps to a list of guard options, the same ones you pass to `guard()` in code. Options that are functions in code, such as custom rule checks, can't go in a file. The file can also hold origin overrides, a strictness preset, settings for the signature feed and the detector, and [run limits](/concepts/run-limits). See [Policy file](/sdk/reference/policy-file).
+
+Here the file gives `payInvoice` one [action guard](/sdk/reference/action-guard) rule: at most 1000 EUR per payment.
+
+### The code says something else
+
+```ts
+// In code, payInvoice allows up to 100000 EUR a run. The file wins.
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "limit",
+    name: "payInvoice",
+    maxAmountPerRun: { field: "amount", max: 100000 },
+});
+```
+
+A tool listed in the file uses the file's options and ignores all of its options in code. While the file lists `payInvoice`, this [limit guard](/sdk/reference/limit-guard) doesn't apply at all. Tools the file doesn't list keep their options from code.
+
+### Load the file
+
+```ts
+writePolicy(1, "observe");
+quard.configure({
+    policyFile,
+    onEvent: (event) => {
+        if (event.type === "decision" && event.decision !== "allow" && event.decision !== "pass") {
+            printEvent(event);
+            console.log(`      policy version ${event.policy}, rules ${event.rules}`);
+        }
+    },
+});
+```
+
+[`quard.configure()`](/sdk/reference/configure) reads the file at once. It throws if the file is missing or invalid, so a broken file shows up at startup. Each guard decision carries two fields that tell you which rules made it:
+
+- `policy`: the version of the policy file in force, when there is one.
+- `rules`: a 16-character hash of all the rules in force in the process, from code and from the file.
+
+With the backend connected, the SDK also sends the rules to control whenever that hash changes. **Rules from code** in the dashboard's [Settings](/guides/settings#rules-from-code) lists each rule with its mode, and each app with its rules hash. See [Events](/sdk/reference/events).
+
+### Version 1 only observes
+
+```ts
+title("Version 1 of the file: payments over 1000 EUR are only observed");
+await quard.run({ agent: "billing" }, () => runAgent(client, prompt, { payInvoice }));
+```
+
+The model asks to pay 4950 EUR. The file's rule caps a payment at 1000 EUR, but it's in observe mode. The guard records a `block` decision in observe mode, with the reason `amount_over_cap`, printed as "would block", and the payment runs. See [Block mode and observe mode](/concepts/guards#block-mode-and-observe-mode).
+
+### Change the file while the app runs
+
+```ts
+writePolicy(2, "block");
+// Quard checks the file at most once a second, so give it a moment
+await setTimeout(1100);
+```
+
+Before each guarded call, Quard rereads the file if at least a second has passed since its last check. A valid new version replaces the old one as a whole, from that call on. Nothing restarts.
+
+An invalid version is ignored. The last good one stays in force, and a `config_error` event says what is wrong, once for each broken version.
+
+### Version 2 blocks
+
+```ts
+title("Version 2: the same rule now blocks, and the app never restarted");
+await quard.run({ agent: "billing" }, () => runAgent(client, prompt, { payInvoice }));
+
+rmSync(folder, { recursive: true });
+```
+
+Same process, same request. This time the rule is in block mode, so the payment is refused, and the agent gets a [refusal](/sdk/reference/refusals) instead of a result. The decision shows version 2 and a new rules hash, because the rules in force changed.
+
+</Steps>
+
+## What you'll see
+
+```text
+The rules in force also go to control. See them at http://localhost:3100/settings?tab=code
+
+Version 1 of the file: payments over 1000 EUR are only observed
+  User: Pay invoice 114 from Acme Ltd: 4950 EUR to IBAN DE89 3704 0044 0532 0130 00.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":4950}
+    · action guard would block (amount_over_cap), but only observes
+      policy version 1, rules …
+    ✓ paid 4950 EUR
+  Model: …
+
+Version 2: the same rule now blocks, and the app never restarted
+  User: Pay invoice 114 from Acme Ltd: 4950 EUR to IBAN DE89 3704 0044 0532 0130 00.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":4950}
+    · action guard: block (amount_over_cap)
+      policy version 2, rules …
+    ✗ blocked by the action guard (amount_over_cap)
+  Model: …
+```
+
+The first line appears only when `sandbox/.env` holds an agent key. `…` stands for the rules hashes, two different strings of 16 characters, and the model's answers, which change from run to run.
+
+## Try this
+
+- **Break the file.** Replace `writePolicy(2, "block")` with `writeFileSync(policyFile, "{")`. Version 1 stays in force, so the second payment runs too, and Quard records a `config_error` event. `printEvent` has no line for it. To see the message, add `if (event.type === "config_error") console.log(event.message);` to `onEvent`.
+- **Empty the list.** In `writePolicy()`, set `payInvoice` to an empty list. The tool then runs with no guards in both versions, and its calls are still recorded. The limit guard from code still doesn't apply. Both payments run.
+- **Leave the tool out.** In `writePolicy()`, remove `payInvoice` from `guards`. Neither version has a rule for it, so the options from code apply: up to 100000 EUR a run. Both payments run, and the limit guard allows them quietly.
+
+## Use it in your app
+
+- Keep `quard.policy.json` in your repo, next to your code, and load it with `quard.configure({ policyFile })`. The SDK's [example policy](https://github.com/oynozan/quard/tree/main/packages/sdk/examples/policy) has a full file and a JSON Schema that editors use to check it as you type.
+- Change `version` with every edit. Each decision carries it, so you can tell which version made it.
+- A tool listed in the file loses all its options from code, so copy into its list every rule you still want.
+- Start a new rule with `"mode": "observe"` in the file, and switch it to `"block"` once the records show it is right.
+
+## Source
+
+- [`sandbox/14-policy-file.ts`](https://github.com/oynozan/quard/blob/main/sandbox/14-policy-file.ts): the example
+- [`packages/sdk/policy/state.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/state.ts): loads the file and picks the file's options over code
+- [`packages/sdk/feeds/file-source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/feeds/file-source.ts): rereads the file at most once a second
+- [`packages/sdk/policy/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schema.ts): what the file may hold
+- [`packages/sdk/policy/rules.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/rules.ts): the rules hash and the rules list sent to control
+- [`packages/sdk/pipeline/checks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/checks.ts): adds the policy version and rules hash to each decision
+- [`packages/sdk/examples/policy/quard.policy.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/policy/quard.policy.json): a full example policy file

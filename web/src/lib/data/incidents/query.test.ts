@@ -1,5 +1,14 @@
 // @vitest-environment node
-import { createProject, failFind, ingestBatch, saveReplay, saveReview, saveVerdict } from "@quard/db";
+import {
+    beatWorker,
+    createProject,
+    failFind,
+    ingestBatch,
+    markIncidentSeen,
+    requestReplay,
+    saveReplay,
+    saveVerdict,
+} from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { storedReplay, storedVerdict } from "../../../../test/incidents/rows";
@@ -20,7 +29,7 @@ const { database } = await import("../runs/live/client");
 // Vitest clears call history before each test, so keep what the import wrapped
 const cached = cache.mock.results.map((result) => result.value);
 
-const [PAID, OPEN, FAILED] = ["b", "c", "d"].map((char) => char.repeat(32));
+const [PAID, OPEN, FAILED, QUEUED] = ["b", "c", "d", "e"].map((char) => char.repeat(32));
 const [MODEL, PAY] = ["1", "2"].map((char) => char.repeat(16));
 let test: TestDb;
 let projectId = "";
@@ -78,15 +87,8 @@ describe("incidents from Postgres", () => {
         expect(requireSession).toHaveBeenCalled();
     });
 
-    it("opens a found incident with its path, replay, note and run", async () => {
+    it("opens a found incident with its path, replay and run", async () => {
         const [row] = (await listIncidents()).filter((item) => item.runId === PAID);
-        const note = {
-            model: "gpt-6.1-sol",
-            costUsd: 0.001,
-            writtenAt: at(5),
-            paragraphs: ["The page held the IBAN."],
-        };
-        await saveReview(test.db, projectId, row.id, note, 0.001);
         const rounds = [
             {
                 with: { runs: 5, harmful: 5 },
@@ -107,9 +109,18 @@ describe("incidents from Postgres", () => {
             ["turning", "billing"],
             ["damage", "payInvoice"],
         ]);
-        expect(detail?.findings?.reviewer?.paragraphs).toEqual(["The page held the IBAN."]);
         expect(detail?.findings?.replay).toMatchObject({ status: "confirmed", costUsd: 0.021 });
         expect(detail?.findings?.replay.rounds).toHaveLength(1);
+    });
+
+    it("counts an incident as seen once someone opened its page", async () => {
+        const list = await listIncidents();
+        expect(list.map((row) => row.seen)).toEqual([false, false, false]);
+        const [row] = list.filter((item) => item.runId === OPEN);
+        await markIncidentSeen(test.db, projectId, row.id);
+        const seen = (await listIncidents()).filter((item) => item.seen);
+        expect(seen.map((item) => item.id)).toEqual([row.id]);
+        expect((await getIncident(row.id))?.incident.seen).toBe(true);
     });
 
     it("opens an incident still being found, and one whose finder failed", async () => {
@@ -122,6 +133,29 @@ describe("incidents from Postgres", () => {
             working: false,
         });
         expect(await getIncident("inc_ffffffffffffffff")).toBeNull();
+    });
+
+    it("reads a requested replay as queued, and whether a worker checked in lately", async () => {
+        await ingestBatch(test.db, projectId, attack(QUEUED, "billing"));
+        const [row] = (await listIncidents()).filter((item) => item.runId === QUEUED);
+        await saveVerdict(test.db, projectId, row.id, VERDICT);
+        expect(await requestReplay(test.db, projectId, row.id, { by: "Ada" })).toBe("started");
+
+        expect(await getIncident(row.id)).toMatchObject({
+            incident: { replay: "queued" },
+            working: true,
+            workerRunning: false,
+        });
+
+        await beatWorker(test.db, { id: "w1", host: "box-1", pid: 7, startedAt: new Date() });
+        expect((await getIncident(row.id))?.workerRunning).toBe(true);
+
+        // Past 30 s without a beat, the worker counts as stopped
+        await test.db
+            .updateTable("workers")
+            .set({ seen_at: new Date(Date.now() - 31_000) })
+            .execute();
+        expect(await getIncident(row.id)).toMatchObject({ working: true, workerRunning: false });
     });
 
     it("reads an incident once per request, since the page and its metadata both ask", () => {

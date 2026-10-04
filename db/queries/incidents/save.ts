@@ -1,7 +1,6 @@
-import { sql } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import { fromNow } from "./jobs.ts";
-import type { StoredReplay, StoredReview, StoredVerdict } from "./types.ts";
+import type { StoredReplay, StoredVerdict } from "./types.ts";
 
 // How long a running replay keeps its lease after each round
 const REPLAY_LEASE_MS = 10 * 60_000;
@@ -10,7 +9,7 @@ function incident(db: Db, projectId: string, id: string) {
     return db.updateTable("incidents").where("project_id", "=", projectId).where("id", "=", id);
 }
 
-// Stores the verdict, with the fields lists filter on, and frees the row for the reviewer
+// Stores the verdict, with the fields lists filter on, and frees the row
 export async function saveVerdict(db: Db, projectId: string, id: string, verdict: StoredVerdict): Promise<void> {
     await incident(db, projectId, id)
         .set({
@@ -27,32 +26,14 @@ export async function saveVerdict(db: Db, projectId: string, id: string, verdict
             turning_agent: verdict.turning.agent,
             leased_until: null,
             attempts: 0,
+            errors: 0,
         })
         .execute();
 }
 
 export async function failFind(db: Db, projectId: string, id: string, error: string): Promise<void> {
     await incident(db, projectId, id)
-        .set({ find_state: "failed", find_error: error, leased_until: null, attempts: 0 })
-        .execute();
-}
-
-// A note, an error, or null when no provider key is set
-export async function saveReview(
-    db: Db,
-    projectId: string,
-    id: string,
-    review: StoredReview | null,
-    costUsd: number,
-): Promise<void> {
-    await incident(db, projectId, id)
-        .set({
-            review_state: review === null ? "skipped" : "error" in review ? "failed" : "done",
-            reviewer: review === null ? null : JSON.stringify(review),
-            spent_usd: sql<number>`spent_usd + ${costUsd}`,
-            leased_until: null,
-            attempts: 0,
-        })
+        .set({ find_state: "failed", find_error: error, leased_until: null, attempts: 0, errors: 0 })
         .execute();
 }
 
@@ -73,7 +54,7 @@ export async function saveReplay(
             spent_usd: spentUsd,
             replay_state: state,
             leased_until: running ? fromNow(leaseMs) : null,
-            ...(running ? {} : { attempts: 0 }),
+            ...(running ? {} : { attempts: 0, errors: 0 }),
         })
         .execute();
 }

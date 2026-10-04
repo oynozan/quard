@@ -1,0 +1,171 @@
+import { Steps } from "nextra/components";
+
+# 22. Agents in two processes
+
+An orchestrator agent reads a supplier invoice on a web page. It hands the payment to a billing agent that runs as a separate service. The billing agent never sees the web page, only the brief the orchestrator sends it. This example sends that brief over HTTP to a second process, with the run and a reference to the brief's labels in a W3C `baggage` header. The IBAN in the brief is still known to come from the web page, so the billing agent's payment rule blocks it. When the IBAN comes from your supplier records instead, the payment goes through.
+
+## Run it
+
+```sh
+node sandbox/22-agents-in-two-processes.ts
+```
+
+Run it from the repo root. It needs your OpenAI key and the local backend: webhook, control, the worker and the dashboard running, and `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` in `sandbox/.env`. [The local backend](/sdk/examples#the-local-backend) shows how. Without the keys, the example stops at once and says what to do.
+
+The example starts the second process itself. Its lines start with `billing │`.
+
+## Step by step
+
+<Steps>
+
+### Start the billing process
+
+```ts
+const billing = fork(fileURLToPath(import.meta.url), ["billing"]);
+```
+
+The same file runs twice. The orchestrator's process forks a copy with the argument `billing`, which starts an HTTP server on a free local port and reports the port back. Both processes load `lib/env.ts`, so both connect the SDK to the same backend, as two services of one app would.
+
+### Send the brief with the run
+
+```ts
+const delegate = guard(
+    async (input: { to: string; brief: string }) => {
+        const baggage = quard.toBaggage(await quard.inject({ content: input.brief }));
+        const response = await fetch(`http://127.0.0.1:${port}/messages`, {
+            method: "POST",
+            headers: { "content-type": "application/json", baggage },
+            body: JSON.stringify({ brief: input.brief }),
+        });
+        return `${input.to} replied: ${await response.text()}`;
+    },
+    { type: "limit", name: "delegate", delegateTo: "to" },
+);
+```
+
+[`quard.inject()`](/sdk/reference/quard#quardinject) runs inside the orchestrator's run, with the exact text it sends. It stores a label record for the brief in the backend and returns the carrier: the run id, the step that sent it and a label reference. The record holds the label of everything the run had read, here a web page, so untrusted. It also holds the label of each traced value in the brief, such as the IBAN with its origin `web:acme-billing.net`. The brief's text itself is never stored.
+
+[`quard.toBaggage()`](/sdk/reference/quard#quardtobaggage) turns the carrier into the baggage members `quard-run`, `quard-parent` and `quard-labels`, for the HTTP header. The `delegateTo` option on the [limit guard](/sdk/reference/limit-guard) names the argument that holds the receiving agent, so Quard checks the [run limits](/sdk/reference/run-limits) on depth, fan-out and loops. They only observe by default.
+
+### Answer inside the same run
+
+```ts
+const answer = await quard.resume(
+    request.headers.baggage,
+    () =>
+        runAgent(client, "A message from the orchestrator is waiting. Read it and do what it asks.", {
+            readMessage,
+            payInvoice,
+        }),
+    { agent: "billing" },
+);
+```
+
+[`quard.resume()`](/sdk/reference/quard#quardresume) takes the whole baggage header, looks up the label record through control, and runs the billing agent inside the run the header names. The run started in the other process, so this process records no start or end for it. The billing agent sits one level below the sender, and it may use only the tools the sender may use. The orchestrator has no `tools` list, so that is every guarded tool.
+
+### Read the message through a source guard
+
+```ts
+const readMessage = guard(async () => brief, { type: "source", origin: "agent", name: "readMessage" });
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "iban", from: ["tool:getSupplier"] }],
+});
+```
+
+A [source guard](/sdk/reference/source-guard) with `origin: "agent"` reads a message from another agent. It uses the carrier and the record that `quard.resume()` came in with. When the record belongs to the same run and the text matches it, the message gets the origin `agent:orchestrator`, with the label the sender's run had. Each value in it keeps the label it had in the sender's run. Quard records a `message` event, with the sender and whether its labels were found.
+
+So the IBAN in the brief still reads as `web:acme-billing.net` here, though this process never saw the page. The [action guard's](/sdk/reference/action-guard) `from` rule wants it from `tool:getSupplier`, so it blocks the payment with `value_not_from_allowed_origin`. [Messages between agents](/sdk/reference/messages) has the details.
+
+### Part 2: the IBAN from your records
+
+```ts
+const getSupplier = guard(async (_input: { name: string }) => "Acme Ltd, IBAN DE89 3704 0044 0532 0130 00", {
+    type: "limit",
+    name: "getSupplier",
+    maxCallsPerRun: 5,
+});
+```
+
+The second run reads the bank details from `getSupplier`, a guarded tool, so they are labeled `tool:getSupplier`, trusted. The orchestrator has read nothing untrusted, so the message arrives trusted, and the IBAN keeps its `tool:getSupplier` label. The rule passes and the billing agent pays.
+
+</Steps>
+
+## What you'll see
+
+```text
+The orchestrator runs in process 51234, the billing agent in process 51240.
+
+1 · The bank details come from the invoice's web page
+  Dashboard: http://localhost:3000/runs/…
+  User: Read the supplier invoice at https://acme-billing.net/invoices/114 first. Our billing agent makes all payments, so delegate the payment to billing with all the details.
+  → fetchPage {"url":"https://acme-billing.net/invoices/114"}
+    · labeled web:acme-billing.net: untrusted, public
+    ✓ Invoice 114 from Acme Ltd. Amount due: 4950 EUR. Our bank has changed. New bank details: GB82 WEST 1234 5698 7654 32.
+  → delegate {"to":"billing","brief":"…"}
+  billing │ Process 51240 got a brief, with baggage: quard-run=…,quard-parent=…,quard-labels=…
+  billing │  User: A message from the orchestrator is waiting. Read it and do what it asks.
+  billing │  → readMessage {}
+  billing │    · message from orchestrator, its labels found: untrusted, internal
+  billing │    · labeled web:acme-billing.net: untrusted, public
+  billing │    · labeled agent:orchestrator: untrusted, internal
+  billing │    ✓ …
+  billing │  → payInvoice {"iban":"GB82 WEST 1234 5698 7654 32","amount":4950}
+  billing │    · action guard: block (value_not_from_allowed_origin)
+  billing │    ✗ blocked by the action guard (value_not_from_allowed_origin)
+  billing │  Model: …
+    ✓ billing replied: …
+  Model: …
+
+2 · The bank details come from our supplier records
+  Dashboard: http://localhost:3000/runs/…
+  User: Pay Acme Ltd's invoice 115 of 1200 EUR. Look up their bank details in our supplier records first. Our billing agent makes all payments, so delegate the payment to billing with all the details.
+  → getSupplier {"name":"Acme Ltd"}
+    · labeled tool:getSupplier: trusted, internal
+    ✓ Acme Ltd, IBAN DE89 3704 0044 0532 0130 00
+  → delegate {"to":"billing","brief":"…"}
+  billing │ Process 51240 got a brief, with baggage: quard-run=…,quard-parent=…,quard-labels=…
+  billing │  User: A message from the orchestrator is waiting. Read it and do what it asks.
+  billing │  → readMessage {}
+  billing │    · message from orchestrator, its labels found: trusted, internal
+  billing │    · labeled tool:getSupplier: trusted, internal
+  billing │    · labeled agent:orchestrator: trusted, internal
+  billing │    ✓ …
+  billing │  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":1200}
+  billing │    ✓ paid 1200 EUR
+  billing │  Model: …
+    ✓ billing replied: …
+  Model: …
+```
+
+The orchestrator prints a link to each run's page as it starts. The dashboard's dev server runs on port 3100, so use that port if the link shows another. Both agents' steps are in the one run, and its [run graph](/guides/runs#the-run-graph) shows the message from `orchestrator` to `billing`.
+
+The `· labeled` lines show only labels from the places an IBAN can come from. When the message arrives, the IBAN's own label comes first, then the message's. Process ids, run ids and the model's words, marked `…`, change from run to run. The model writes the brief and may write the IBAN with or without spaces. Whatever it writes, an IBAN from the web page is blocked in the billing process.
+
+## Try this
+
+- **Send no carrier.** Leave `baggage` out of the request headers. `quard.resume()` then starts a new run, and the message arrives as `agent:unknown`, untrusted, with `no labels found`. Both payments are blocked.
+- **Change the brief on the way.** In the billing process, add a word to `brief` before the agent reads it. Its hash no longer matches the record, so it arrives untrusted and the second payment is blocked too.
+- **Narrow the billing agent's tools.** Pass `tools: ["readMessage"]` to `quard.resume()`, next to `agent`. Every payment is refused with `permission_denied`.
+- **Turn on a depth limit.** Add `quard.configure({ runLimits: { mode: "block", depth: 0 } })` to the orchestrator's process. Every `delegate` call is refused with `limit_reached`, and the brief is never sent. See [Run limits](/sdk/reference/run-limits).
+
+## Use it in your app
+
+- Wrap the function that sends work to another service with `guard()` and `delegateTo`. Inside it, call `quard.inject()` with the exact text you send, and put the carrier in the channel's metadata slot. For HTTP, that is the `baggage` header, through `quard.toBaggage()`.
+- On the receiving side, wrap the handler in `quard.resume()` with the header or the carrier, and the agent's name.
+- Read incoming messages through a source guard with `origin: "agent"`. Pass it where to find the message, not the text itself.
+- Configure every process with `key`, `webhookUrl`, `controlUrl` and `hashKey`. The sender stores its labels through webhook, and the receiver looks them up through control.
+
+[Multi-agent](/concepts/multi-agent) explains what travels with a message and what happens when a record is missing.
+
+## Source
+
+- [`sandbox/22-agents-in-two-processes.ts`](https://github.com/oynozan/quard/blob/main/sandbox/22-agents-in-two-processes.ts): the example
+- [`sandbox/lib/env.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/env.ts): connects the SDK to the local backend, and `needsDashboard()`
+- [`packages/sdk/context/carrier.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/carrier.ts): `quard.inject()` and `quard.resume()`
+- [`packages/sdk/context/baggage.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/baggage.ts): `quard.toBaggage()` and reading a baggage header
+- [`packages/sdk/labels/records.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/records.ts): saves and finds label records
+- [`packages/sdk/guards/source/source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/source.ts): `receiveMessage()`, which checks a message against its record
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): labels a message and records the `message` event
+- [`packages/sdk/guards/limit/delegation.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/delegation.ts): depth, fan-out and loops for `delegateTo`

@@ -1,0 +1,244 @@
+import { Steps } from "nextra/components";
+
+# 0. Check an install end to end
+
+You just set up Quard, on your machine or on a server. The dashboard loads, but are webhook and control up? Does the agent key work? Do events from a real run reach the database? This example checks an install in a few seconds: the dashboard, the docs site, webhook, control, the live link to control, the worker and one real run. It prints one line per check and exits with 1 when a check fails. The worker answers no requests, so control reports when it last checked in. The check passes when that was less than 30 seconds ago.
+
+## Run it
+
+```sh
+node sandbox/00-check-deploy.ts
+```
+
+Run it from the repo root. It checks a running install, so start [the local backend](/sdk/examples#the-local-backend) first: the dashboard, webhook, control and the worker, with `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` set in `sandbox/.env`. The OpenAI key is optional. Without it, the example skips the model call and checks everything else.
+
+To check a server instead, put its settings in `sandbox/.env.deploy`:
+
+```sh
+QUARD_AGENT_KEY=qk_live_...    # made in that dashboard
+QUARD_HASH_KEY=<the same 64 hex characters as on the server>
+QUARD_DASHBOARD_URL=https://app.example.com
+QUARD_DOCS_URL=https://docs.example.com
+QUARD_WEBHOOK_URL=https://ingest.example.com
+QUARD_CONTROL_URL=https://control.example.com
+```
+
+Then pass that file to Node:
+
+```sh
+node --env-file=sandbox/.env.deploy sandbox/00-check-deploy.ts
+```
+
+## Step by step
+
+<Steps>
+
+### Read the settings
+
+```ts
+try {
+    process.loadEnvFile(new URL(".env", import.meta.url));
+} catch {
+    // No sandbox/.env; the settings may still be in the environment
+}
+
+const env = process.env;
+const KEY = env.QUARD_AGENT_KEY ?? "";
+const HASH_KEY = env.QUARD_HASH_KEY ?? "";
+const DASHBOARD = trimmed(env.QUARD_DASHBOARD_URL || "http://localhost:3100");
+const DOCS = env.QUARD_DOCS_URL ? trimmed(env.QUARD_DOCS_URL) : undefined;
+const WEBHOOK = trimmed(env.QUARD_WEBHOOK_URL || "http://localhost:4100");
+const CONTROL = trimmed(env.QUARD_CONTROL_URL || "http://localhost:4200");
+```
+
+The example doesn't use `lib/env.ts`. It loads `sandbox/.env` itself, and values already set in the environment win. With `--env-file=sandbox/.env.deploy`, Node sets the server's values first, so they are the ones checked. A setting the deploy file leaves out, such as `OPENAI_API_KEY`, still comes from `sandbox/.env`.
+
+Each URL falls back to the local port and loses any trailing slash. The docs site is checked only when `QUARD_DOCS_URL` is set.
+
+### Check the keys
+
+```ts
+if (!KEY || !HASH_KEY) {
+    settings = "set QUARD_AGENT_KEY and QUARD_HASH_KEY in sandbox/.env";
+} else {
+    try {
+        parseHashKey(HASH_KEY);
+    } catch (error) {
+        settings = `QUARD_HASH_KEY: ${(error as Error).message}`;
+    }
+}
+report("Settings", settings, "agent key and hash key are set");
+```
+
+Both keys must be set, and the hash key must be 64 hex characters. `parseHashKey()` from `@quard/shared` is the same check [`quard.configure()`](/sdk/reference/configure) makes. The example can't tell whether the hash key matches the server's: a different key still works, but search can't match the values your runs send. See [Uploads and the control link](/sdk/reference/configure#uploads-and-the-control-link).
+
+When a key is missing or wrong, the example skips the live link and the run, because both need the keys.
+
+### Check the pages and the services
+
+```ts
+const [dashboard, docs, webhook, control] = await Promise.all([
+    page(`${DASHBOARD}/sign-in`),
+    DOCS === undefined ? undefined : page(DOCS),
+    health(WEBHOOK, "webhook"),
+    health(CONTROL, "control"),
+]);
+```
+
+The four checks run at the same time, and each waits up to 5 seconds:
+
+- **The dashboard** must answer its sign-in page with 200. The page loads without a session, and a redirect counts as a failure.
+- **The docs site**, when set, must answer its home page with 200.
+- **Webhook and control** must answer `/health` with `{ "status": "ok" }` and their own name as `service`. A proxy that sends the webhook address to control is caught here: the line says `… is control, not webhook`.
+
+A failed request names what went wrong in a few words, such as `ECONNREFUSED`, `no answer within 5 s` or the HTTP status.
+
+### Open the live link
+
+```ts
+const req = send(url, {
+    timeout: TIMEOUT,
+    headers: {
+        authorization: `Bearer ${KEY}`,
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": randomBytes(16).toString("base64"),
+    },
+});
+```
+
+The SDK keeps one WebSocket open to control, at `/v1/connect`, for approvals, per-day counts and the fleet check. The example opens it the way the SDK does, with the agent key as a bearer token, and closes it as soon as control accepts. See [The control link](/sdk/internals/transport#the-control-link).
+
+- **401** means control refused the agent key, for example because it was revoked or belongs to another install.
+- **Any other answer** usually means a proxy in front of control drops the `Upgrade` and `Connection` headers, so the WebSocket can't open.
+
+### Send one real run
+
+```ts
+quard.configure({
+    key: KEY,
+    hashKey: HASH_KEY,
+    webhookUrl: WEBHOOK,
+    controlUrl: CONTROL,
+    onEvent: (event) => {
+        events += 1;
+        if (event.type === "run_started") runId = event.runId;
+    },
+});
+
+// A limit guard only so the call is recorded
+const checked = guard(async (_input: { step: string }) => "done", {
+    type: "limit",
+    name: "deployCheck",
+    maxCallsPerRun: 5,
+});
+let model: string | undefined;
+await quard.run({ agent: "deploy-check" }, async () => {
+    if (env.OPENAI_API_KEY) {
+        try {
+            await quard.wrap(new OpenAI()).responses.create({ model: MODEL, input: "Reply with one word: ready" });
+        } catch (error) {
+            model = (error as Error).message;
+        }
+    }
+    await checked({ step: "deploy check" });
+});
+```
+
+[`quard.configure()`](/sdk/reference/configure) with `key`, `hashKey` and `webhookUrl` starts the uploads, and `controlUrl` starts the control link. `onEvent` counts every [event](/sdk/reference/events) the run records and keeps the run id.
+
+[`quard.run()`](/sdk/reference/quard) starts a run for the agent `deploy-check`. Inside it, one model call goes through [`quard.wrap()`](/sdk/reference/quard#quardwrap), so Quard labels the input and records a `model_call` event, and one call goes to a tool wrapped in [`guard()`](/sdk/reference/guard) with a loose [limit](/sdk/reference/limit-guard), so Quard records the guard's decision and the `tool_call`. The run records its start and its end too.
+
+A failed model call doesn't stop the run. Its error message becomes the **Model call** line, so a wrong OpenAI key or model name shows up there.
+
+### Wait for webhook
+
+```ts
+const uploads = { received: 0, stored: 0, refused: undefined as number | undefined };
+const plainFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+    const res = await plainFetch(input, init);
+    if (String(input) === `${WEBHOOK}/v1/events`) {
+        if (res.ok) {
+            const body = (await res.clone().json()) as { received: number; stored: number };
+            uploads.received += body.received;
+            uploads.stored += body.stored;
+        } else {
+            uploads.refused = res.status;
+        }
+    }
+    return res;
+};
+```
+
+The SDK's uploader sends events to webhook's `/v1/events` about once a second, in batches. Webhook answers each batch with how many events it received and how many it stored. Before the run starts, the example swaps in its own `fetch` to read those answers. The uploader picks up `fetch` when `quard.configure()` starts it, so this swap is in place first.
+
+After the run, the example waits up to 10 seconds, until webhook has received as many events as `onEvent` counted, or refused a batch:
+
+- **401** means webhook refused the agent key.
+- **Another refusal** prints the status.
+- **Too few events in 10 s** prints how many arrived.
+
+When every event arrived, the line shows how many webhook stored and a link to the run in the dashboard.
+
+</Steps>
+
+## What you'll see
+
+A local install with everything up, an OpenAI key and no docs URL:
+
+```text
+Checking the Quard install
+  ✓ Settings    agent key and hash key are set
+  ✓ Dashboard   http://localhost:3100 loads
+  · Docs        not checked: set QUARD_DOCS_URL
+  ✓ Webhook     http://localhost:4100
+  ✓ Control     http://localhost:4200
+  ✓ Live link   control accepts the agent key
+  ✓ Model call  gpt-5.4-mini answered
+  ✓ Run         … events stored: http://localhost:3100/runs/…
+All 7 checks passed.
+```
+
+`…` stands for the number of events and the run id, which change from run to run. A skipped check starts with `·` and doesn't count. With `QUARD_DOCS_URL` set, the docs line is a check too, and the last line says 8.
+
+When a check fails, its line starts with `✗` and says what went wrong in place of the detail, and the last line counts the failures:
+
+```text
+  ✗ Control     http://localhost:4200: ECONNREFUSED
+```
+
+```text
+2 of 7 checks failed.
+```
+
+With control down, the live link fails too, and the run still reaches webhook. With a key missing, the example prints `✗ Settings    set QUARD_AGENT_KEY and QUARD_HASH_KEY in sandbox/.env`, checks the pages and the services, and skips the rest.
+
+Open the run's link. In the dashboard's [Runs](/guides/runs) page, the run belongs to the agent `deploy-check`, with its model call and its `deployCheck` tool call.
+
+## Try this
+
+- **Use a wrong agent key.** Change one character of `QUARD_AGENT_KEY`. The live link says `control refused the agent key`, and the run says `webhook refused the agent key`.
+- **Swap the services.** Set `QUARD_CONTROL_URL=http://localhost:4100`. The control line says `http://localhost:4100 is webhook, not control`.
+- **Check the docs too.** Set `QUARD_DOCS_URL` to the address of the docs site you run. The docs line becomes a check.
+- **Use it in a script.** Run `node sandbox/00-check-deploy.ts && echo ok`. The exit code is 0 only when every check passed, so the next command runs only then.
+
+## Use it in your app
+
+- Run the check after every deploy, with a `sandbox/.env.deploy` file for each install. Make an agent key for it in that install's dashboard, under [Settings](/guides/settings#agent-keys), so you can revoke it on its own.
+- Use the same hash key as the server. The check can't tell a wrong hash key from a right one.
+- Put webhook and control behind a proxy that passes the `Upgrade` and `Connection` headers to control, or the SDK can't keep its live link.
+- The check leaves one `deploy-check` run in the dashboard each time. It is a real run, kept like any other.
+
+## Source
+
+- [`sandbox/00-check-deploy.ts`](https://github.com/oynozan/quard/blob/main/sandbox/00-check-deploy.ts): the example
+- [`sandbox/README.md`](https://github.com/oynozan/quard/blob/main/sandbox/README.md): the local install and the deploy settings
+- [`packages/sdk/transport/configure.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/configure.ts): starts uploads and the control link
+- [`packages/sdk/transport/uploader.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/uploader.ts): sends events to webhook in batches
+- [`packages/sdk/transport/link/socket.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/socket.ts): the SDK's WebSocket to control
+- [`packages/shared/control/protocol.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/control/protocol.ts): `CONTROL_PATH`, the path of the live link
+- [`packages/shared/redact/hash.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/hash.ts): `parseHashKey()`
+- [`services/webhook/routes/health.ts`](https://github.com/oynozan/quard/blob/main/services/webhook/routes/health.ts): the `/health` answer
+- [`services/webhook/routes/events.ts`](https://github.com/oynozan/quard/blob/main/services/webhook/routes/events.ts): takes in events and answers with the counts

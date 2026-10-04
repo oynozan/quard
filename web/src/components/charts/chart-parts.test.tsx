@@ -3,10 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { ChartTooltip, HeaderDivider, LiveMark, Readout, TableToggle } from "./chart-parts";
 
 describe("LiveMark", () => {
-    it("says Live with a filled green square", () => {
+    it("says Live with a filled green square by default", () => {
         const { container } = render(<LiveMark />);
         expect(container.textContent).toBe("Live");
         expect(container.querySelector("[aria-hidden]")?.className).toContain("bg-signal");
+    });
+
+    it("says Offline with a hollow square when the feed is down", () => {
+        const { container } = render(<LiveMark live={false} />);
+        expect(container.textContent).toBe("Offline");
+        expect(container.querySelector("[aria-hidden]")?.className).toContain("bg-transparent");
     });
 });
 

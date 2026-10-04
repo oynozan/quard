@@ -5,6 +5,7 @@ const meta: MetaRecord = {
     concepts: "Concepts",
     integrations: "Integrations",
     guides: "User guides",
+    sdk: "SDK",
     glossary: "Glossary",
 };
 

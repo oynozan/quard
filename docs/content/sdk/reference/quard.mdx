@@ -1,0 +1,261 @@
+# quard
+
+`quard` is the SDK's main object. `wrap()` watches your OpenAI client, `run()` and `agent()` group work into runs and agents, and `configure()` changes settings. `inject()`, `resume()` and `toBaggage()` carry a run from one agent to another, and `memory()` labels what goes in and out of a shared store. `x402()` checks every payment of an x402 client before it is signed, and `x402Fetch()` and `x402Mcp()` record payments. The other function you use every day is [`guard()`](/sdk/reference/guard), which wraps a tool.
+
+```ts
+import { quard } from "quard";
+
+quard.wrap(client);
+quard.run(options, fn);
+quard.agent(name, fn, options);
+quard.inject({ content });
+quard.resume(carrier, fn, options);
+quard.toBaggage(carrier);
+quard.configure(options);
+quard.memory(store, { name });
+quard.x402(client, options);
+quard.x402Fetch(fetch);
+quard.x402Mcp(mcpClient);
+```
+
+## quard.wrap()
+
+```ts
+function wrap<T extends { withOptions(options: { fetch: Fetch }): T }>(client: T): T;
+
+type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+```
+
+Returns a copy of the client whose requests go through Quard. The client you pass in doesn't change. Use the copy everywhere your agent calls the model.
+
+| Parameter | Type | What it is                                                                                                                      |
+| --------- | ---- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `client`  | `T`  | Your OpenAI client, such as `new OpenAI()`. Any client works that has a `withOptions()` method taking `fetch`, as OpenAI's does |
+
+How it works:
+
+- `wrap()` gives the copy a `fetch` function that runs through Quard's monitor. Inside, it calls the client's own `fetch` if it has one, or else the global `fetch`.
+- A client that already goes through Quard comes back as it is. That covers a wrapped client and a copy made from one, so no call is recorded twice.
+- Quard reads `POST` requests to the Responses API: any URL whose path ends in `/responses`. Every other request passes through unchanged and isn't recorded.
+- For each Responses call, Quard labels what the model reads, checks the tool calls the model asks for against the agent's tools, and records a `model_call` [event](/sdk/reference/events). Streamed responses work too.
+- Before each call, Quard checks the run's [step and cost limits](/sdk/reference/run-limits). When they are enforced, a call over a limit never leaves the process.
+- While [uploads](/sdk/reference/configure#uploads-and-the-control-link) are on, the `model_call` event also holds the request body, cut to the fields a [replay](/guides/incidents#replay) resends and redacted before it leaves.
+- A Responses request whose body Quard can't read still goes out. Quard records an `unreadable_request` warning for it.
+
+[The wrapped client](/sdk/internals/monitor) explains the details.
+
+```ts
+import OpenAI from "openai";
+import { quard } from "quard";
+
+const client = quard.wrap(new OpenAI());
+```
+
+## quard.run()
+
+```ts
+function run<T>(options: RunOptions, fn: () => T): T;
+
+type RunOptions = {
+    agent?: string;
+    runId?: string;
+    tools?: string[];
+};
+```
+
+Runs `fn` as one run and returns what `fn` returns. A run is one task from start to finish. Everything `fn` does belongs to the run, across `await`: model calls through a wrapped client, calls to guarded tools, and the labels of everything the run reads. Per-run limits count across the whole run.
+
+| Option  | Type       | Default            | What it does                                                                                                                                                       |
+| ------- | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `agent` | `string`   | `"default"`        | The name of the agent doing the work, such as `"billing"`.                                                                                                         |
+| `runId` | `string`   | a new random id    | A run id to use instead of a new one. The backend only accepts 32 lowercase hex characters, the format Quard makes itself.                                         |
+| `tools` | `string[]` | every guarded tool | The guarded tools the agent may use, by their [`name`](/sdk/reference/guard#options-every-guard-has). A call to any other one is refused with `permission_denied`. |
+
+Behavior:
+
+- `run()` records a `run_started` event with the [origin overrides](/sdk/reference/configure#origins) in force. When `fn` returns, throws or settles its promise, it records `run_finished`.
+- `run_finished` has the status `completed`, `failed` when `fn` threw or rejected, or `blocked` when the error was a [`GuardBlockedError`](/sdk/reference/refusals#guardblockederror) or the OpenAI client's error for a model call that [run limits](/sdk/reference/run-limits) refused. The error is passed on unchanged.
+- `fn` can be sync or async. For an async `fn`, `run()` returns its promise.
+- Each call starts a new run, even inside another run. To hand work to a helper inside the same run, use `quard.agent()`.
+- The agent that starts the run sits at depth 0. Depth counts toward the [run limits](/concepts/run-limits).
+
+```ts
+await quard.run({ agent: "billing", tools: ["getSupplier", "payInvoice"] }, () =>
+    runAgent(client, prompt, { getSupplier, payInvoice }),
+);
+```
+
+`runAgent` stands for your own agent loop.
+
+## quard.agent()
+
+```ts
+function agent<T>(name: string, fn: () => T, options?: AgentOptions): T;
+
+type AgentOptions = {
+    tools?: string[];
+};
+```
+
+Runs `fn` as a child agent inside the current run, and returns what `fn` returns. The child shares the run, so it shares the run's labels and per-run limits.
+
+| Parameter       | Type       | Default            | What it does                                                                                                                   |
+| --------------- | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `name`          | `string`   | required           | The child agent's name.                                                                                                        |
+| `fn`            | `() => T`  | required           | The child's work.                                                                                                              |
+| `options.tools` | `string[]` | the parent's tools | The guarded tools the child may use. A child can only lose tools: it keeps the ones in this list that its parent may also use. |
+
+- `agent()` throws `quard.agent() must be called inside quard.run()` when there is no current run.
+- The child's model calls record the parent's latest step as `parentStepId`.
+- The child sits one level of depth below its parent.
+- `agent()` records no event of its own.
+
+```ts
+await quard.run({ agent: "support" }, async () => {
+    await quard.agent("faq-bot", () => runAgent(client, question, tools), { tools: ["lookupOrder"] });
+});
+```
+
+## quard.inject()
+
+```ts
+function inject(options: InjectOptions): Promise<Carrier>;
+
+type InjectOptions = { content: unknown };
+
+type Carrier = { runId: string; parentStepId?: string; labelRef: string };
+```
+
+Call it inside a run, just before an agent sends a message to an agent in another process. It stores a label record for `content`, the exact message you send, and returns the carrier to send with it. It throws `quard.inject() must be called inside quard.run()` when there is no current run. [Messages between agents](/sdk/reference/messages) has the details.
+
+## quard.resume()
+
+```ts
+function resume<T>(carrier: unknown, fn: () => T, options?: ResumeOptions): Promise<Awaited<T>>;
+
+type ResumeOptions = { agent?: string; tools?: string[] };
+```
+
+Runs `fn` inside the run the carrier names, as the agent `options.agent`, or `"default"`. `carrier` is a `Carrier` object or a whole W3C `baggage` header. A carrier Quard can't read starts a new run instead, as `quard.run()` would. See [Messages between agents](/sdk/reference/messages).
+
+## quard.toBaggage()
+
+```ts
+function toBaggage(carrier: Carrier): string;
+```
+
+Returns the carrier as W3C baggage members, `quard-run`, `quard-parent` and `quard-labels`, for an HTTP `baggage` header. `quard-parent` is left out when the carrier has no `parentStepId`. See [Messages between agents](/sdk/reference/messages).
+
+## quard.configure()
+
+```ts
+function configure(options: Partial<QuardConfig>): void;
+```
+
+Changes settings: origin overrides, the event callback, the approver, the backend connection, the policy file, the signature feed, the detector and the run limits. Each call changes only the options it names. See [Configuration](/sdk/reference/configure) for every option.
+
+## quard.memory()
+
+```ts
+function memory<T extends object>(store: T, options: MemoryOptions): MemoryStore<T>;
+
+type MemoryOptions = { name: string };
+```
+
+Wraps a shared memory store, such as a vector store or a key-value store, so what agents write into it keeps its labels when another agent reads it back. Items read from it get the origin `memory:<name>`. The store's `get`, `search` and `read` methods are reads, `put` and `write` are writes, and they return promises. Other methods pass through. It throws when `name` is missing, empty or longer than 200 characters. See [Shared memory](/sdk/reference/memory).
+
+## quard.x402()
+
+```ts
+function x402<C extends X402Client>(client: C, options: X402Options): C;
+```
+
+Puts the x402 guard on an x402 client, such as `x402Client` from `@x402/core/client`, and returns the same client. Each payment is checked before the wallet signs it, and a refused payment is never signed. It throws when `options.type` isn't `"x402"` or an option is invalid. See [x402 payments](/sdk/reference/x402#quardx402).
+
+## quard.x402Fetch()
+
+```ts
+function x402Fetch(fetch: Fetch): Fetch;
+```
+
+Returns a `fetch` to put under an x402 client, such as the one `wrapFetchWithPayment()` from `@x402/fetch` calls. It records each price, payment and settlement as `payment` events, and refuses with a `403` a payment no x402 guard checked. See [x402 payments](/sdk/reference/x402#quardx402fetch).
+
+## quard.x402Mcp()
+
+```ts
+function x402Mcp<T extends McpToolClient>(client: T): T;
+```
+
+Wraps an MCP client, such as the `Client` from `@modelcontextprotocol/sdk`, so its paid tool calls are recorded the same way. A payment no x402 guard checked is not sent: the call returns an error result instead. Other methods pass through. See [x402 payments](/sdk/reference/x402#quardx402mcp).
+
+## Calls outside a run
+
+A single-agent app doesn't need `quard.run()`. Quard finds a run for calls made outside one:
+
+- A model call joins the run of the response, conversation or tool call it continues, through `previous_response_id`, `conversation` or a tool result in its input. Otherwise it starts a new run.
+- A guarded call joins the run of the matching tool call the model asked for. Otherwise it starts a new run. See [Tool calls the model asked for](/sdk/reference/guard#tool-calls-the-model-asked-for).
+- A read or write through `quard.memory()` starts a new run.
+- An x402 payment joins the run where `quard.x402Fetch()` or `quard.x402Mcp()` saw its price. Otherwise it starts a new run. See [What Quard records](/sdk/reference/x402#what-quard-records).
+- A new run started this way uses the agent `default`, which may use every guarded tool. It records `run_started` but never `run_finished`.
+
+## Everything the package exports
+
+From `quard`:
+
+| Export                                                                                           | Kind     | Reference                                                          |
+| ------------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------ |
+| `quard`                                                                                          | object   | This page                                                          |
+| `guard`                                                                                          | function | [guard()](/sdk/reference/guard)                                    |
+| `GuardRefusal`                                                                                   | class    | [Refusals and errors](/sdk/reference/refusals#guardrefusal)        |
+| `isGuardRefusal`                                                                                 | function | [Refusals and errors](/sdk/reference/refusals#isguardrefusal)      |
+| `GuardBlockedError`                                                                              | class    | [Refusals and errors](/sdk/reference/refusals#guardblockederror)   |
+| `GUARD_TYPES`                                                                                    | constant | [guard()](/sdk/reference/guard#guard-types)                        |
+| `isGuardType`                                                                                    | function | [guard()](/sdk/reference/guard#guard-types)                        |
+| `jevDetector`                                                                                    | function | [Detector and signatures](/sdk/reference/detector#jev)             |
+| `DetectorError`                                                                                  | class    | [Detector and signatures](/sdk/reference/detector#detector-errors) |
+| `RunOptions`, `AgentOptions`                                                                     | types    | This page                                                          |
+| `Carrier`, `InjectOptions`, `ResumeOptions`                                                      | types    | [Messages between agents](/sdk/reference/messages)                 |
+| `MemoryOptions`, `MemoryStore`                                                                   | types    | [Shared memory](/sdk/reference/memory)                             |
+| `QuardConfig`                                                                                    | type     | [Configuration](/sdk/reference/configure)                          |
+| `RunLimits`                                                                                      | type     | [Run limits](/sdk/reference/run-limits)                            |
+| `GuardOptions`, `GuardType`, `RuleResult`                                                        | types    | [guard()](/sdk/reference/guard#guard-types)                        |
+| `SourceOptions`                                                                                  | type     | [Source guard](/sdk/reference/source-guard)                        |
+| `ActionOptions`, `ActionRule`, `GuardCall`                                                       | types    | [Action guard](/sdk/reference/action-guard)                        |
+| `ApprovalOptions`, `ApprovalRequest`, `ApprovalAnswer`                                           | types    | [Approval guard](/sdk/reference/approval-guard)                    |
+| `EgressOptions`, `DataAction`                                                                    | types    | [Egress guard](/sdk/reference/egress-guard)                        |
+| `LimitOptions`                                                                                   | type     | [Limit guard](/sdk/reference/limit-guard)                          |
+| `X402Options`, `X402Client`, `McpToolClient`                                                     | types    | [x402 payments](/sdk/reference/x402)                               |
+| `RunEvent`                                                                                       | type     | [Events](/sdk/reference/events)                                    |
+| `Detector`, `DetectorRules`, `DetectorAnswer`, `DetectorLabel`, `JevOptions`, `SignaturesConfig` | types    | [Detector and signatures](/sdk/reference/detector)                 |
+
+From `quard/openai-agents`, for the OpenAI Agents SDK:
+
+| Export                                     | Kind     | Reference                                         |
+| ------------------------------------------ | -------- | ------------------------------------------------- |
+| `quardRunner`, `guardedTool`               | function | [OpenAI Agents SDK](/sdk/reference/openai-agents) |
+| `QuardRunnerOptions`, `GuardedToolOptions` | types    | [OpenAI Agents SDK](/sdk/reference/openai-agents) |
+
+## Related
+
+- [Overview](/sdk): install and quick start.
+- [Agents and permissions](/sdk/examples/agents-and-permissions): `quard.run()` and `quard.agent()` with tool lists.
+- [Agents in two processes](/sdk/examples/agents-in-two-processes): `quard.inject()` and `quard.resume()` in a runnable example.
+- [Shared memory](/sdk/examples/shared-memory): `quard.memory()` in a runnable example.
+- [A paid API in a loop](/sdk/examples/paid-api-in-a-loop): `quard.x402()` and `quard.x402Fetch()` in a runnable example.
+- [Multi-agent](/concepts/multi-agent): one run across many agents, without code.
+- [Labels and trust](/concepts/labels): what a run's labels are.
+
+## Source
+
+- [`packages/sdk/index.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/index.ts): the `quard` object and every export
+- [`packages/sdk/monitor/wrap.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/wrap.ts): `wrap()`
+- [`packages/sdk/monitor/fetch.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/fetch.ts): `createMonitorFetch()`, which picks the run for a model call
+- [`packages/sdk/context/scope.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/scope.ts): `runScope()`, `agentScope()` and `narrowTools()`
+- [`packages/sdk/context/carrier.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/carrier.ts): `inject()` and `resume()`
+- [`packages/sdk/context/baggage.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/baggage.ts): `toBaggage()`
+- [`packages/sdk/memory/wrap.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/wrap.ts): `memory()`
+- [`packages/sdk/guards/x402/x402.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/x402.ts): `x402()`
+- [`packages/sdk/x402/fetch/fetch.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/fetch/fetch.ts): `createX402Fetch()`, which is `quard.x402Fetch()`
+- [`packages/sdk/x402/mcp/mcp.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/mcp/mcp.ts): `x402Mcp()`
+- [`packages/sdk/transport/configure.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/configure.ts): `configureQuard()`
+- [`packages/sdk/integrations/openai-agents/index.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/index.ts): the `quard/openai-agents` exports

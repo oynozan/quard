@@ -1,0 +1,178 @@
+# Approval guard
+
+An approval guard makes every call to its tool wait for a person. The tool runs only after someone approves, and only with exactly the arguments they saw. Use it on high-stakes tools, such as payments or deletes.
+
+```ts
+type ApprovalOptions = {
+    type: "approval";
+    name?: string;
+    onBlock?: "return" | "throw";
+    timeout?: number;
+};
+```
+
+## Options
+
+| Option            | Type     | Default  | What it does                                                                                                                                                    |
+| ----------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timeout`         | `number` | no limit | Seconds to wait for an answer. It must be above 0. When it passes, the call is refused with `approval_timed_out`. The longest possible wait is about 24.8 days. |
+| `name`, `onBlock` |          |          | See [Options every guard has](/sdk/reference/guard#options-every-guard-has).                                                                                    |
+
+An approval guard has no `mode`. It always asks.
+
+Some hosts end a call that waits too long. If yours does, set `timeout` below the host's limit, so the agent gets a refusal instead of a stopped process. With the [OpenAI Agents SDK](/sdk/reference/openai-agents), the tool's own timeout also ends the wait. See [Aborted calls](#aborted-calls).
+
+## Who answers
+
+When a call needs an answer, Quard asks, in this order:
+
+1. The `approver` function set with `quard.configure()`, when there is one.
+2. A person in the dashboard, through the [control link](/sdk/reference/configure#uploads-and-the-control-link), when it is set up.
+3. Nobody. The call is refused with `approval_unavailable`.
+
+## An approver in code
+
+`approver` answers approvals in your own code, for example in a terminal or a chat tool. When it is set, the dashboard isn't asked, even with the control link on.
+
+```ts
+type ApprovalRequest = {
+    runId: string;
+    agent: string;
+    stepId: string;
+    tool: string;
+    input: unknown;
+    values: ArgumentLabel[];
+};
+
+type ApprovalAnswer = "once" | "always" | "deny";
+```
+
+- `input` holds the real arguments. `values` says where each value came from, in the same shape as [`GuardCall.values`](/sdk/reference/action-guard#guardcall).
+- `"once"` runs this call.
+- `"always"` runs this call, and later calls with the same agent, tool and exact arguments run without asking, until the process ends. Quard keeps this in memory only.
+- `"deny"`, and any other answer, refuses the call with `approval_denied`.
+- An approver that throws or rejects refuses the call with `approval_unavailable`.
+- `timeout` applies to the approver too.
+
+```ts
+import { createInterface } from "node:readline/promises";
+import { quard } from "quard";
+
+quard.configure({
+    approver: async (request) => {
+        const terminal = createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await terminal.question(
+            `${request.agent} wants ${request.tool} ${JSON.stringify(request.input)}. Run it? [y/N] `,
+        );
+        terminal.close();
+        return answer.trim().toLowerCase() === "y" ? "once" : "deny";
+    },
+});
+```
+
+## Through the dashboard
+
+With the control link on and no `approver`, Quard sends the request to `control` and waits. People answer on the dashboard's [Approvals](/guides/approvals) page.
+
+- The request shows the real arguments, with secrets removed, and where each value came from. It carries a keyed hash of the arguments, so a call with any changed argument asks again.
+- Quard refuses the call with `approval_unavailable`, without asking, when the arguments are nested more than 32 levels deep, so no one could see them in full. It does the same for a request `control` wouldn't accept, such as one over 1 MB.
+- `control` must take the request within 30 seconds. While it can't be reached, Quard keeps trying. After 30 seconds the call is refused with `backend_unavailable`. The same 30 seconds apply when the link drops while a call waits. After a reconnect, the call picks up its open request again.
+- Once `control` has the request, the call waits with no time limit, unless you set `timeout`. When `timeout` passes, Quard stops waiting, tells `control`, and refuses the call with `approval_timed_out`.
+- An **Always approve** answer is kept by the backend. A later identical call is answered at once, and its decision is recorded with the rule `always-approved`.
+- While it waits, the call keeps your process alive and sends a heartbeat every 15 seconds, so the dashboard shows that it is still waiting.
+
+[Approvals](/concepts/approvals) explains the three answers and what each is tied to.
+
+## Aborted calls
+
+A call made through [`guardedTool()`](/sdk/reference/openai-agents) carries the abort signal of the OpenAI Agents SDK. The Agents SDK fires it when it gives up on the call, such as on the tool's `timeoutMs`. When it fires before an answer:
+
+- Quard stops waiting, or doesn't ask at all when the signal fired first.
+- A request in the dashboard is dropped in `control`, so no one can approve a call that is gone.
+- An approver in code is no longer waited for. Its later answer changes nothing.
+- The call is refused with `approval_timed_out`, and the decision is recorded with the rule `aborted`.
+
+A call aborted after its approval is refused by the `abort` guard instead. See [Aborted calls](/sdk/reference/guard#aborted-calls).
+
+## After the answer
+
+1. Any answer but an approval refuses the call.
+2. After an approval, Quard runs the block checks again. Asks from other guards count as settled by the person. A block that came up while the call waited still refuses it, such as a daily cap reached in the meantime.
+3. Quard counts the call against its limits, then runs the tool with exactly the arguments the person saw. If they changed since the approval, which only values that aren't plain data, such as a `Date`, can do, the call is refused with `approval_required`.
+
+## Asks from other guards
+
+An approval guard isn't the only way a call waits for a person. A call also asks when:
+
+- an [action rule](/sdk/reference/action-guard#rules) fails with `onFail: "ask"`, the default for `neverSeen` rules,
+- a custom action rule returns `"ask"`,
+- an [egress guard's](/sdk/reference/egress-guard) allowlist check fails with `onFail: "ask"`,
+- a `flag` signature from the [signature feed](/sdk/reference/detector#the-signature-feed) matches the arguments.
+
+The same approver, or the dashboard, answers these. The `timeout` comes only from an approval guard on the same tool. Without one, the call waits with no limit.
+
+## Reason codes
+
+Every refusal from this step names the `approval` guard.
+
+| Reason                 | When                                                                                          | Refusal text, after "Blocked by the approval guard:"   |
+| ---------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `approval_unavailable` | No approver and no control link, the approver threw, or the request couldn't be shown or sent | it needs a human approval and none could be asked      |
+| `approval_denied`      | The answer was deny, or anything other than `"once"` or `"always"`                            | a human denied it                                      |
+| `approval_timed_out`   | No answer before `timeout`, or the call was aborted before an answer                          | no one answered the approval request in time           |
+| `backend_unavailable`  | `control` couldn't be reached for 30 seconds                                                  | it needs the Quard backend, which could not be reached |
+| `approval_required`    | The arguments changed after the approval                                                      | it needs a human approval                              |
+
+## Decision records
+
+A tool with an approval guard records a `decision` with `guard: "approval"`, `rule: "approval"` and `decision: "ask"` on each call that passes the permission check. Every answer, to this guard or to an ask from another guard, adds one more decision from the `approval` guard, with one of these rules:
+
+| Rule                             | Decision           | Meaning                                        |
+| -------------------------------- | ------------------ | ---------------------------------------------- |
+| `human`                          | `allow` or `block` | A person answered                              |
+| `always-approved`                | `allow`            | An earlier "always" answered                   |
+| `timeout`                        | `block`            | `timeout` passed                               |
+| `aborted`                        | `block`            | The call was aborted before an answer          |
+| `no-approver`                    | `block`            | There was no approver and no control link      |
+| `approver-error`                 | `block`            | The approver threw or rejected                 |
+| `backend-down`                   | `block`            | `control` couldn't be reached                  |
+| `too-deep-to-show`, `unsendable` | `block`            | The request couldn't be shown in full, or sent |
+| `arguments-changed`              | `block`            | The arguments changed after the approval       |
+
+Answers from the dashboard carry the approval request's id in the event's `request` field.
+
+## Labels
+
+An approval guard doesn't label anything. Without a source guard on the same tool, the result is labeled `tool:<name>`.
+
+## Example
+
+```ts
+import { guard } from "quard";
+
+const deleteRecords = guard(rawDeleteRecords, { type: "approval", name: "deleteRecords", timeout: 600 });
+
+const out = await deleteRecords({ table: "invoices", before: "2025-01-01" });
+// Approved: rawDeleteRecords ran with exactly these arguments.
+// Denied, or no answer within 10 minutes: out is a refusal.
+```
+
+## Related
+
+- [Human approval](/sdk/examples/human-approval): an approver in the terminal.
+- [Approvals in the dashboard](/sdk/examples/approvals-in-the-dashboard): approve once, always approve and a timeout.
+- [Approvals guide](/guides/approvals): answering requests in the dashboard.
+- [OpenAI Agents SDK](/sdk/reference/openai-agents): `guardedTool()` and its abort signal.
+
+## Source
+
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): `ApprovalOptions`
+- [`packages/sdk/core/config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/config.ts): `ApprovalRequest` and `ApprovalAnswer`
+- [`packages/sdk/guards/approval/approval.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/approval/approval.ts): `checkApproval()` and the in-memory "always" answers
+- [`packages/sdk/pipeline/approval/human.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/human.ts): `askHuman()`, which picks who answers
+- [`packages/sdk/pipeline/approval/local.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/local.ts): `askApprover()`
+- [`packages/sdk/pipeline/approval/remote.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/remote.ts): `askControl()`
+- [`packages/sdk/pipeline/approval/message.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/message.ts): `askFor()`, the request the dashboard shows
+- [`packages/sdk/pipeline/approval/record.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/record.ts): `blocked()`, `aborted()`, `approved()` and `timeoutMs()`
+- [`packages/sdk/transport/link/approvals.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/approvals.ts): `createApprovals()`, the wait, the 30 seconds, the heartbeat and the cancel on a timeout or an abort
+- [`packages/sdk/pipeline/guard.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard.ts): the checks after an approval

@@ -4,6 +4,7 @@ import { replayBody } from "./body.ts";
 import { rebuildRequest } from "./request.ts";
 import type { Side } from "./rounds.ts";
 import { standInsOf, withStandIns } from "./standins.ts";
+import { suspectCallIds } from "./suspects.ts";
 import { NOT_A_TOOL_RESULT, withoutContent } from "./without.ts";
 
 type Body = Record<string, unknown>;
@@ -22,31 +23,33 @@ export type ReplayPlan = {
 export function planReplay(verdict: StoredVerdict, run: StoredRun, calls: ModelCallRecord[]): ReplayPlan {
     const { entry, turning, damage } = verdict;
     const stepsOf = (stepId: string) => run.steps.filter((step) => step.stepId === stepId);
-    // The tool call whose result held the suspect content
-    const source = stepsOf(entry.stepId).filter((step) => step.kind === "tool_call" && entry.contentId !== null);
-    const callId = source.map((step) => step.callId).find((id) => id !== null) ?? null;
     const cost = stepsOf(turning.stepId)
         .map(costOfStep)
         .find((usd) => usd !== undefined);
+    const request = rebuildRequest(calls, turning.stepId);
+    const body = typeof request === "string" ? request : replayBody(request);
+    // The tool result left out is the first suspect the turning request holds
+    const suspects = suspectCallIds(verdict, run);
+    const without = typeof body === "string" ? undefined : withoutContent(body.input as unknown[], suspects);
     const base = {
         model: calls.find((call) => call.stepId === turning.stepId)?.model ?? "",
         harmfulCall: {
             tool: damage.tool,
             keys: entry.key === null ? stepsOf(damage.stepId).flatMap(keysOf) : [entry.key],
         },
-        removed: { contentId: entry.contentId, origin: entry.origin, callId },
+        removed: { contentId: entry.contentId, origin: entry.origin, callId: without?.callId ?? suspects[0] ?? null },
     };
     const plan = { base, firstRoundUsd: cost === undefined ? undefined : 10 * cost };
-    const request = rebuildRequest(calls, turning.stepId);
-    if (typeof request === "string") {
-        return { ...plan, ready: request };
+    if (typeof body === "string") {
+        return { ...plan, ready: body };
     }
-    const body = replayBody(request);
-    const without = withoutContent(body.input as unknown[], callId);
     if (without === undefined) {
         return { ...plan, ready: NOT_A_TOOL_RESULT };
     }
     const standIns = standInsOf([...run.labels.flatMap((label) => label.keys), ...run.steps.flatMap(keysOf)]);
-    const bodies = { with: withStandIns(body, standIns), without: withStandIns({ ...body, input: without }, standIns) };
+    const bodies = {
+        with: withStandIns(body, standIns),
+        without: withStandIns({ ...body, input: without.input }, standIns),
+    };
     return { ...plan, ready: { bodies, back: new Map(standIns.map((item) => [item.asKey, item.key])) } };
 }

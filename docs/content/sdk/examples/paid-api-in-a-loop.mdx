@@ -1,0 +1,151 @@
+import { Steps } from "nextra/components";
+
+# 27. A paid API in a loop
+
+A trading app asks a paid quote API for the EUR/USD rate, $0.01 a call. A retry loop, or many helpers, can pay the same endpoint hundreds of times. This example calls the API up to ten times in one run. With `maxPerRun: 0.05`, five payments settle and the sixth is refused before it is signed. With `maxPaymentsPerRun: 3`, the fourth is refused. There is no model in this example: the app itself calls the API.
+
+## Run it
+
+```sh
+node sandbox/27-paid-api-in-a-loop.ts
+```
+
+Run it from the repo root. It needs no OpenAI key, no chain and no wallet: the API is a local x402 server, settled by a stub facilitator and paid with a fake signer. It doesn't load `sandbox/.env` or connect to the backend, so its runs stay in the terminal.
+
+## Step by step
+
+<Steps>
+
+### Start the quote API
+
+```ts
+const api = await startPaidApi({
+    origin: "https://quotes.example",
+    amount: "10000",
+    payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+    answer: () => `EUR/USD ${(1.08 + Math.random() / 100).toFixed(4)}`,
+});
+```
+
+`startPaidApi()` in `lib/x402/server.ts` starts a local x402 server for `https://quotes.example`. Each call costs 10000 atomic units of test USDC on Base Sepolia, which is $0.01. A paid call gets a random rate between 1.08 and 1.09, and a settlement with a new transaction number. `api.fetch` sends requests for that host to the local server.
+
+### Print what each payment did
+
+```ts
+quard.configure({
+    onEvent: (event) => {
+        if (event.type === "payment" && event.stage !== "challenged" && event.stage !== "signed") {
+            console.log(`    · ${paymentLine(event)}`);
+        }
+    },
+});
+```
+
+Each step of a payment is a `payment` [event](/sdk/reference/events). The example prints how each one ended: `settled`, `failed` or `refused`. It skips the price request and the signature, which every paid call has.
+
+### Pay in a loop
+
+```ts
+async function loop(options: X402Options): Promise<void> {
+    const wallet = quard.x402(testWallet(), options);
+    const paidFetch = wrapFetchWithPayment(quard.x402Fetch(api.fetch), wallet);
+    await quard.run({ agent: "trader" }, async () => {
+        for (let call = 1; call <= 10; call++) {
+            try {
+                const response = await paidFetch("https://quotes.example/eur-usd");
+                console.log(`  Call ${call}: ${await response.text()}`);
+            } catch (error) {
+                console.log(`  Call ${call}: ${(error as Error).message}`);
+                console.log("  The loop stopped.");
+                return;
+            }
+        }
+    });
+}
+```
+
+[`quard.x402()`](/sdk/reference/x402) adds the x402 guard to an x402 client with a fake signer, and `quard.x402Fetch()` under it records each price, payment and settlement. Each call to `loop()` starts a new run with [`quard.run()`](/sdk/reference/quard#quardrun), so the run caps count from zero.
+
+The calls don't run inside a tool wrapped with `guard()`. So when the guard refuses a payment, the x402 client throws, and the error's message holds the refusal. The loop prints it and stops. In an agent, you would pass that message to the model as the tool's result.
+
+### Part 1: a cap on what the run spends
+
+```ts
+await loop({ type: "x402", name: "quotes", maxPerRun: 0.05 });
+```
+
+`maxPerRun` caps the run's spend in USD. The guard counts each payment before it is signed, so the run's total is known before the next one. After five payments, the run has spent $0.05. The sixth would take it to $0.06, so the guard refuses it before the signer runs. The message reads:
+
+```text
+Failed to create payment payload: Payment creation aborted: Blocked by the x402 guard: the payment is over the run limit. The x402 payment did NOT happen. Do not retry it.
+```
+
+The first part comes from `@x402/fetch`, the second from the x402 client, and the rest is Quard's [refusal](/sdk/reference/refusals).
+
+### Part 2: a cap on the number of payments
+
+```ts
+await loop({ type: "x402", name: "quotes", maxPaymentsPerRun: 3 });
+```
+
+`maxPaymentsPerRun` counts payments, whatever they cost and whatever the token. The fourth payment is refused with "this run made too many payments". `maxPerRun` isn't set here, so it is back to the default of $5, which only observes.
+
+</Steps>
+
+## What you'll see
+
+```text
+1 · maxPerRun: 0.05
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0001
+  Call 1: EUR/USD 1.0843
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0002
+  Call 2: EUR/USD 1.0871
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0003
+  Call 3: EUR/USD 1.0809
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0004
+  Call 4: EUR/USD 1.0856
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0005
+  Call 5: EUR/USD 1.0832
+    · payment refused before signing: $0.01 to 0x2096…287C at quotes.example
+  Call 6: Failed to create payment payload: Payment creation aborted: Blocked by the x402 guard: the payment is over the run limit. The x402 payment did NOT happen. Do not retry it.
+  The loop stopped.
+
+2 · maxPaymentsPerRun: 3
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0006
+  Call 1: EUR/USD 1.0865
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0007
+  Call 2: EUR/USD 1.0818
+    · payment settled: $0.01 to 0x2096…287C at quotes.example, tx 0x0000…0008
+  Call 3: EUR/USD 1.0890
+    · payment refused before signing: $0.01 to 0x2096…287C at quotes.example
+  Call 4: Failed to create payment payload: Payment creation aborted: Blocked by the x402 guard: this run made too many payments. The x402 payment did NOT happen. Do not retry it.
+  The loop stopped.
+```
+
+There is no model, so every run prints the same lines, apart from the rates, which are random. Each payment's line comes before the call's line, because Quard records the settlement as the paid response comes in. The `tx` is the stub facilitator's count of settled payments, so it goes on from 6 in part 2. A refused payment has no `tx`: it was never signed, so the server never saw it.
+
+## Try this
+
+- **Watch first.** In part 1, add `mode: "observe"`. All ten payments settle, and Quard records that the guard would have blocked the sixth to the tenth. The example prints only payments, so add `printEvent` from `lib/show.ts` to `onEvent` to see the decisions.
+- **Cap the day.** In part 1, add `maxPerDay: 0.03`. The fourth payment is refused: "the payment is over the daily limit". Without the backend, the day's total is kept in this process only.
+- **Leave out the run.** In `loop()`, call the loop body without `quard.run()`. Part 1 still stops at the sixth payment, because a payment made outside a run joins the run that saw its price. Part 2 calls the same URL, so its payments join that run too, and its first payment is refused: that run already made five.
+
+## Use it in your app
+
+- Set `maxPaymentsPerRun` on any agent that can call a paid endpoint in a loop. It catches loops whatever each call costs, and it works for tokens with no known USD value.
+- Set `maxPerRun` and `maxPerDay` to what a task and a day may spend. With the backend, `maxPerDay` counts across every process of the project.
+- Wrap each task in `quard.run()`, so run caps count per task.
+- Outside a guarded tool, catch the x402 client's error and give its message to the model as the tool's result, as the [concept page](/concepts/payments#when-a-payment-is-refused) shows. Inside one, as in [example 26](/sdk/examples/paid-link-in-a-page), the tool returns the refusal for you.
+
+[x402 payments](/sdk/internals/payments#counting-before-signing) shows how the guard counts before signing.
+
+## Source
+
+- [`sandbox/27-paid-api-in-a-loop.ts`](https://github.com/oynozan/quard/blob/main/sandbox/27-paid-api-in-a-loop.ts): the example
+- [`sandbox/lib/x402/server.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/x402/server.ts): the local x402 server and stub facilitator
+- [`sandbox/lib/x402/wallet.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/x402/wallet.ts): the x402 client with a fake signer
+- [`sandbox/lib/x402/show.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/x402/show.ts): `paymentLine()`
+- [`packages/sdk/guards/x402/checks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/checks.ts): the run, day and payment caps
+- [`packages/sdk/guards/x402/count.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/count.ts): counting before signing
+- [`packages/sdk/x402/record/payments.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/record/payments.ts): payment events, and payments made outside a run
+- [`packages/shared/refusals/templates.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/refusals/templates.ts): the refusal texts

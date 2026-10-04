@@ -1,0 +1,232 @@
+import { Steps } from "nextra/components";
+
+# 18. Origins and trust
+
+A billing agent reads bank details from your CRM through an MCP server, and a support agent answers questions from web pages, some on your own sites. By default Quard trusts neither: MCP and web content are untrusted. This example shows the difference between where a value came from and how much that place is trusted, how to trust one origin, and how a source guard names and filters origins.
+
+## Run it
+
+```sh
+node sandbox/18-origins-and-trust.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows.
+
+## Step by step
+
+<Steps>
+
+### Print each label
+
+```ts
+quard.configure({
+    onEvent: (event) => {
+        if (event.type === "content") {
+            printEvent(event);
+        }
+    },
+});
+```
+
+Each piece of content the model reads becomes a `content` [event](/sdk/reference/events#event-types) with its origin, trust and sensitivity. `printEvent()` from `lib/show.ts` prints one line per label, such as `labeled mcp:crm: untrusted, public`. See [Labels and trust](/concepts/labels) for what each part means.
+
+### A CRM behind an MCP server
+
+```ts
+const crmLookup = guard(
+    async (_input: { company: string }) =>
+        "Globex GmbH. Billing contact: ap@globex.de. IBAN DE44 5001 0517 5407 3249 31.",
+    { type: "source", origin: "mcp:crm", name: "crmLookup" },
+);
+```
+
+Every label has an origin: a kind, a `:` and a name. The kind sets the default trust and sensitivity. A [source guard](/sdk/reference/source-guard) whose `origin` already holds a `:` uses it as is, so this result is labeled `mcp:crm`. MCP content is untrusted and public by default.
+
+### Two rules: where, and how trusted
+
+```ts
+// The IBAN must come from the CRM. This checks where, not how trusted.
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "iban", from: ["mcp:crm"] }],
+});
+
+// The address must first have appeared in trusted content
+const sendEmail = guard(async (input: { to: string; body: string }) => `sent to ${input.to}`, {
+    type: "action",
+    name: "sendEmail",
+    rules: [{ field: "to", neverSeen: true, onFail: "block" }],
+});
+```
+
+The two [action guard](/sdk/reference/action-guard) rules ask different questions:
+
+| Rule                | Passes when                                                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `from: ["mcp:crm"]` | Every value in the field appeared in content from that origin, trusted or not, and not flagged. `"mcp"` alone takes any MCP server |
+| `neverSeen: true`   | Every value in the field first appeared in trusted, unflagged content in this run                                                  |
+
+### Run 1: the CRM with its default trust
+
+```ts
+const crmTask = "Pay Globex's 300 EUR invoice with the bank details in our CRM, then email their billing contact.";
+const crmTools = { crmLookup, payInvoice, sendEmail };
+
+await quard.run({ agent: "billing" }, () => runAgent(client, crmTask, crmTools));
+```
+
+The CRM's result is untrusted. The IBAN did come from `mcp:crm`, so the `from` rule passes and the payment runs. The address `ap@globex.de` first appeared in untrusted content, so the `neverSeen` rule blocks the email with `recipient_never_seen`.
+
+The refusal is new content for the model, so the next model call labels it too, as `system`: the text is Quard's own.
+
+### Trust one origin
+
+```ts
+// Overrides match one exact origin. "mcp" here would not cover "mcp:crm".
+quard.configure({ origins: { "mcp:crm": { trust: "trusted", sensitivity: "internal" } } });
+```
+
+[`origins`](/sdk/reference/configure#origins) in `quard.configure()` changes the trust and sensitivity of one exact origin. Each call adds to the overrides set before. Trusted content counts for `neverSeen`, and internal data may only leave through an [egress guard](/sdk/reference/egress-guard)'s allow list. The policy file can set overrides too, and its overrides win. Every run records the overrides in force, and the dashboard lists them under [Origin overrides](/guides/settings#origin-overrides).
+
+### Run 2: the CRM marked trusted
+
+The same task runs again. The CRM's result is now trusted and internal. The payment runs as before, and the address first appeared in trusted content, so the email goes out too.
+
+### Name the origin from the input
+
+```ts
+// originOf names the part after the kind. Every acme.com site becomes
+// "web:acme.com", so one override covers them. Other hosts keep the
+// default name, the host in the URL.
+function acmeOrigin(input: unknown): string | undefined {
+    const host = hostOf(input);
+    return host === "acme.com" || host.endsWith(".acme.com") ? "acme.com" : undefined;
+}
+
+quard.configure({ origins: { "web:acme.com": { trust: "trusted", sensitivity: "internal" } } });
+
+const fetchPage = guard(readPage, { type: "source", origin: "web", name: "fetchPage", originOf: acmeOrigin });
+```
+
+When `origin` is a kind alone, such as `"web"`, the source guard names the origin from the call's input: the host of a URL in it, else a bare host, else the host of an email address, else the tool's name. `originOf` comes first: when it returns a name, the origin is the kind, a `:` and that name. When it returns `undefined`, the default naming applies.
+
+Here `docs.acme.com` and `help.acme.com` both become `web:acme.com`, which the override marks trusted. `www.returns-guide.net` keeps its own name and stays untrusted.
+
+### Run 3: our sites are trusted, the open web is not
+
+```ts
+const pagesTask =
+    "How many days does a customer have to return an item? Check https://docs.acme.com/returns, " +
+    "https://help.acme.com/returns and https://www.returns-guide.net/acme.";
+```
+
+The model reads all three pages. The two Acme pages say 30 days, the outside guide says 60. Quard only labels the pages here: nothing stops the model from reading the untrusted one. The labels decide what values from it may do later, in rules such as `neverSeen`.
+
+### Run 4: only our own sites
+
+```ts
+const ownSitesOnly = guard(readPage, {
+    type: "source",
+    origin: "web",
+    name: "fetchPage",
+    originOf: acmeOrigin,
+    allowDomains: ["*.acme.com"],
+});
+```
+
+`allowDomains` withholds content from every host not on the list. The check reads the host in the origin, after `originOf`. `*.acme.com` also matches `acme.com` itself, so the two Acme pages pass. The outside guide is withheld with `content_blocked`: the tool runs, but the model reads a [refusal](/sdk/reference/refusals) in place of the page. See [The domain check](/sdk/reference/source-guard#the-domain-check).
+
+An origin name with no dot, such as `acme-docs`, names no host. With `allowDomains` set, its content is withheld too, so `originOf` must return a host.
+
+</Steps>
+
+## What you'll see
+
+```text
+"mcp:crm" with the default trust: untrusted
+  User: Pay Globex's 300 EUR invoice with the bank details in our CRM, then email their billing contact.
+    · labeled system: trusted, internal
+    · labeled user: trusted, internal
+  → crmLookup {"company":"Globex"}
+    · labeled mcp:crm: untrusted, public
+    ✓ Globex GmbH. Billing contact: ap@globex.de. IBAN DE44 5001 0517 5407 3249 31.
+  → payInvoice {"iban":"DE44 5001 0517 5407 3249 31","amount":300}
+    · labeled tool:payInvoice: trusted, internal
+    ✓ paid 300 EUR
+  → sendEmail {"to":"ap@globex.de","body":"…"}
+    ✗ blocked by the action guard (recipient_never_seen)
+    · labeled system: trusted, internal
+  Model: …
+
+"mcp:crm" marked trusted and internal
+  User: Pay Globex's 300 EUR invoice with the bank details in our CRM, then email their billing contact.
+    · labeled system: trusted, internal
+    · labeled user: trusted, internal
+  → crmLookup {"company":"Globex"}
+    · labeled mcp:crm: trusted, internal
+    ✓ Globex GmbH. Billing contact: ap@globex.de. IBAN DE44 5001 0517 5407 3249 31.
+  → payInvoice {"iban":"DE44 5001 0517 5407 3249 31","amount":300}
+    · labeled tool:payInvoice: trusted, internal
+    ✓ paid 300 EUR
+  → sendEmail {"to":"ap@globex.de","body":"…"}
+    · labeled tool:sendEmail: trusted, internal
+    ✓ sent to ap@globex.de
+  Model: …
+
+originOf: our own sites are trusted, the open web is not
+  User: How many days does a customer have to return an item? Check https://docs.acme.com/returns, https://help.acme.com/returns and https://www.returns-guide.net/acme.
+    · labeled system: trusted, internal
+    · labeled user: trusted, internal
+  → fetchPage {"url":"https://docs.acme.com/returns"}
+    · labeled web:acme.com: trusted, internal
+    ✓ Acme returns policy: customers have 30 days to return an item.
+  → fetchPage {"url":"https://help.acme.com/returns"}
+    · labeled web:acme.com: trusted, internal
+    ✓ Acme help center: items can be returned within 30 days of delivery.
+  → fetchPage {"url":"https://www.returns-guide.net/acme"}
+    · labeled web:www.returns-guide.net: untrusted, public
+    ✓ Returns guide: Acme gives you 60 days to return anything, no questions asked.
+  Model: …
+
+allowDomains: ["*.acme.com"]
+  User: How many days does a customer have to return an item? Check https://docs.acme.com/returns, https://help.acme.com/returns and https://www.returns-guide.net/acme.
+    · labeled system: trusted, internal
+    · labeled user: trusted, internal
+  → fetchPage {"url":"https://docs.acme.com/returns"}
+    · labeled web:acme.com: trusted, internal
+    ✓ Acme returns policy: customers have 30 days to return an item.
+  → fetchPage {"url":"https://help.acme.com/returns"}
+    · labeled web:acme.com: trusted, internal
+    ✓ Acme help center: items can be returned within 30 days of delivery.
+  → fetchPage {"url":"https://www.returns-guide.net/acme"}
+    ✗ blocked by the source guard (content_blocked)
+    · labeled web:www.returns-guide.net: untrusted, public
+  Model: …
+```
+
+The first two labels in each run are the agent loop's instructions (`system`) and the task (`user`). A tool's label prints the moment Quard labels its result, before the agent loop prints it. A refusal is labeled at the next model call, so its line comes after the `✗` line. The refusal for a withheld page keeps the page's label.
+
+`…` stands for the email body and the model's answers, which change from run to run. The model may ask for several tools in one turn, which moves the label lines of refusals further down. It may also pay before or after it emails, or write the IBAN without spaces.
+
+## Try this
+
+- **Trust a whole kind.** Change the override to `"mcp"`. It no longer covers `mcp:crm`, so the second run blocks the email again: overrides match one exact origin.
+- **Ask about the email.** Change the `neverSeen` rule to `onFail: "ask"`, and set an approver as [Example 16](/sdk/examples/your-own-rules) does. The email in run 1 now goes to the approver.
+- **Name a host.** Make `acmeOrigin` return `"acme-docs"` for Acme hosts. In run 4, the Acme pages are withheld too, because that name holds no host.
+
+## Use it in your app
+
+- Give each MCP server or outside system its own origin, such as `mcp:crm`, so rules and the dashboard can tell them apart.
+- Use `from` rules to say where a value must come from, and `neverSeen` to say it must come from somewhere trusted.
+- Trust an origin only when you control what it returns. An override is listed in the dashboard's Settings, so a change of trust leaves a trace.
+- Use `originOf` to group your own sites under one origin, and `allowDomains` when a tool must never read anything else.
+
+## Source
+
+- [`sandbox/18-origins-and-trust.ts`](https://github.com/oynozan/quard/blob/main/sandbox/18-origins-and-trust.ts): the example
+- [`packages/sdk/guards/source/source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/source.ts): how a source guard names an origin, and `allowDomains`
+- [`packages/sdk/guards/action/action.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.ts): `from` and `neverSeen`
+- [`packages/shared/labels/mapping.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/mapping.ts): the default trust and sensitivity of each kind, and overrides
+- [`packages/sdk/core/config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/config.ts): how `origins` adds up across `configure()` calls
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): labels each tool result

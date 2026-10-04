@@ -56,12 +56,8 @@ function storedValues(values: TracedValue[]): StoredVerdict["values"] {
     }));
 }
 
-// The verdict for one damaging tool call. Undefined when the run has no such tool call.
-export function findVerdict(run: StoredRun, damageStepId: string): StoredVerdict | undefined {
-    const damage = run.steps.find((step) => step.stepId === damageStepId && step.kind === "tool_call");
-    if (damage === undefined) {
-        return undefined;
-    }
+// The verdict for one damaging tool call of the run
+export function verdictOf(run: StoredRun, damage: StoredStep): StoredVerdict {
     const turning = turningPoint(run.steps, damage);
     const values = traceValues(keysOf(damage), run.labels, turning);
     const read = run.labels.filter((label) => label.agent === turning.agent).filter(readBy(turning));
@@ -78,4 +74,10 @@ export function findVerdict(run: StoredRun, damageStepId: string): StoredVerdict
         values: storedValues(values),
         versions: versionsOf(run.steps, [entry.agent, turning.agent, damage.agent], turning),
     };
+}
+
+// The verdict by damage step id, undefined when the run has no such tool call
+export function findVerdict(run: StoredRun, damageStepId: string): StoredVerdict | undefined {
+    const damage = run.steps.find((step) => step.stepId === damageStepId && step.kind === "tool_call");
+    return damage === undefined ? undefined : verdictOf(run, damage);
 }

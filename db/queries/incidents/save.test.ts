@@ -4,7 +4,7 @@ import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
 import { claimIncidentJob } from "./jobs.ts";
 import { getIncident } from "./list.ts";
-import { failFind, saveReplay, saveReview, saveVerdict } from "./save.ts";
+import { failFind, saveReplay, saveVerdict } from "./save.ts";
 
 let test: TestDb;
 
@@ -19,7 +19,7 @@ afterAll(async () => {
 async function job(id: string) {
     return test.db
         .selectFrom("incidents")
-        .select(["leased_until as leasedUntil", "attempts", "damage_step_id as damageStepId"])
+        .select(["leased_until as leasedUntil", "attempts", "errors", "damage_step_id as damageStepId"])
         .where("id", "=", id)
         .executeTakeFirstOrThrow();
 }
@@ -33,7 +33,7 @@ async function claimed(found = false): Promise<{ projectId: string; id: string }
     }
     await test.db
         .updateTable("incidents")
-        .set({ leased_until: new Date(Date.now() + 60_000), attempts: 3 })
+        .set({ leased_until: new Date(Date.now() + 60_000), attempts: 3, errors: 2 })
         .where("id", "=", id)
         .execute();
     return { projectId, id };
@@ -58,8 +58,8 @@ describe("saveVerdict", () => {
             entryTrust: "untrusted",
             turningAgent: "planner",
         });
-        expect(await job(id)).toEqual({ leasedUntil: null, attempts: 0, damageStepId: found.damage.stepId });
-        expect(await claimIncidentJob(test.db, 1000)).toMatchObject({ id, job: "review" });
+        expect(await job(id)).toEqual({ leasedUntil: null, attempts: 0, errors: 0, damageStepId: found.damage.stepId });
+        expect(await claimIncidentJob(test.db, 1000)).toBeUndefined();
     });
 });
 
@@ -74,42 +74,7 @@ describe("failFind", () => {
             findError: "The blocked call's events never arrived",
             verdict: null,
         });
-        expect(await job(id)).toMatchObject({ leasedUntil: null });
-    });
-});
-
-describe("saveReview", () => {
-    it("stores the note and adds its cost", async () => {
-        const { projectId, id } = await claimed(true);
-        const note = { model: "gpt-6.1-sol", costUsd: 0.02, writtenAt: "2026-10-04T10:00:00.000Z", paragraphs: ["A"] };
-
-        await saveReview(test.db, projectId, id, note, 0.02);
-        await saveReview(test.db, projectId, id, note, 0.03);
-
-        expect(await getIncident(test.db, projectId, id)).toMatchObject({
-            reviewState: "done",
-            reviewer: note,
-            spentUsd: 0.05,
-        });
-        expect(await job(id)).toMatchObject({ leasedUntil: null, attempts: 0 });
-    });
-
-    it("marks an error as failed and a missing key as skipped", async () => {
-        const failed = await claimed(true);
-        await saveReview(test.db, failed.projectId, failed.id, { error: "OpenAI returned 500" }, 0.01);
-        expect(await getIncident(test.db, failed.projectId, failed.id)).toMatchObject({
-            reviewState: "failed",
-            reviewer: { error: "OpenAI returned 500" },
-            spentUsd: 0.01,
-        });
-
-        const skipped = await claimed(true);
-        await saveReview(test.db, skipped.projectId, skipped.id, null, 0);
-        expect(await getIncident(test.db, skipped.projectId, skipped.id)).toMatchObject({
-            reviewState: "skipped",
-            reviewer: null,
-            spentUsd: 0,
-        });
+        expect(await job(id)).toMatchObject({ leasedUntil: null, attempts: 0, errors: 0 });
     });
 });
 
@@ -128,14 +93,14 @@ describe("saveReplay", () => {
         expect(await getIncident(test.db, projectId, id)).toMatchObject({ replayState: "running", spentUsd: 0.45 });
         const running = await job(id);
         expect(running.leasedUntil?.getTime()).toBeGreaterThan(Date.now() + 5 * 60_000);
-        expect(running.attempts).toBe(3);
+        expect(running).toMatchObject({ attempts: 3, errors: 2 });
 
         await saveReplay(test.db, projectId, id, replay({ rounds: [round], outcome: "confirmed" }), 0.45, "done", 1);
         expect(await getIncident(test.db, projectId, id)).toMatchObject({
             replayState: "done",
             replay: { rounds: [round], outcome: "confirmed" },
         });
-        expect(await job(id)).toMatchObject({ leasedUntil: null, attempts: 0 });
+        expect(await job(id)).toMatchObject({ leasedUntil: null, attempts: 0, errors: 0 });
     });
 
     it("stores a failed replay with its error", async () => {

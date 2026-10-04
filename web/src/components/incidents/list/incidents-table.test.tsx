@@ -101,6 +101,17 @@ describe("IncidentsTable", () => {
         expect(screen.getByRole("option", { name: "Bad input (1)" })).toBeTruthy();
     });
 
+    it("outlines an incident nobody has opened yet, even after its replay started", () => {
+        const fresh = { ...INCIDENTS[0], id: "inc_120", title: "Fresh breach", seen: false };
+        const opened = { ...INCIDENTS[2], replay: "not started" as const };
+        show("all", [fresh, INCIDENTS[0], INCIDENTS[1], opened]);
+        const row = (name: string) => screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+        expect(row("Fresh breach").className).toContain("outline-danger");
+        expect(row("Payment to an IBAN copied from a supplier page").className).not.toContain("outline-danger");
+        // Opening the page clears the outline before any replay
+        expect(row("Customer list sent to an unlisted domain").className).not.toContain("outline-danger");
+    });
+
     it("names the agent once when one agent did both", () => {
         show();
         const row = screen.getByRole("link", { name: "Customer list sent to an unlisted domain" }).closest("tr");
@@ -153,6 +164,36 @@ describe("IncidentsTable", () => {
         show();
         await pick("Replay status", "Confirmed");
         expect(titles()).toEqual(["Spending cap dropped in a handoff"]);
+        expect(shownCount()).toBe("1 of 3");
+    });
+
+    it("says queued for a replay no worker has claimed yet, and filters by it", async () => {
+        const queued = { ...INCIDENTS[1], replay: "queued" as const };
+        show("all", [INCIDENTS[0], queued, INCIDENTS[2]]);
+        const row = screen.getByRole("link", { name: queued.title }).closest("tr") as HTMLElement;
+        const cell = within(row).getAllByRole("cell")[5];
+        expect(cell.textContent).toBe("Queued");
+        expect(cell.querySelector(".border-line-strong")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("combobox", { name: "Replay status" }));
+        await act(async () => {});
+        expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+            "Any replay",
+            "Not started",
+            "Queued",
+            "Replaying",
+            "Confirmed",
+            "Not confirmed",
+            "Could not reproduce",
+            "Cap reached",
+            "Limited",
+            "Failed",
+        ]);
+        fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+        await act(async () => {});
+
+        await pick("Replay status", "Queued");
+        expect(titles()).toEqual([queued.title]);
         expect(shownCount()).toBe("1 of 3");
     });
 

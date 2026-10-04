@@ -1,0 +1,320 @@
+# Agents, messages and memory
+
+This page is the code behind agents that work together: helper agents in one process, messages between processes, shared memory, and the OpenAI Agents SDK integration. [Multi-agent](/concepts/multi-agent), [Shared memory](/concepts/shared-memory) and [OpenAI Agents SDK](/integrations/openai-agents) explain what each one does for you. The API itself is in [Messages between agents](/sdk/reference/messages), [Shared memory](/sdk/reference/memory) and [OpenAI Agents SDK](/sdk/reference/openai-agents).
+
+All of it builds on one idea: labels leave a run only as a [label record](/sdk/internals/labels#label-records), and come back only when a record of the same content vouches for them.
+
+## Agents in one process
+
+`quard.agent()` in [`context/scope.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/scope.ts) runs a helper inside the current run:
+
+```ts
+// A child agent in the parent's run, started from the parent's last step
+export function childScope(parent: Scope, agent: string, tools?: string[]): Scope {
+    return {
+        run: parent.run,
+        agent,
+        parentStepId: parent.lastStepId,
+        tools: narrowTools(parent.tools, tools),
+        lastStepId: undefined,
+        depth: parent.depth + 1,
+    };
+}
+```
+
+- The child shares the run, so it shares the content index. A value the parent read keeps its label in the child's calls.
+- `narrowTools()` keeps only the tools both lists name. A child can never use a tool its parent can't.
+- `depth` grows by one per level. The depth limit reads it. See [Delegation limits](/sdk/internals/pipeline#delegation-limits).
+- `quard.agent()` throws outside `quard.run()`.
+
+## The carrier
+
+Three items travel with a message between processes. `Carrier` lives in [`context/carrier.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/carrier.ts):
+
+```ts
+// The three items that travel with a message between agents
+export type Carrier = {
+    runId: string;
+    parentStepId?: string;
+    labelRef: string;
+};
+```
+
+`readCarrier()` reads a carrier from an object or a baggage header string. It returns `undefined` unless `runId` is a 32-hex run id and `labelRef` is a string. A `parentStepId`, when there is one, must be a 16-hex step id.
+
+`toBaggage()` and `readBaggage()` in [`context/baggage.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/baggage.ts) turn the carrier into W3C baggage members and back:
+
+- The members are `quard-run`, `quard-parent` and `quard-labels`, with percent-encoded values. A missing `parentStepId` adds no member.
+- `readBaggage()` skips every other member, and drops properties after `;`. The first copy of a member wins, and a value that isn't percent-encoded right is skipped.
+
+## Sending: quard.inject()
+
+```ts
+// quard.inject(): stores the message's labels, then returns what travels with it
+export async function inject(options: InjectOptions): Promise<Carrier> {
+    const scope = currentScope();
+    if (scope === undefined) {
+        throw new Error("quard.inject() must be called inside quard.run()");
+    }
+    const { run, agent } = scope;
+    const text = textOf(options.content);
+    const labelRef = randomBytes(8).toString("hex");
+    const stepId = scope.lastStepId;
+    const stored = saveRecord(
+        {
+            ref: labelRef,
+            runId: run.runId,
+            stepId,
+            sender: agent,
+            depth: scope.depth,
+            print: printOf(options.content),
+            label: vouchedLabel(run.index),
+            values: valuesOf(text, run.index),
+            tools: scope.tools === undefined ? undefined : [...scope.tools].sort(),
+        },
+        run,
+    );
+    // The run now spans processes, so its counters move to control
+    startSharing(run);
+    // ...
+}
+```
+
+1. **The record.** `saveRecord()` keeps the record in this process, with the raw values, and remembers the run. The label is the run's context label from `vouchedLabel()`. `valuesOf()` gives each traced value in the content the label it had where it first appeared as itself. The parent step is the sender's latest step, such as the guarded delegate call that runs `quard.inject()`.
+2. **Shared counters.** `startSharing()` moves the run's steps, cost and per-run counters to control. See [Runs that span processes](/sdk/internals/transport#runs-that-span-processes).
+3. **Storing it.** With uploads on, or with a control link, receivers elsewhere may look the record up. So `storeLabels()` sends it to webhook and waits until it is stored. When it isn't, or uploads are off, a `label_record_not_stored` warning is recorded, and a receiver in another process will read the message as untrusted. With neither uploads nor a link, the record stays in this process and nothing is sent.
+4. **The carrier.** The run id, the step id when there is one, and the label reference.
+
+`messageRecordOf()` in [`labels/message-record.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/message-record.ts) cuts the stored record to webhook's limits: 200 characters per name, 200 origins, 20 flags, 500 values, and a depth of at most 1,000. Tools with names that are too long are dropped, which only narrows what the receiver may use. Values go out as keyed hashes only.
+
+## Receiving: quard.resume()
+
+```ts
+export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOptions = {}): Promise<Awaited<T>> {
+    const checked = readCarrier(carrier);
+    if (checked === undefined) {
+        // Messages received here have nothing to vouch for them
+        return await runScope({ agent: options.agent, tools: options.tools }, fn);
+    }
+    const found = await findRecord(checked.labelRef);
+    const known = found?.record.runId === checked.runId ? found.record : undefined;
+    const kept = keptRun(checked.runId);
+    const run = kept ?? newRun(checked.runId);
+    if (kept === undefined) {
+        startSharing(run);
+    }
+    // ...
+}
+```
+
+- **No carrier.** A carrier `readCarrier()` can't read starts a new run, as `quard.run()` would. Messages read there have no record to vouch for them.
+- **The record.** `findRecord()` looks in this process first. Else, when the label reference is 16 hex characters, it asks control with a `lookup` message. A record only counts when it belongs to the carrier's run.
+- **The run.** When this process sent the message, `keptRun()` gives back the same `RunState`, content index and all. Otherwise the run gets a new `RunState` with the carrier's run id and an empty index, and its counters are shared through control.
+- **The scope.** The agent is `options.agent`, else `default`. The parent step comes from the carrier. The tools are the record's tools, narrowed by `options.tools`. The depth is the sender's depth plus one.
+- **No record.** A `label_record_not_found` warning is recorded. Only `options.tools` caps the agent's tools, and its depth is set past any depth limit, so it can't delegate further once depth limits are on.
+- **No run edges.** The run started elsewhere, so `quard.resume()` records no `run_started` or `run_finished`.
+
+The scope remembers what it came in with in a `WeakMap`, for the receive guard.
+
+## The receive guard
+
+A source guard with `origin: "agent"` reads messages from other agents. `finishOutput()` in [`pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts) asks `received()` who sent the message:
+
+1. **The carrier.** `incomingMessage()` takes the carrier from the guard's `carrierOf(input)`, when it is set and returns something. A value that isn't a readable carrier leaves the message unverified. When `carrierOf` is not set or returns nothing, it takes the carrier `quard.resume()` came in with. A carrier with the same label reference as the resumed one reuses its record, with no second lookup.
+2. **The record.** `findRecord()` finds it, here or through control.
+3. **The label.** `receiveMessage()` in [`guards/source/source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/source.ts) decides it:
+
+```ts
+// A message is vouched for only by a record of the same run and the
+// same content. Anything else gets the agent default: untrusted.
+export function receiveMessage(incoming: Incoming | undefined, output: unknown, overrides: OriginOverrides): Received {
+    const carrier = incoming?.carrier;
+    const found = incoming?.found;
+    const origin = `agent:${found?.record.sender ?? "unknown"}`;
+    const text = textOf(output);
+    if (found === undefined || found.record.runId !== carrier?.runId || found.record.print !== printOf(output)) {
+        const { trust, sensitivity } = labelFor(origin);
+        const untrusted = { ...overrides, [origin]: { trust, sensitivity } };
+        return { origin, from: "unknown", verified: false, carrier, overrides: untrusted, values: [] };
+    }
+    // A team's override for this exact origin still wins
+    const own = Object.hasOwn(overrides, origin) ? overrides[origin] : undefined;
+    const { trust, sensitivity } = found.record.label;
+    const vouched = { ...overrides, [origin]: { trust, sensitivity, ...own } };
+    const from = found.record.sender;
+    return { origin, from, verified: true, carrier, overrides: vouched, values: recordValues(found, text) };
+}
+```
+
+- **Verified.** The record is of the carrier's run, and its print matches `printOf()` of what the receive function returned. The message gets the record's trust and sensitivity. A team's override for that exact origin wins over them.
+- **Not verified.** The message gets the `agent` default, untrusted and internal. A team's override can't raise it, because the default replaces the override for that origin.
+- **The values.** `recordValues()` gives the traced values with the labels they had in the sender's run. In the sender's process they are the raw values it kept. Elsewhere `matchValues()` hashes each value in the text and keeps the ones the record lists.
+
+Then the output goes on like any source output: `checkSource()` checks the domain and scans the text with these overrides, and the signature feed and the detector run. `recordMessage()` records a `message` event: the sender (`from`), the parent step, the label reference, `verified`, and the trust and sensitivity the message got. It is the edge from the sender to this agent in the run graph.
+
+Last, `indexOutput()` adds the record's values to the index first, each under its own origin, then the message under its label. A trusted, verified message marks its values that the record didn't vouch for as made up. See [How tool output is labeled](/sdk/internals/labels#how-tool-output-is-labeled) and [Made-up values](/sdk/internals/labels#made-up-values).
+
+## Shared memory
+
+`quard.memory(store, { name })` in [`memory/wrap.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/wrap.ts) returns a `Proxy` of your store:
+
+```ts
+function wrapMethod(target: object, method: Method, fn: Fn, name: string): Fn {
+    return async (...args: unknown[]) => {
+        // Like guard(): the current run, or else a new one
+        const scope = currentScope() ?? newScope();
+        const call = async () => withScope(scope, () => fn.apply(target, args));
+        if (method === "put") {
+            return writeThrough(scope, name, args[1], call);
+        }
+        if (method === "write") {
+            return writeThrough(scope, name, args[0], call);
+        }
+        return readThrough(scope, name, method !== "get", call);
+    };
+}
+```
+
+- Writes are `put(key, value)` and `write(value)`. Reads are `get`, which returns one item, and `search` and `read`, whose array result holds one item per element. Any of them may be missing.
+- Other methods pass through, bound to the store, so private fields and built-ins such as `Map` still work.
+- `name` must be 1 to 200 characters, or `quard.memory()` throws. Items read back get the origin `memory:<name>`.
+
+### Writes
+
+`writeThrough()` in [`memory/write.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/write.ts) stores the labels before the item is written:
+
+1. The label is the run's context label, from `vouchedLabel()`. Value records give each traced value its first label.
+2. `keepLabels()` in `memory/kept.ts` keeps the labels in this process by the item's print, so this process reads its own labels back with no backend. Writing the same content again keeps the least trusted labels.
+3. A `memory` record goes to webhook through `storeLabels()`: the store, the print, the run, the agent, the label and the values by hash.
+4. Then the store's own method runs. A write whose labels weren't stored still goes ahead. Other processes then read the item back as unlabeled, so untrusted.
+5. A `memory` event records the write, with `verified` set to 1 when webhook stored the record.
+
+### Reads
+
+`readThrough()` in [`memory/read.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/read.ts) runs the read first, then labels each item that isn't `null` or `undefined`:
+
+1. **Find the labels.** `findLabels()` takes the print of the item and merges the labels this process kept with the records control finds by that print. A lookup that fails counts as no record.
+2. **Label the item.** With labels, the item gets the merged trust and sensitivity, and a team's override for the store's origin wins over them. A flagged label adds the flag `flagged`. Without labels, the item gets the default for its origin: `memory:` is not a known kind, so that is the `unknown` default, untrusted and internal. A team's override applies only to labeled items.
+3. **Index it.** The values the labels vouch for go into the content index first, each with its stored label, so an IBAN from the web stays `web:…`. Then the item goes in with its own label. In a trusted item, values no record vouched for are marked made up.
+4. **Record it.** A `memory` event gives the number of items, how many had labels (`verified`), and the least trusted and most sensitive label among them.
+
+The print covers the whole item. An item changed outside the wrapper, even by a hidden character, has a new print, so it reads back unlabeled.
+
+`mergeLabels()` in [`memory/merge.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/merge.ts) decides when one item has several records, such as two writers with different labels:
+
+- The context label is untrusted if either is, internal if either is, and flagged if either is. The origins are joined, up to 200.
+- Per value, the less trusted record keeps its origin, the sensitivity takes the higher one, and the flags are joined.
+
+## The OpenAI Agents SDK integration
+
+The integration is the second entry point, [`integrations/openai-agents`](https://github.com/oynozan/quard/tree/main/packages/sdk/integrations/openai-agents), built as `quard/openai-agents`. It needs `@openai/agents` 0.18. It maps the framework's agents onto Quard scopes, so every model call and guarded tool carries the agent the framework runs.
+
+### quardRunner()
+
+```ts
+export function quardRunner(options: QuardRunnerOptions): Runner {
+    const { client, ...config } = options;
+    followRuns();
+    followHandoffs();
+    // The Responses API over HTTP, which the monitor sees
+    const modelProvider = new OpenAIProvider({
+        openAIClient: wrap(client),
+        useResponses: true,
+        useResponsesWebSocket: false,
+    });
+    followProvider(modelProvider);
+    return new Runner({ ...config, modelProvider });
+}
+```
+
+- `wrap()` returns a client that is already wrapped as it is, so no model call is recorded twice.
+- `followRuns()` in `runs.ts` patches `Runner.prototype.run` once per process. Only a runner whose model provider `quardRunner()` made is followed. Other runners run as they are. An agent run as a tool runs on a runner that inherits its parent's provider, so it is followed too.
+- `followHandoffs()` in `handoffs.ts` patches `Agent.prototype.getEnabledHandoffs` once per process. It marks each handoff the agent is offered, so the monitor labels the handoff's result as `system`.
+- Each followed runner listens to `agent_handoff` and `agent_tool_start`.
+
+### Frames
+
+A frame is the scope of one `run()` call. [`frames.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/frames.ts) makes and changes them:
+
+| When                                    | Code                       | What happens                                                                                                                                      |
+| --------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run()` outside any Quard scope         | `startRun()`, `topFrame()` | A new run under the first agent's name. The run ends with the result, or for a stream when the stream ends.                                       |
+| `run()` inside `quard.run()`            | `topFrame()`               | A copy of the current scope with the framework's agent, so a handoff leaves your scope alone. Your scope ends the run.                            |
+| A handoff                               | `handOff()`                | The frame's agent changes in place. The step that handed over becomes the new agent's parent step. Depth stays the same, since control passes on. |
+| An agent run as a tool, with `asTool()` | `toolFrame()`              | A child frame one level deeper, below the model step that asked for the tool call. Its user input is labeled as the caller's brief.               |
+
+Each switch records a `handoff` event: from, `to`, `via` (`"handoff"` or `"tool"`) and the run's context label at that moment.
+
+`startToolCall()` runs in the SDK's tool start hook. That hook fires in the tool call's own async chain, so sibling calls that run at once each keep the step that asked for them. `toolFrame()` reads it from there.
+
+```ts
+export function toolFrame(parent: Scope, agent: string): Scope {
+    const call = inCall.getStore();
+    const stepId = call?.stepId ?? (parent.lastStepId ??= newStepId());
+    recordHandoff(parent, agent, "tool", stepId);
+    const child = frame({ ...childScope(parent, agent), parentStepId: stepId });
+    if (call?.agentTool === true) {
+        markBrief(child, parent.agent);
+    }
+    return child;
+}
+```
+
+`markBrief()` in [`monitor/agent-brief.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/agent-brief.ts) gives the brief the label `agent:<caller>`, with the run's context label at the call. See [Labeling what the model reads](/sdk/internals/monitor#labeling-what-the-model-reads).
+
+`noteSdkTools()` in `sdk-tools.ts` notes each agent's handoff tools and agent tools for the run. They are the SDK's own, so the monitor doesn't warn that they are unwrapped.
+
+### guardedTool()
+
+[`tool.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/tool.ts) builds the SDK's own `tool()` with an `execute` that runs the guard pipeline:
+
+- Each guard takes the name the SDK gave the tool.
+- The pipeline runs through `guardWithSignal()` with the SDK's abort signal for the call. See [Aborted calls](/sdk/internals/pipeline#aborted-calls).
+- The guard checks the input only. The run context and the call details reach your `execute` through an `AsyncLocalStorage`.
+- `quardGuardrail` in `guardrail.ts` goes first in the tool's output guardrails:
+
+```ts
+export const quardGuardrail = defineToolOutputGuardrail({
+    name: "quard",
+    run: async ({ output }) => {
+        if (output instanceof GuardBlockedError) {
+            throw output;
+        }
+        if (isGuardRefusal(output)) {
+            return ToolGuardrailFunctionOutputFactory.rejectContent(output.text, output.toJSON());
+        }
+        return ToolGuardrailFunctionOutputFactory.allow();
+    },
+});
+```
+
+- A refusal becomes a rejection that the model reads, with Quard's own text.
+- A guard set to `onBlock: "throw"` stops the run. The SDK wraps errors thrown in tools in its `ToolCallError`, so `unwrapBlocked()` in `blocked.ts` gives your app the `GuardBlockedError` itself, from `run()` and from a stream.
+- The SDK checks a Zod output schema before any guardrail, so a refusal would fail it. `outputCheck()` in `output-schema.ts` gives the SDK only the JSON schema and checks real results itself.
+
+### Paused runs
+
+A run that stops for the SDK's own `needsApproval` returns interruptions and a state. [`paused.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/paused.ts) keeps such runs open:
+
+- `notePause()` keeps the paused run by its state object, and by its Quard run, so a state rebuilt from a string in the same process still finds it through its interrupted calls.
+- A run started outside any Quard scope stays open while it is paused. The first `run()` outside a scope that resumes the state goes back into the same Quard run and frame, with the agent it stopped at. That run then ends as usual.
+- A run that stopped inside `quard.run()` ends with that scope.
+- Any other run that resumes the state, or a second resume, runs in its own Quard run, or in the current scope's, and takes in the paused run's labels with `absorb()`.
+- A stream's state is noted as soon as the stream exists, so a resume before the stream ends still goes back into the run.
+
+## Source
+
+- [`packages/sdk/context/carrier.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/carrier.ts): `quard.inject()`, `quard.resume()`, `readCarrier()`, `incomingMessage()`
+- [`packages/sdk/context/baggage.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/baggage.ts): `toBaggage()` and `readBaggage()`
+- [`packages/sdk/context/scope.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/scope.ts): scopes, `childScope()`, `narrowTools()`
+- [`packages/sdk/context/shared-run.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/shared-run.ts): runs that span processes
+- [`packages/sdk/labels/records.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/records.ts): `saveRecord()`, `findRecord()`
+- [`packages/sdk/guards/source/source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/source.ts): `receiveMessage()`
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): `received()`, `recordMessage()`, `indexOutput()`
+- [`packages/sdk/memory`](https://github.com/oynozan/quard/tree/main/packages/sdk/memory): `quard.memory()`, reads, writes and merged labels
+- [`packages/sdk/integrations/openai-agents`](https://github.com/oynozan/quard/tree/main/packages/sdk/integrations/openai-agents): `quardRunner()`, `guardedTool()`, frames and paused runs
+- [`packages/sdk/monitor/agent-brief.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/agent-brief.ts): the label of a brief
+- [`packages/sdk/monitor/framework-tools.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/framework-tools.ts): handoffs and agent tools
+- [`packages/shared/labels/records.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/records.ts): the label record formats
+- [`packages/shared/control/labels.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/control/labels.ts): lookups and run counts
+- [`packages/sdk/e2e`](https://github.com/oynozan/quard/tree/main/packages/sdk/e2e): `multi-agent.test.ts`, `two-processes.test.ts`, `memory.test.ts` and `openai-agents.test.ts` show each part end to end

@@ -2,7 +2,7 @@ import type { ModelCallRecord } from "@quard/db";
 import { ibanFrom } from "@quard/shared";
 import { describe, expect, it } from "vitest";
 import { bodies, MODEL, PAGE } from "../test/attack.ts";
-import { attackRun, changeStep, IBAN_KEY, STEP } from "../test/runs.ts";
+import { attackRun, changeStep, IBAN_KEY, MESSAGE, passedOnRun, STEP } from "../test/runs.ts";
 import { findVerdict } from "../rootcause/verdict.ts";
 import { planReplay } from "./plan.ts";
 import { NOT_RECORDED } from "./request.ts";
@@ -15,6 +15,24 @@ function calls(): ModelCallRecord[] {
     return [
         { ...record, stepId: STEP.ask, requestBody: bodies().ask },
         { ...record, stepId: STEP.decide, requestBody: bodies().decide },
+    ];
+}
+
+// Billing's turning-point request when the IBAN came in a message
+function messageCalls(): ModelCallRecord[] {
+    const { ask, decide } = bodies();
+    const read = { type: "function_call", call_id: MESSAGE.callId, name: "readMessage", arguments: "{}" };
+    const message = { type: "function_call_output", call_id: MESSAGE.callId, output: PAGE };
+    const input = [...ask.input, read, message];
+    return [
+        {
+            model: MODEL,
+            responseId: null,
+            toolCalls: [],
+            at: new Date(0),
+            stepId: STEP.decide,
+            requestBody: { ...decide, input },
+        },
     ];
 }
 
@@ -64,9 +82,34 @@ describe("planReplay", () => {
         expect(plan).toMatchObject({ base: { model: "" }, ready: NOT_RECORDED });
     });
 
+    it("resends the turning point without the message that passed the page on", () => {
+        const run = passedOnRun();
+        const plan = planReplay(verdictOf(run), run, messageCalls());
+
+        expect(plan.base.removed).toEqual({
+            contentId: "c2",
+            origin: "web:invoices.evil-pay.com",
+            callId: MESSAGE.callId,
+        });
+        const ready = typeof plan.ready === "string" ? undefined : plan.ready;
+        const inputs = [ready?.bodies.with, ready?.bodies.without].map((body) => body?.input as { output?: string }[]);
+        expect(inputs.map((input) => input.at(-1)?.output)).toEqual([PAGE.replace("DE89…3000", STAND_IN), REMOVED]);
+    });
+
+    it("falls back to the page's own tool result when the request holds no message", () => {
+        const run = passedOnRun();
+
+        const removed = { type: "function_call_output", call_id: "call_1_0", output: REMOVED };
+
+        expect(planReplay(verdictOf(run), run, calls())).toMatchObject({
+            base: { removed: { callId: "call_1_0" } },
+            ready: { bodies: { without: { input: expect.arrayContaining([removed]) } } },
+        });
+    });
+
     it("is limited when the entry is no tool result", () => {
         const verdict = verdictOf();
-        const prompt = { ...verdict, entry: { ...verdict.entry, stepId: STEP.ask, contentId: null } };
+        const prompt = { ...verdict, entry: { ...verdict.entry, stepId: STEP.ask, contentId: null, key: null } };
 
         expect(planReplay(prompt, attackRun(), calls())).toMatchObject({
             base: { removed: { callId: null } },

@@ -35,24 +35,6 @@ export function incidentPath(run: RunDetail, verdict: StoredVerdict): PathNode[]
     ];
 }
 
-// The AI reviewer's note, or why there is none
-function reviewerOf(row: IncidentRow): Pick<IncidentFindings, "reviewer" | "reviewerStatus"> {
-    const stored = row.reviewer;
-    if (stored && "paragraphs" in stored) {
-        const { model, costUsd, paragraphs } = stored;
-        return {
-            reviewer: { model, costUsd, paragraphs, writtenAt: Date.parse(stored.writtenAt) },
-            reviewerStatus: "",
-        };
-    }
-    if (stored) return { reviewer: null, reviewerStatus: `The explanation failed: ${stored.error}` };
-    const skipped = row.reviewState === "skipped";
-    return {
-        reviewer: null,
-        reviewerStatus: skipped ? "Skipped: the worker has no provider key" : "No explanation yet",
-    };
-}
-
 function findingsOf(row: IncidentRow, verdict: StoredVerdict, run: RunDetail): IncidentFindings {
     return {
         // Handoff faults need messages between agents (M4)
@@ -64,23 +46,18 @@ function findingsOf(row: IncidentRow, verdict: StoredVerdict, run: RunDetail): I
         },
         path: incidentPath(run, verdict),
         replay: replayOf(row, verdict, run),
-        ...reviewerOf(row),
     };
 }
 
 // One incident with its run. Without a verdict yet, only the incident and its run.
-export function incidentDetailOf(row: IncidentRow, run: RunDetail): IncidentDetail {
+export function incidentDetailOf(row: IncidentRow, run: RunDetail, workerRunning: boolean): IncidentDetail {
     const incident = incidentOf(row);
-    const { findState, reviewState } = row;
     return {
         incident,
         run: run.summary,
         findError: row.findError,
         findings: row.verdict ? findingsOf(row, row.verdict, run) : null,
-        // The note is written only after a verdict
-        working:
-            findState === "pending" ||
-            (findState === "done" && reviewState === "pending") ||
-            incident.replay === "running",
+        working: row.findState === "pending" || incident.replay === "queued" || incident.replay === "running",
+        workerRunning,
     };
 }

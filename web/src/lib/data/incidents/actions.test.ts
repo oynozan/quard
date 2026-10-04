@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { createProject, ingestBatch, listIncidents, saveReplay, saveVerdict } from "@quard/db";
+import { createProject, getIncident, ingestBatch, listIncidents, saveReplay, saveVerdict } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { redirect } from "next/navigation";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -15,11 +15,12 @@ vi.mock("@/lib/auth/session", () => ({
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
 vi.mock("next/cache", () => cache);
 
-const { replayIncident } = await import("./actions");
+const { markIncidentSeen, replayIncident } = await import("./actions");
 const { database } = await import("../runs/live/client");
 
 const RUN = "b".repeat(32);
 const MISSING = "inc_0123456789abcdef";
+const NO_PROJECT = "00000000-0000-0000-0000-000000000000";
 let test: TestDb;
 let projectId = "";
 
@@ -90,5 +91,53 @@ describe("replayIncident", () => {
         expect(await replayIncident(id)).toBe("decided");
         expect(await replayIncident(id, { raiseCap: true })).toBe("started");
         expect(await stored(id)).toMatchObject({ replay_state: "requested", cap_usd: 10 });
+    });
+});
+
+describe("markIncidentSeen", () => {
+    const seenAt = async (id: string) => (await getIncident(test.db, projectId, id))?.seenAt;
+
+    // A new incident nobody has opened or replayed
+    async function freshIncident(runId: string): Promise<string> {
+        await ingestBatch(test.db, projectId, attack(runId, "billing"));
+        const rows = await listIncidents(test.db, projectId, { limit: 10 });
+        return rows.find((row) => row.runId === runId)!.id;
+    }
+
+    it("sends a visitor without a session to sign in before reading anything", async () => {
+        signedIn.session = null;
+        await expect(markIncidentSeen("not an id")).rejects.toThrow("NEXT_REDIRECT");
+        expect(cache.revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("turns away anything that is not an incident id", async () => {
+        await expect(markIncidentSeen("inc_123")).rejects.toThrow("Not an incident id");
+        await expect(markIncidentSeen(42 as never)).rejects.toThrow("Not an incident id");
+        expect(cache.revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("leaves incidents alone while the dashboard's project is missing", async () => {
+        const id = await freshIncident("c".repeat(32));
+        vi.stubEnv("QUARD_PROJECT_ID", NO_PROJECT);
+        try {
+            await markIncidentSeen(id);
+        } finally {
+            vi.stubEnv("QUARD_PROJECT_ID", "");
+        }
+        expect(await seenAt(id)).toBeNull();
+        expect(cache.revalidatePath).toHaveBeenCalledWith("/incidents");
+    });
+
+    it("keeps the first time someone opened the incident, and reloads the list", async () => {
+        const id = await freshIncident("d".repeat(32));
+        expect(await seenAt(id)).toBeNull();
+        await markIncidentSeen(id);
+        const first = await seenAt(id);
+        expect(first).toBeInstanceOf(Date);
+        expect(cache.revalidatePath).toHaveBeenCalledWith("/incidents");
+
+        await markIncidentSeen(id);
+        expect(await seenAt(id)).toEqual(first);
+        await expect(markIncidentSeen(MISSING)).resolves.toBeUndefined();
     });
 });

@@ -8,7 +8,7 @@ import { showToast } from "@/components/ui/toast";
 import { replayIncident } from "@/lib/data/incidents/actions";
 import type { ReplayStatus } from "@/lib/data/types";
 
-type Props = { id: string; status: ReplayStatus; found: boolean; findFailed?: boolean };
+type Props = { id: string; status: ReplayStatus; found: boolean; findFailed?: boolean; workerRunning?: boolean };
 
 // Why a replay can't start from here
 const LOCKED: Partial<Record<ReplayStatus, string>> = {
@@ -27,12 +27,21 @@ const ANSWER: Record<ReplayRequest, string> = {
 };
 
 // The page's main action. The liquid-metal button is used once, here.
-export function ReplayButton({ id, status, found, findFailed = false }: Props) {
+export function ReplayButton({ id, status, found, findFailed = false, workerRunning = true }: Props) {
     const [pending, startTransition] = useTransition();
-    if (status === "running" || pending) {
+    // A replay no worker is on waits in line, even one a stopped worker began
+    const queued = status === "queued" || (status === "running" && !workerRunning);
+    if (pending || (status === "running" && !queued)) {
         return (
             <Button busy className="h-[46px] min-w-[142px]">
                 Replaying…
+            </Button>
+        );
+    }
+    if (queued) {
+        return (
+            <Button disabled className="h-[46px] min-w-[142px]">
+                Queued
             </Button>
         );
     }

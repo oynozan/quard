@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { CATEGORIES, formatCost, formatP, REPLAY_TONE, REPLAY_WORD, ROLE_WORD, sentenceCase } from "./labels";
+import {
+    CATEGORIES,
+    formatCost,
+    formatP,
+    REPLAY_TONE,
+    REPLAY_WORD,
+    ROLE_WORD,
+    sentenceCase,
+    WORKER_DOWN,
+} from "./labels";
 
 describe("sentenceCase", () => {
     it("capitalizes only the first letter", () => {
@@ -39,6 +48,7 @@ describe("word maps", () => {
     it("names every replay status and gives each a tone", () => {
         expect(REPLAY_WORD).toEqual({
             "not started": "Not started",
+            queued: "Queued",
             running: "Replaying",
             confirmed: "Confirmed",
             "not confirmed": "Not confirmed",
@@ -49,6 +59,7 @@ describe("word maps", () => {
         });
         expect(REPLAY_TONE).toEqual({
             "not started": "off",
+            queued: "off",
             running: "on",
             confirmed: "danger",
             "not confirmed": "context",
@@ -57,6 +68,10 @@ describe("word maps", () => {
             limited: "context",
             failed: "warning",
         });
+    });
+
+    it("says the work waits for a worker that isn't running", () => {
+        expect(WORKER_DOWN).toBe("Waiting for the worker. It isn't running.");
     });
 
     it("lists the five categories in menu order and names the path roles", () => {

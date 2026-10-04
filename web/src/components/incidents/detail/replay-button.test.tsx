@@ -83,6 +83,20 @@ describe("ReplayButton", () => {
         expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
     });
 
+    it("says queued, without a spinner, until a worker claims the replay", () => {
+        show("queued");
+        expect(button("Queued").disabled).toBe(true);
+        expect(button("Queued").getAttribute("aria-busy")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
+    });
+
+    it("stops spinning when the worker running the replay is gone", () => {
+        render(<ReplayButton id={ID} status="running" found workerRunning={false} />);
+        expect(button("Queued").disabled).toBe(true);
+        expect(button("Queued").getAttribute("aria-busy")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Replaying…" })).toBeNull();
+    });
+
     it.each([
         ["confirmed", true, "The replay already has an answer"],
         ["not confirmed", true, "The replay already has an answer"],

@@ -1,9 +1,11 @@
 import type { ColumnType, Generated } from "kysely";
 import type { AgentMessagesTable, MemoryLabelsTable, MessageRecordsTable, RunCountersTable } from "./multi-agent.ts";
 import type { PaymentsTable } from "./payments.ts";
+import type { WorkersTable } from "./workers.ts";
 
 export type { AgentMessagesTable, MemoryLabelsTable, MessageRecordsTable, RunCountersTable } from "./multi-agent.ts";
 export type { PaymentsTable } from "./payments.ts";
+export type { WorkersTable } from "./workers.ts";
 
 // Postgres returns Date; we insert ISO strings or Dates
 type Timestamp = ColumnType<Date, Date | string, Date | string>;
@@ -240,6 +242,7 @@ export type IncidentsTable = {
     id: string;
     run_id: string;
     opened_at: Timestamp;
+    seen_at: Timestamp | null;
     // Copied from the verdict, null until it is found
     category: string | null;
     damage_step_id: string | null;
@@ -250,13 +253,12 @@ export type IncidentsTable = {
     entry_trust: "trusted" | "untrusted" | null;
     turning_agent: string | null;
     verdict: NullableJson;
-    reviewer: NullableJson;
     replay: NullableJson;
     find_state: Generated<"pending" | "done" | "failed">;
     find_error: string | null;
-    review_state: Generated<"pending" | "done" | "skipped" | "failed">;
     replay_state: Generated<"idle" | "requested" | "running" | "done" | "failed">;
     attempts: Generated<number>;
+    errors: Generated<number>;
     run_after: DefaultTimestamp;
     leased_until: Timestamp | null;
     spent_usd: Generated<number>;
@@ -287,4 +289,5 @@ export type Database = {
     agent_messages: AgentMessagesTable;
     incidents: IncidentsTable;
     payments: PaymentsTable;
+    workers: WorkersTable;
 };

@@ -5,7 +5,8 @@ import { DIALOG, section } from "./shared.ts";
 export const SUMMARY_JOBS: Job[] = summaryJobs();
 
 function summaryJobs(): Job[] {
-    const limits = section("Run limits");
+    const quarantine = section("Quarantine");
+    const spend = section("x402 spend");
     return [
         {
             name: "summary-incidents",
@@ -21,7 +22,7 @@ function summaryJobs(): Job[] {
             name: "summary-blocks",
             url: "/summary",
             marks: [
-                { n: 1, sel: "button", text: "All guards", closest: "div" },
+                { n: 1, sel: '[aria-label="Guard type"]' },
                 { n: 2, sel: section("Blocks per day") },
                 { n: 3, sel: section("Blocks by hour, all guards") },
             ],
@@ -43,33 +44,59 @@ function summaryJobs(): Job[] {
             name: "summary-limits",
             url: "/summary",
             marks: [
-                { n: 1, sel: `${limits} *`, text: "would stop" },
-                { n: 2, sel: `${limits} *`, text: "stopped" },
-                { n: 3, sel: `${limits} *`, text: "3 levels" },
+                { n: 1, sel: `${section("Loops limit")} h3` },
+                { n: 2, sel: `${section("Loops limit")} span.mono`, pad: 4 },
+                { n: 3, sel: `${section("Loops limit")} span[title^="Rule:"]` },
+                { n: 4, sel: `${section("Loops limit")} [role="progressbar"]` },
             ],
             full: true,
-            clip: { sel: limits, pad: 24 },
+            clip: { sel: section("Run limits"), pad: 24 },
+        },
+        {
+            name: "summary-spend",
+            url: "/summary",
+            marks: [
+                { n: 1, sel: `${spend} h2` },
+                { n: 2, sel: section("Spend per day") },
+                { n: 3, sel: section("By agent") },
+                { n: 4, sel: section("By host") },
+                { n: 5, sel: section("By payee") },
+            ],
+            full: true,
+            clip: { sel: spend, pad: 24 },
+        },
+        {
+            name: "summary-payees",
+            url: "/summary",
+            marks: [
+                { n: 1, sel: section("New payees") },
+                { n: 2, sel: section("Quarantined payees") },
+            ],
+            full: true,
+            clip: { sel: section("Payees"), pad: 24 },
         },
         {
             name: "summary-quarantine",
             url: "/summary",
             marks: [
-                { n: 1, sel: `${section("Quarantine")} tbody tr`, pad: 2 },
-                { n: 2, sel: "button", text: "Mark as known" },
-                { n: 3, sel: `${section("Quarantine")} h3`, text: "Watching", closest: "div" },
-                { n: 4, sel: "button", text: "more at 1 run" },
+                { n: 1, sel: `${quarantine} h2` },
+                { n: 2, sel: `${quarantine} p`, text: "Observe mode until" },
+                { n: 3, sel: `${quarantine} tbody tr`, pad: 2 },
+                { n: 4, sel: "button", text: "Mark as known" },
+                { n: 5, sel: `${quarantine} h3`, text: "Watching", closest: "div" },
             ],
             full: true,
-            clip: { sel: section("Quarantine"), pad: 24 },
+            clip: { sel: quarantine, pad: 24 },
         },
         {
             name: "summary-mark-known",
             url: "/summary",
             actions: [{ click: { sel: "button", text: "Mark as known" }, wait: 1200 }],
             marks: [
-                { n: 1, sel: `${DIALOG} h2`, badge: "l" },
+                { n: 1, sel: `${DIALOG} button`, text: "Copy", closest: "div", badge: "l" },
                 { n: 2, sel: `${DIALOG} section`, badge: "l" },
                 { n: 3, sel: `${DIALOG} button`, text: "Mark as known", badge: "l" },
+                { n: 4, sel: `${DIALOG} button`, text: "Cancel", badge: "l" },
             ],
         },
     ];

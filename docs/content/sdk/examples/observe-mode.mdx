@@ -1,0 +1,138 @@
+import { Steps } from "nextra/components";
+
+# 6. Observe mode
+
+You wrote two new rules for payments: the IBAN must come from your supplier records, and no payment may go over 1000 EUR. Before they stop real payments, you want to see what they would do. In observe mode, Quard checks every call and records what each rule would have done, but never stops a call. This example sends one risky payment through both rules in observe mode.
+
+## Run it
+
+```sh
+node sandbox/06-observe-mode.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows.
+
+## Step by step
+
+<Steps>
+
+### A web page with new bank details
+
+```ts
+const fetchPage = guard(
+    async (_input: { url: string }) =>
+        "Invoice 114 from Acme Ltd. Amount due: 4950 EUR. New bank details: GB33 BUKB 2020 1555 5555 55.",
+    { type: "source", origin: "web", name: "fetchPage" },
+);
+```
+
+The same invoice page as in [example 2](/sdk/examples/where-values-come-from). Its [source guard](/sdk/reference/source-guard) labels it `web:acme-billing.net`: untrusted.
+
+### Two rules in observe mode
+
+```ts
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "action",
+    name: "payInvoice",
+    mode: "observe",
+    rules: [
+        { field: "iban", from: ["tool:getSupplier"] },
+        { field: "amount", max: 1000 },
+    ],
+});
+```
+
+[`guard()`](/sdk/reference/guard) wraps the payment in an [action guard](/sdk/reference/action-guard) with two rules: the IBAN must come from `getSupplier`, and the amount may be at most 1000. `mode: "observe"` applies to every rule in the guard. Each rule still runs and records its decision, marked as not enforced, but the final decision ignores it. The default mode is `"block"`. See [Block mode and observe mode](/concepts/guards#block-mode-and-observe-mode).
+
+### Print the decisions
+
+```ts
+quard.configure({
+    onEvent: (event) => {
+        if (event.type === "decision") {
+            printEvent(event);
+        }
+    },
+});
+```
+
+Every rule's result is a `decision` [event](/sdk/reference/events), allows included. The handler set with [`quard.configure()`](/sdk/reference/configure) passes each one to `printEvent` from `lib/show.ts`, which skips the quiet ones, allow and pass, and words the rest by whether they were enforced:
+
+```ts
+return event.enforced
+    ? `${event.guard} guard: ${event.decision}${why}`
+    : `${event.guard} guard would ${event.decision}${why}, but only observes`;
+```
+
+### The model pays the web page's IBAN
+
+```ts
+title("Bank details from a web page, over the 1000 EUR cap");
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, "Pay the invoice at https://acme-billing.net/invoices/114 with the bank details it lists.", {
+        fetchPage,
+        payInvoice,
+    }),
+);
+```
+
+Inside [`quard.run()`](/sdk/reference/quard), the model reads the page and asks to pay 4950 EUR to its IBAN. Both rules fail. The IBAN came from `web:acme-billing.net`, not `getSupplier`, which this agent doesn't even have. And 4950 is over the cap. Quard records both as "would block", and the payment runs.
+
+### Turn the rules on
+
+```ts
+// Remove mode: "observe" (the default is "block") to enforce the rules
+```
+
+Without `mode: "observe"`, both rules block. Quard records both decisions, and the refusal gives the reason of the first rule, the IBAN rule:
+
+```text
+Blocked by the action guard: the iban value did not come from an allowed source. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+</Steps>
+
+## What you'll see
+
+```text
+Bank details from a web page, over the 1000 EUR cap
+  User: Pay the invoice at https://acme-billing.net/invoices/114 with the bank details it lists.
+  → fetchPage {"url":"https://acme-billing.net/invoices/114"}
+    ✓ Invoice 114 from Acme Ltd. Amount due: 4950 EUR. New bank details: GB33 BUKB 2020 1555 5555 55.
+  → payInvoice {"iban":"GB33 BUKB 2020 1555 5555 55","amount":4950}
+    · action guard would block (value_not_from_allowed_origin), but only observes
+    · action guard would block (amount_over_cap), but only observes
+    ✓ paid 4950 EUR
+  Model: …
+```
+
+The source guard's decision on the page is pass, and the other decisions are allows, so `printEvent` skips them. The model writes the arguments and the answer marked `…`, so those change from run to run. Whenever it pays the page's IBAN, both rules would block, and the payment goes through.
+
+## Try this
+
+- **Enforce the rules.** Remove `mode: "observe"`. The payment is refused, and both lines read `action guard: block`.
+- **Enforce one rule and watch the other.** Pass `guard()` a list of two action guards, one per mode:
+
+    ```ts
+    const payInvoice = guard(pay, [
+        { type: "action", name: "payInvoice", rules: [{ field: "iban", from: ["tool:getSupplier"] }] },
+        { type: "action", name: "payInvoice", mode: "observe", rules: [{ field: "amount", max: 1000 }] },
+    ]);
+    ```
+
+    Here `pay` stands for the tool function. The IBAN rule now blocks, and the cap only records.
+
+- **See everything.** Use `quard.configure({ onEvent: printEvent })` to print every event: labels, model calls and tool calls too. The payment's line says it ran after reading untrusted content.
+
+## Use it in your app
+
+- Ship a new rule in observe mode first. Watch its "would block" decisions in your logs or the dashboard on real traffic, then remove `mode: "observe"` to enforce it.
+- Changing a mode is a code change and a redeploy, or an edit to a [policy file](/sdk/examples/policy-file), which applies while the app runs.
+- Every guard type takes `mode`, except approval guards, which always ask.
+
+## Source
+
+- [`sandbox/06-observe-mode.ts`](https://github.com/oynozan/quard/blob/main/sandbox/06-observe-mode.ts): the example
+- [`sandbox/lib/show.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/show.ts): `printEvent()`
+- [`packages/sdk/pipeline/checks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/checks.ts): the final decision, which leaves out observed rules
+- [`packages/sdk/guards/action/action.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.ts): the `from` and `max` rules

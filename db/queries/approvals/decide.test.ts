@@ -110,7 +110,7 @@ describe("decideApproval", () => {
         const listening = await listeningDb(test.url);
         try {
             const projectId = await createProject(listening.db, "Acme");
-            const { id } = await openApprovalRequest(listening.db, projectId, requestInput());
+            const { id } = await openApprovalRequest(test.db, projectId, requestInput());
 
             await decideApproval(listening.db, projectId, id, "once", "dana@acme.com");
             await decideApproval(listening.db, projectId, id, "deny", "dana@acme.com");

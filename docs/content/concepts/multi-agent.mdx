@@ -21,7 +21,7 @@ await quard.run({ agent: "orchestrator" }, async () => {
 ```
 
 - A helper can only use the tools its parent may use. `tools` narrows that list further. It can never add to it.
-- The agents form a run graph: the agent that started the run at the root, its helpers below it, and messages and handoffs as links in time order. The [run page](/guides/runs#read-a-run) draws it.
+- The agents form a run graph: the agent that started the run at the root and its helpers below it. The [run page](/guides/runs#the-run-graph) draws it, with every message, delegation and handoff in time order, and the [Agents page](/guides/agents) shows the links between agents across runs.
 - With the OpenAI Agents SDK, the agent comes from the framework instead. See [OpenAI Agents SDK](/integrations/openai-agents).
 
 ## Sending and receiving
@@ -49,7 +49,7 @@ When agents run in separate processes, three items go with each message:
 | Parent step id  | The sender's step that led to the message    |
 | Label reference | A key to the labels the sender stored for it |
 
-Together they are called the carrier. Set up both sides with `quard.configure()` and all four of `key`, `webhookUrl`, `controlUrl` and `hashKey`. The sender stores its labels through the webhook, and the receiver looks them up through `control`.
+Together they are called the carrier. Set up both sides with `quard.configure()` and all three of `key`, `webhookUrl` and `controlUrl`. The sender stores its labels through the webhook, and the receiver looks them up through `control`.
 
 ### Sending
 
@@ -109,8 +109,8 @@ const result = await quard.resume(
 | The sender's name and delegation depth     | In the stored record, looked up by the receiver                             |
 | The tools the sender may use               | In the stored record. They cap what the receiving agent may use             |
 | The label of what the sender had read      | In the stored record                                                        |
-| The label of each traced value in the text | In the stored record. Sensitive values are stored as keyed hashes           |
-| A hash of the message text                 | In the stored record, to check the text on arrival                          |
+| The label of each traced value in the text | In the stored record. Each value is stored as a keyed hash                  |
+| A keyed hash of the whole message          | In the stored record, to check the message on arrival                       |
 | The message text                           | Only in your message. Quard never stores it                                 |
 | The pages and emails the sender read       | Nowhere. The receiver only learns the labels of values that are in the text |
 | Steps, cost and per-run limit counts       | In `control`, shared by every process of the run                            |

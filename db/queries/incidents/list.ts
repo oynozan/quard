@@ -1,16 +1,15 @@
 import type { Db } from "../../connect/connect.ts";
-import type { IncidentCategory, IncidentRow, StoredReplay, StoredReview, StoredVerdict } from "./types.ts";
+import type { IncidentCategory, IncidentRow, StoredReplay, StoredVerdict } from "./types.ts";
 
 const COLUMNS = [
     "id",
     "run_id as runId",
     "opened_at as openedAt",
+    "seen_at as seenAt",
     "find_state as findState",
     "find_error as findError",
-    "review_state as reviewState",
     "replay_state as replayState",
     "verdict",
-    "reviewer",
     "replay",
     "spent_usd as spentUsd",
     "cap_usd as capUsd",
@@ -26,7 +25,6 @@ const COLUMNS = [
 // jsonb comes back untyped. The worker wrote these shapes.
 type Narrowed = {
     verdict: StoredVerdict | null;
-    reviewer: StoredReview | null;
     replay: StoredReplay | null;
     category: IncidentCategory | null;
 };

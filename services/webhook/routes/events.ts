@@ -1,5 +1,5 @@
-import { ingestBatch, type Db } from "@quard/db";
-import { MAX_BATCH_BYTES, redactEvent, uploadBatch, type Redactor } from "@quard/shared";
+import { ingestBatch, runNotices, type Db } from "@quard/db";
+import { MAX_BATCH_BYTES, redactEvent, uploadBatch, type Redactor, type UploadItem } from "@quard/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { issuesOf, projectFor, readJson } from "../http/request.ts";
@@ -12,6 +12,10 @@ const MAX_BODY = MAX_BATCH_BYTES + 1024 * 1024;
 
 // Events from the SDK, in batches. Agent keys only.
 export function eventRoutes(deps: EventDeps): Hono {
+    // Tells the dashboard which runs changed, merged and after each commit
+    const notices = runNotices(deps.db, (error) =>
+        console.warn(`webhook: a dashboard notice failed: ${error.message}`),
+    );
     return new Hono().post(
         "/v1/events",
         bodyLimit({ maxSize: MAX_BODY, onError: (c) => c.json({ error: "batch_too_large" }, 413) }),
@@ -39,7 +43,15 @@ export function eventRoutes(deps: EventDeps): Hono {
             // Redacted again here, so an old or broken SDK never stores a raw value
             const items = batch.data.events.map((item) => ({ ...item, event: redactEvent(deps.redactor, item.event) }));
             const stored = await ingestBatch(deps.db, projectId, items);
+            if (stored > 0) {
+                notices.changed(projectId, runIdsOf(items));
+            }
             return c.json({ received: items.length, stored }, 202);
         },
     );
+}
+
+// Config errors belong to no run
+function runIdsOf(items: UploadItem[]): string[] {
+    return items.flatMap(({ event }) => ("runId" in event ? [event.runId] : []));
 }

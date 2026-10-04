@@ -69,7 +69,7 @@ Milestones 0 and 1 need no more decisions.
 
 ## M6. Root-cause finder
 
-- `worker` jobs on a Postgres table queue: value tracing, the verdict, replay (rounds of 5, early stop, $5 cap) and the AI reviewer, using the team's own key.
+- `worker` jobs on a Postgres table queue: value tracing, the verdict and replay (rounds of 5, early stop, $5 cap), using the team's own key.
 - `web`: the incident view with a replay button, search across runs by hashed value, and the summary view.
 
 **Done when** the M1 payment attack produces a verdict with entry point, turning point, damage and missing guard, confirmed by replay.

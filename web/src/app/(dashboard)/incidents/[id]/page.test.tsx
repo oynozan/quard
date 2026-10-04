@@ -11,7 +11,8 @@ import IncidentPage, { generateMetadata } from "./page";
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 const data = vi.hoisted(() => ({ getIncident: vi.fn<(id: string) => Promise<IncidentDetail | null>>() }));
 vi.mock("@/lib/data/incidents/query", () => data);
-vi.mock("@/lib/data/incidents/actions", () => ({ replayIncident: vi.fn() }));
+const actions = vi.hoisted(() => ({ replayIncident: vi.fn(), markIncidentSeen: vi.fn(async () => {}) }));
+vi.mock("@/lib/data/incidents/actions", () => actions);
 vi.mock("@/lib/data/scope", () => ({ requestTime: async () => NOW }));
 vi.mock("@paper-design/shaders", () => shadersModule);
 vi.mock("next/navigation", () => ({
@@ -49,6 +50,7 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     router.refresh.mockClear();
+    actions.markIncidentSeen.mockClear();
 });
 
 describe("IncidentPage", () => {
@@ -78,42 +80,109 @@ describe("IncidentPage", () => {
         expect(button.title).toBe("The replay already has an answer");
     });
 
-    it("shows the path, the replay, the AI explanation and the verdict", async () => {
+    it("shows the path, the replay and the verdict", async () => {
         await show(DONE);
         expect(screen.getByText("4 steps")).toBeTruthy();
         const replay = within(screen.getByRole("region", { name: "Replay" }));
         expect(replay.getByText("Confirmed")).toBeTruthy();
-        expect(screen.getByText(findings.reviewer!.paragraphs[0])).toBeTruthy();
         expect(within(screen.getByRole("region", { name: "Verdict" })).getByText("bad input")).toBeTruthy();
     });
 
-    it("keeps the replay and AI reviewer panes before the first round and note", async () => {
-        const reviewerStatus = "Skipped: the worker has no provider key";
+    it("keeps the replay pane before the first round", async () => {
         await show({
             ...INCIDENT_DETAIL,
             incident: { ...incident, replay: "not started" },
-            findings: { ...findings, replay: replayOf([]), reviewer: null, reviewerStatus },
+            findings: { ...findings, replay: replayOf([]) },
         });
         const replay = within(screen.getByRole("region", { name: "Replay results" }));
         expect(replay.getByText("0 × 5 + 5")).toBeTruthy();
         expect(replay.getByRole("img").getAttribute("aria-label")).toBe("No replay rounds yet.");
         expect(replay.getByText("No rounds yet")).toBeTruthy();
-        const [, reviewer] = screen.getAllByRole("region", { name: "AI reviewer" });
-        expect(within(reviewer).getByText("not the verdict")).toBeTruthy();
-        expect(within(reviewer).getByRole("status").textContent).toBe(reviewerStatus);
         expect((screen.getByRole("button", { name: "Replay" }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("marks an incident nobody opened yet as seen once its page is open", async () => {
+        await show({ ...DONE, incident: { ...DONE.incident, seen: false } });
+        expect(actions.markIncidentSeen).toHaveBeenCalledTimes(1);
+        expect(actions.markIncidentSeen).toHaveBeenCalledWith(incident.id);
+    });
+
+    it("leaves an incident someone already opened as it is", async () => {
+        await show(DONE);
+        expect(actions.markIncidentSeen).not.toHaveBeenCalled();
     });
 
     it("says the finder is still at work, and offers no replay yet", async () => {
         await show({ ...INCIDENT_DETAIL, incident: { ...incident, replay: "not started" }, findings: null });
-        expect(screen.getByRole("status").textContent).toBe(
-            "Finding the entry point, the turning point and the damage…",
-        );
+        const status = screen.getByRole("status");
+        expect(status.textContent).toBe("Finding the entry point, the turning point and the damage…");
+        expect(status.querySelector(".spinner")).toBeTruthy();
         expect(screen.queryByRole("region", { name: "Verdict" })).toBeNull();
         const button = screen.getByRole("button", { name: "Replay" }) as HTMLButtonElement;
         expect(button.disabled).toBe(true);
         expect(button.title).toBe("Replay starts once the verdict is found");
     });
+
+    it("says the worker isn't running in place of the finder's spinner, and reloads until it is", async () => {
+        vi.useFakeTimers();
+        await show({
+            ...INCIDENT_DETAIL,
+            incident: { ...incident, replay: "not started" },
+            findings: null,
+            working: true,
+            workerRunning: false,
+        });
+        const status = screen.getByRole("status");
+        expect(status.textContent).toBe("Waiting for the worker. It isn't running.");
+        expect(status.querySelector(".spinner")).toBeNull();
+        expect(status.querySelector(".bg-warning")).toBeTruthy();
+        await act(async () => vi.advanceTimersByTime(5000));
+        expect(router.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("says queued while a worker is about to claim the replay", async () => {
+        await show({
+            ...INCIDENT_DETAIL,
+            incident: { ...incident, replay: "queued" },
+            findings: { ...findings, replay: replayOf([], [], { status: "queued" }) },
+            working: true,
+        });
+        const replay = within(screen.getByRole("region", { name: "Replay results" }));
+        expect(replay.getByText("Queued")).toBeTruthy();
+        expect((screen.getByRole("button", { name: "Queued" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("shows the round in progress while a worker replays", async () => {
+        await show({
+            ...INCIDENT_DETAIL,
+            incident: { ...incident, replay: "running" },
+            findings: { ...findings, replay: replayOf([[5, 0, 0.004]], [], { status: "running" }) },
+            working: true,
+        });
+        const replay = within(screen.getByRole("region", { name: "Replay results" }));
+        expect(replay.getByText("Replaying round 2…")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Replaying…" }).getAttribute("aria-busy")).toBe("true");
+    });
+
+    it.each(["queued", "running"] as const)(
+        "says the worker isn't running in the replay pane while the replay is %s, and reloads until it is",
+        async (status) => {
+            vi.useFakeTimers();
+            await show({
+                ...INCIDENT_DETAIL,
+                incident: { ...incident, replay: status },
+                findings: { ...findings, replay: replayOf([[5, 0, 0.004]], [], { status }) },
+                working: true,
+                workerRunning: false,
+            });
+            const replay = within(screen.getByRole("region", { name: "Replay results" }));
+            expect(replay.getByText("Waiting for the worker. It isn't running.")).toBeTruthy();
+            expect(replay.queryByText(/^Replaying round/)).toBeNull();
+            expect(replay.queryByText("Queued")).toBeNull();
+            await act(async () => vi.advanceTimersByTime(5000));
+            expect(router.refresh).toHaveBeenCalledTimes(1);
+        },
+    );
 
     it("says why the finder stopped", async () => {
         await show({

@@ -1,0 +1,320 @@
+# Labels and value tracing
+
+Every piece of content an agent reads gets a label, and every value in a tool call's arguments is traced back to where it appeared. [Labels and trust](/concepts/labels) and [Value tracing](/concepts/value-tracing) explain the ideas. This page is the code behind them, including the label records that carry labels to other agents and to shared memory.
+
+## Label types
+
+The types live in [`packages/shared/labels/types.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/types.ts):
+
+```ts
+export type Label = {
+    origin: string;
+    kind: OriginKind;
+    trust: Trust;
+    sensitivity: Sensitivity;
+    flags: string[];
+};
+
+// The least trusted and most sensitive mix of what a model read
+export type ContextLabel = {
+    trust: Trust;
+    sensitivity: Sensitivity;
+    origins: string[];
+    flagged: boolean;
+};
+```
+
+- `origin` is a string such as `web:evil.com` or `tool:getSupplier`. The part before the first `:` is its kind.
+- `flags` list what a source guard, the signature feed or the detector found, such as `instructions` or `signature:<id>`. Action rules don't count values that appeared in flagged content.
+
+## From origin to label
+
+[`packages/shared/labels/mapping.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/mapping.ts) holds the default trust and sensitivity of each kind:
+
+```ts
+// Default trust and sensitivity per origin kind (PROJECT.md, Q5)
+const DEFAULTS: Record<OriginKind, { trust: Trust; sensitivity: Sensitivity }> = {
+    user: { trust: "trusted", sensitivity: "internal" },
+    system: { trust: "trusted", sensitivity: "internal" },
+    tool: { trust: "trusted", sensitivity: "internal" },
+    web: { trust: "untrusted", sensitivity: "public" },
+    email: { trust: "untrusted", sensitivity: "public" },
+    mcp: { trust: "untrusted", sensitivity: "public" },
+    file: { trust: "untrusted", sensitivity: "internal" },
+    agent: { trust: "untrusted", sensitivity: "internal" },
+    unknown: { trust: "untrusted", sensitivity: "internal" },
+};
+```
+
+- `originKind()` reads the kind before the first `:`. A kind that isn't in the table counts as `unknown`. So `memory:<store>` has the kind `unknown`.
+- `labelFor(origin, overrides, flags)` takes the defaults of the kind, then the override for that exact origin, if there is one.
+- Overrides come from `quard.configure({ origins })` and from the policy file. `getConfig()` in [`core/config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/config.ts) merges them, and the policy file wins for an origin set in both.
+- Each `run_started` event records the overrides in force.
+
+The SDK sets these origins:
+
+| Origin           | Set by                            | For                                                                                                                          |
+| ---------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `user`           | The monitor                       | User messages, and a string `input`                                                                                          |
+| `system`         | The monitor, and `refuse()`       | Instructions, system and developer messages, handoff results, and refusal text                                               |
+| `tool:<name>`    | `finishOutput()`                  | The output of a guarded tool without a source guard                                                                          |
+| `<kind>:<name>`  | `originFor()`                     | The output of a tool with a source guard, such as `web:evil.com`                                                             |
+| `agent:<sender>` | `receiveMessage()`                | A message a receive guard read. The sender is `unknown` when no record vouched for it                                        |
+| `agent:<caller>` | `markBrief()`                     | The brief of an agent the Agents SDK runs as a tool                                                                          |
+| `memory:<store>` | `readThrough()`                   | An item read from a store wrapped with `quard.memory()`                                                                      |
+| `unknown`        | The monitor, and `vouchedLabel()` | Results of tool calls that no guard labeled, history the process never saw, and what a run that read nothing sends or stores |
+
+For `agent:` and `memory:` origins, the trust and sensitivity come from the label record, not from the defaults. A team's override for that exact origin still wins. See [Label records](#label-records).
+
+`originFor()` in [`guards/source/source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/source.ts) builds the origin of a source tool's output from the guard's options and the call's arguments, never from the content the tool returned:
+
+```ts
+// The exact origin, such as "web:evil.com". A URL in the arguments wins
+// over a bare host, which wins over an email address.
+export function originFor(options: SourceOptions, input: unknown, tool: string): string {
+    if (options.origin.includes(":")) {
+        return options.origin;
+    }
+    const values = extractValues(textOf(input));
+    const found =
+        values.find((v) => v.type === "url") ??
+        values.find((v) => v.type === "host") ??
+        values.find((v) => v.type === "email");
+    const name = options.originOf?.(input) ?? (found === undefined ? tool : hostOf(found));
+    return `${options.origin}:${name}`;
+}
+```
+
+## The content index
+
+`ContentIndex` in [`labels/content-index.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/content-index.ts) holds everything one run read. Each `RunState` has one.
+
+```ts
+export type ContentRecord = {
+    id: string;
+    label: Label;
+    stepId: string;
+    order: number;
+    keys: string[];
+    // A hash of the exact text, so content is only stored once
+    print: string;
+};
+```
+
+- **Records.** Each piece of content becomes one record, with its label, the step that let it in, its place in the run and an id such as `c1-<tag>`. The tag is random per index, because a run resumed in another process gets an index of its own.
+- **Keys.** The value keys in the text, from `extractValues()`, such as `iban:DE89370400440532013000` or `domain:acme.com`. A map from each key to its records makes lookups fast.
+- **Print.** A SHA-256 hash of the exact text. The same text added again is skipped, so content seen before keeps its first label. Only the exact text counts: a copy with hidden text added is new content. The hash stays in the index and never goes into an event.
+
+```ts
+// Content seen before keeps its first label. Only the exact text
+// counts: a copy with hidden text added is new content.
+add(text: string, label: Label, stepId: string, options: AddOptions = {}): ContentRecord | undefined {
+    const print = hash(text);
+    if (text.trim() === "" || this.#seen.has(print)) {
+        return undefined;
+    }
+    this.#seen.add(print);
+    const skipMadeUp = label.trust === "trusted" && options.vouched !== true;
+    const keys = [...new Set(extractValues(text).flatMap((value) => value.keys))].filter(
+        (key) =>
+            options.exclude?.has(key) !== true &&
+            !(options.keepEarlier === true && this.#byKey.has(key)) &&
+            !(skipMadeUp && this.#madeUp.has(key)),
+    );
+    return this.#push({ label, stepId, keys, print });
+}
+```
+
+The options:
+
+| Option        | What it does                                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `exclude`     | Leaves keys out, such as the values a tool result echoes from the call's own arguments.                               |
+| `keepEarlier` | Leaves out the keys the index already holds, so those values keep their earlier labels.                               |
+| `vouched`     | A label record vouched for this content's values, so made-up keys come in too. See [Made-up values](#made-up-values). |
+
+The other methods:
+
+| Method             | What it does                                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lookup(keys)`     | Every record that holds one of the keys, as an `Occurrence` with its origin, trust, sensitivity, flags, step and match kind, in run order. Each record is listed once, with its strongest match. |
+| `context()`        | The context label, from `combineLabels()` over every record: untrusted if any record is, internal if any record is, and flagged if any record has flags.                                         |
+| `absorb(other)`    | Takes in another run's records with their labels, and its made-up keys. The monitor uses it when a request in one run chains to another run.                                                     |
+| `markMadeUp(keys)` | Marks value keys that a model wrote and no record vouched for.                                                                                                                                   |
+| `has(text)`        | Whether the index holds this exact text.                                                                                                                                                         |
+| `size`             | How many records the index holds.                                                                                                                                                                |
+
+The match kind comes from the key: `host:` keys match by host, `domain:` keys match by main domain, and every other key is an exact match.
+
+## Made-up values
+
+A value a model wrote, such as an IBAN it invented, is model-generated: no content the run read holds it. Without care, app code could make it look seen. It could paste a model's note into the next prompt as user text, or return it from a trusted tool. So the index keeps a set of made-up keys:
+
+- Keys go in with `markMadeUp()` when a trusted message, memory item or brief holds values that no record vouched for. The sender's or writer's model wrote those values.
+- `add()` leaves made-up keys out of trusted content, unless `vouched` is set. That holds even for user and system text, which app code may fill with them.
+- Untrusted content still indexes them under its own label.
+
+`unvouchedKeys()` in [`labels/unvouched.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/unvouched.ts) finds them. A host that a vouched value shares still counts as vouched. See [Values the sender made up](/concepts/multi-agent#values-the-sender-made-up).
+
+## Finding values
+
+`extractValues()` in [`packages/shared/values/extract.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/values/extract.ts) finds every traceable value in a text, normalized, with the keys it can match on. The normalizers live in [`packages/shared/normalize`](https://github.com/oynozan/quard/tree/main/packages/shared/normalize).
+
+| Type    | Found by                                                                                       | Keys                                                     |
+| ------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `iban`  | `findIbans()`: the country's length and the mod-97 check digits, with single spaces allowed    | `iban:<IBAN>`                                            |
+| `email` | `findEmails()`, in lower case                                                                  | `email:<address>`, `host:<host>`, `domain:<main domain>` |
+| `url`   | `findUrls()`: http and https, normalized by `URL`, without the `#` part                        | `url:<url>`, `host:<host>`, `domain:<main domain>`       |
+| `host`  | `findHosts()`: names that end in a real public suffix                                          | `host:<host>`, `domain:<main domain>`                    |
+| `path`  | `findPaths()`: absolute, home, relative and Windows paths, with `.` and `..` resolved          | `path:<path>`                                            |
+| `id`    | `findIds()`: 8 or more letters, digits, `_` or `-`, with at least one digit; dates don't count | `id:<id>`                                                |
+
+- The text is cleaned first with `cleanText()`: Unicode NFKC, with hidden characters removed, so a zero-width space can't split a value apart. Runs of spaces and tabs count as one.
+- The main domain comes from the Public Suffix List through `tldts`, with private suffixes counted, so `a.github.io` and `b.github.io` differ.
+- An IBAN, and the host of an email or a URL, are not listed a second time as a host or an id.
+
+### textOf() and keyText()
+
+Arguments and tool results can have any shape, but scans and the index need text. [`packages/shared/values/text-of.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/values/text-of.ts) makes it two ways:
+
+```ts
+// The text inside a value, one piece per line: object keys, strings and
+// numbers. The model reads keys too, so they are scanned and indexed.
+// JSON text would hide word boundaries behind escapes such as \n.
+export function textOf(value: unknown): string {
+    return joined(value, () => true);
+}
+
+// The text value keys are built from: textOf without the values under
+// secret-named fields, so no key carries a secret. JSON text is read as
+// the value it holds, since tools often return it.
+export function keyText(value: unknown): string {
+    return joined(parsedJson(value), (path) => !underSecret(path));
+}
+```
+
+- `textOf()` is what the source guard's scan, the signature feed, messages and memory items are read from.
+- `keyText()` is what tool output is indexed from, and what the uploaded value keys of a tool call are built from. `underSecret()` matches a path such as `auth.api_key` or `headers[0].cookie`.
+- `flattenArgs()` in [`packages/shared/values/flatten.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/values/flatten.ts) splits nested values into single values with their paths, such as `invoice.iban` or `items[0].amount`. It skips objects it has seen, so cycles end.
+
+## Value labels
+
+`labelArguments()` in [`labels/value-labels.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/value-labels.ts) labels every traceable value in a call's arguments:
+
+```ts
+// Labels every traceable value in a call's arguments
+export function labelArguments(input: unknown, index: ContentIndex): ArgumentLabel[] {
+    return flattenArgs(input).map(({ path, value }) => ({
+        path,
+        values: extractValues(value).map((found) => {
+            const occurrences = index.lookup(found.keys);
+            return { type: found.type, value: found.value, occurrences, modelGenerated: occurrences.length === 0 };
+        }),
+    }));
+}
+```
+
+- Each argument path gets every value found in it, so an IBAN inside an email body is traced too.
+- A value found nowhere in the run is `modelGenerated`.
+
+Guards read value labels through three helpers:
+
+| Helper                            | Returns                                                                         | Used by                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `valuesAt(labels, field)`         | The values of one field, nested parts included                                  | Action rules                                                             |
+| `exactOccurrences(value)`         | Where the value itself appeared: exact matches, or host matches for a bare host | The `from` and `neverSeen` action rules, and the values of label records |
+| `firstAppearance(value, matches)` | The first occurrence of the strongest kind of match in the list                 | The egress check for destinations from untrusted content                 |
+
+What the guards do with them:
+
+- An action `from` rule passes only when every traced value in the field appeared, as itself, in an allowed origin, in content with no flags. A field with no traced value fails. When a value is model-generated, the reason is `value_model_generated`.
+- An action `neverSeen` rule passes only when each value first appeared in trusted content with no flags.
+- An egress guard blocks a destination whose first appearance was untrusted. When every target of the destination is on the allowlist, a main-domain match alone doesn't count.
+
+## How tool output is labeled
+
+`finishOutput()` in [`pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts) labels what a guarded tool returns, before the agent sees it:
+
+- **Without a source guard**, the output gets the label `tool:<name>`: trusted and internal by default.
+- **With a source guard**, `checkSource()` gives it the label of the origin from `originFor()`. When the content is flagged, the scan's findings become flags. After a strip, only what is still suspect stays as flags. The signature feed adds `signature:<id>` flags, and the detector adds `detector:<label>` flags, or `detector:unchecked` when it couldn't answer. In observe mode the label gets no flags.
+- **With a receive guard** (origin `"agent"`), the label comes from the message's record. See [The receive guard](/sdk/internals/multi-agent#the-receive-guard).
+- **Blocked output** is withheld and never indexed.
+
+Then `indexOutput()` adds the output to the content index:
+
+```ts
+// A message from another agent first brings in the labels its values had
+// in the sender's run, so a web-derived IBAN stays web-derived here
+function indexOutput(call: GuardCall, output: unknown, label: Label, message?: Received): void {
+    for (const { value, key, origin, trust, sensitivity, flags, stepId } of message?.values ?? []) {
+        // Only the value's own key: its host and domain take the message's label
+        const exclude = new Set(extractValues(value).flatMap((found) => found.keys.filter((other) => other !== key)));
+        const label = { origin, kind: originKind(origin), trust, sensitivity, flags };
+        indexText(call, value, label, stepId, { exclude, keepEarlier: true, vouched: true }, true);
+    }
+    // Values under secret-named fields never become keys
+    const text = keyText(output);
+    // The index leaves made-up keys out of trusted output, this one too
+    call.run.index.markMadeUp(madeUpKeys(text, label, message));
+    indexText(call, text, label, call.stepId, { exclude: echoedKeys(call), keepEarlier: message !== undefined });
+}
+```
+
+- `echoedKeys()` holds the values in the call's own input. A result that echoes them back gains no trust for them. So a trusted lookup tool that repeats the IBAN it was asked about doesn't make that IBAN trusted.
+- Each new record is recorded as a `content` event with its label and keys.
+- The same label goes on the requested call as `outputLabel`. When your app sends the result back to the model, the monitor gives it that label. See [Labeling what the model reads](/sdk/internals/monitor#labeling-what-the-model-reads).
+
+## Label records
+
+A label record carries labels out of a run, so another agent or a later run can read them back. There are two kinds, both defined in [`packages/shared/labels/records.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/records.ts):
+
+| Kind      | Made by                    | Found by                                   | Holds                                                                                                              |
+| --------- | -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `message` | `quard.inject()`           | Its label reference, a random 16-hex `ref` | The run, the sender's step, the sender, its depth, the print, the context label, value records, the sender's tools |
+| `memory`  | A write to a wrapped store | Its print                                  | The store, the print, the run, the agent, the context label and value records                                      |
+
+Every part is built from the run's content index:
+
+- **The context label.** `vouchedLabel()` in [`labels/vouched-label.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/vouched-label.ts) gives the run's context label. A run that read nothing can't say where its content came from, so it gets the `unknown` label: untrusted and internal.
+- **Value records.** Each traced value in the content, with the label it had where it first appeared as itself (`exactOccurrences()`). A value the run never read gets no record, so it stays model-generated in the reader.
+- **The print.** `printOf()` in [`labels/print.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/print.ts) is an HMAC-SHA-256 of the whole content, as canonical JSON with sorted keys. Any change to a string, a hidden character, or which value sits under which key changes it. The key is the project's hash key, which the SDK gets from the backend, or a random key of the process while it has none. So short content can't be guessed from its print.
+
+```ts
+// The print a label record holds: a keyed hash of the whole value. Any
+// change to a string, a flag or which value sits under which key shows,
+// and short content can't be guessed from it without the key.
+export function printOf(value: unknown): string {
+    return createHmac("sha256", printKey())
+        .update(`print:${canonical(value, new Set()) ?? ""}`)
+        .digest("hex");
+}
+```
+
+Raw values never leave the process. `hashValues()` in [`labels/value-records.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/value-records.ts) turns each value into its keyed hash with `valueHash()`, made with the project's hash key. While the SDK has no key, values get no hash, so the record holds none. With a backend set, `quard.inject()` and wrapped stores wait up to 5 seconds for the key before they make a record. See [The project's hash key](/sdk/internals/transport#the-projects-hash-key). A reader in another process finds the values again with `matchValues()`: it hashes each value in the text it got and keeps the ones the record lists.
+
+The process that made a record keeps it with the raw values. `saveRecord()` in [`labels/records.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/records.ts) keeps the newest 10,000, and `findRecord()` looks there first, then asks control. Memory labels are kept apart, in `memory/kept.ts`. See [Agents, messages and memory](/sdk/internals/multi-agent) for how each kind is stored and read.
+
+## Where labels end up
+
+- **Guards** see `GuardCall.context` and `GuardCall.values`.
+- **Tool call events** carry `influenced` (the context label is untrusted) and `flagged`. On upload they also get the value keys of their arguments, from `keyText()`.
+- **Content events** carry each record's label and keys. Keys of IBANs and emails are hashed with a mask before upload, so search and tracing still match.
+- **Message, handoff and memory events** carry the trust and sensitivity of what moved between agents or through a store.
+- **Label records** carry a context label and value records by hash. See [Label records](#label-records).
+- **Asks to the dashboard** give each value's type, origins and match kinds in their labels, but not the value. The approver sees the values in the arguments, with secrets removed.
+
+## Source
+
+- [`packages/sdk/labels/content-index.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/content-index.ts): `ContentIndex`
+- [`packages/sdk/labels/value-labels.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/value-labels.ts): `labelArguments()` and its helpers
+- [`packages/sdk/labels/records.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/records.ts): message records made and found
+- [`packages/sdk/labels/message-record.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/message-record.ts): a message record as webhook stores it
+- [`packages/sdk/labels/value-records.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/value-records.ts): value records by hash
+- [`packages/sdk/labels/print.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/print.ts): `printOf()`
+- [`packages/sdk/labels/vouched-label.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/vouched-label.ts): the label of what a run sends or stores
+- [`packages/sdk/labels/unvouched.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/unvouched.ts): made-up value keys
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): `finishOutput()`, `indexOutput()`
+- [`packages/sdk/guards/source/source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/source.ts): `originFor()`, `checkSource()`, `receiveMessage()`
+- [`packages/shared/labels`](https://github.com/oynozan/quard/tree/main/packages/shared/labels): label types, `labelFor()`, `combineLabels()`, label records
+- [`packages/shared/values`](https://github.com/oynozan/quard/tree/main/packages/shared/values): `extractValues()`, `flattenArgs()`, `canonicalJson()`, `textOf()`, `keyText()`
+- [`packages/shared/normalize`](https://github.com/oynozan/quard/tree/main/packages/shared/normalize): the value normalizers

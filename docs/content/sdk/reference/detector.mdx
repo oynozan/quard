@@ -1,0 +1,283 @@
+# Detector and signatures
+
+Two optional checks add to the rules in your code. A **detector** is an AI model that labels what source tools return, such as `article` or `prompt_injection`, with the chance of each label. A **signature feed** is a list of known attack patterns, checked against tool arguments and source content. Both can only make things stricter: neither can allow what a rule blocked, or raise trust.
+
+## The detector
+
+```ts
+type Detector = {
+    readonly name: string;
+    label(text: string, options?: { signal?: AbortSignal }): Promise<DetectorAnswer>;
+};
+
+type DetectorAnswer = {
+    label: DetectorLabel;
+    probabilities: Partial<Record<DetectorLabel, number>>;
+    injection?: number;
+};
+```
+
+A detector is any object with a `name` and a `label()` function. `label()` gets a piece of text and returns the most likely [label](#labels), the chance of each label from 0 to 1, and, if the detector answers it on its own, `injection`: the chance that some part of the text tries to instruct the AI agent reading it.
+
+Use the built-in [Jev detector](#jev), or write your own:
+
+```ts
+import { quard, type Detector } from "quard";
+
+const detector: Detector = {
+    name: "my-detector",
+    async label(text, options) {
+        const chance = await myModel.injectionChance(text, { signal: options?.signal });
+        return {
+            label: chance >= 0.5 ? "prompt_injection" : "article",
+            probabilities: { prompt_injection: chance, article: 1 - chance },
+            injection: chance,
+        };
+    },
+};
+
+quard.configure({ detector });
+```
+
+`myModel.injectionChance()` stands for your own model call. Use a client that isn't wrapped with `quard.wrap()`, so the detector's own calls aren't recorded as the agent's model calls. `configure()` throws `Invalid Quard configuration` when `detector` has no string `name` or no `label` function.
+
+- `options.signal` fires when Quard stops waiting for the answer. Pass it to your model call, so the call stops too.
+- An answer counts only when `label` is one of the [labels](#labels), `probabilities` holds a chance for that label, and every chance, `injection` included, is a number from 0 to 1. Labels left out of `probabilities` count as 0.
+
+### Labels
+
+```ts
+type DetectorLabel =
+    | "prompt_injection"
+    | "payment_fraud"
+    | "phishing"
+    | "malicious_code"
+    | "invoice"
+    | "business_message"
+    | "promotion"
+    | "documentation"
+    | "article"
+    | "search_results"
+    | "code"
+    | "data_records"
+    | "none";
+```
+
+| Label              | Risky | What it means                                                                                                                                                      |
+| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `prompt_injection` | yes   | Speaks to an AI agent instead of a human reader: tells it to ignore or change its instructions, use a tool, send data somewhere, or hide something from the user.  |
+| `payment_fraud`    | yes   | Tries to send money somewhere new: says bank details have changed, gives a new account or IBAN, or asks for an urgent or unexpected payment, gift cards or crypto. |
+| `phishing`         | yes   | Pretends to be a trusted company or person to get a password, a login, a one-time code, or a click on a link or attachment.                                        |
+| `malicious_code`   | yes   | Code or commands that would harm a system if run: download and run a script, delete data, turn off security, or read keys and passwords.                           |
+| `invoice`          | no    | An ordinary invoice, receipt, quote or account statement that does not change payment details.                                                                     |
+| `business_message` | no    | An ordinary email, chat message or support ticket between people about everyday work.                                                                              |
+| `promotion`        | no    | An advert, newsletter, offer or other marketing message.                                                                                                           |
+| `documentation`    | no    | Product documentation, a help article, an API reference or a manual.                                                                                               |
+| `article`          | no    | A news story, blog post, report or reference page written for people to read.                                                                                      |
+| `search_results`   | no    | A list of search results or links, each with a short snippet.                                                                                                      |
+| `code`             | no    | Ordinary source code, configuration or log output.                                                                                                                 |
+| `data_records`     | no    | Structured records, such as table rows, JSON from an API, or CRM or database entries.                                                                              |
+| `none`             | no    | None of the other labels fits this text.                                                                                                                           |
+
+From each answer, Quard works out two numbers:
+
+- **Risk score**: the chances of the four risky labels added up, at most 1. It decides flags.
+- **Injection chance**: the chance of `prompt_injection`, or `injection` when that is higher. It decides strips.
+
+### Detector rules
+
+```ts
+type DetectorRules = {
+    readonly mode: "observe" | "enforce";
+    readonly flagAt: number;
+    readonly stripAt: number;
+};
+```
+
+| Rule      | Type                     | Default     | What it does                                                                                        |
+| --------- | ------------------------ | ----------- | --------------------------------------------------------------------------------------------------- |
+| `mode`    | `"observe" \| "enforce"` | `"enforce"` | `"enforce"` waits for the labels and acts on them. `"observe"` saves the labels and changes nothing |
+| `flagAt`  | number, 0 to 1           | `0.5`       | Content with an answer whose risk score is at or above this is flagged                              |
+| `stripAt` | number, 0 to 1           | `0.9`       | Text whose injection chance is at or above this is removed                                          |
+
+Set them with `detectorRules` in `quard.configure()`, or with `detector` in the [policy file](/sdk/reference/policy-file#fields). For each rule, the policy file wins over code, and code wins over the defaults. A rule set to `undefined` in code keeps its default. The policy file's values apply live.
+
+### What the detector does
+
+The detector runs on the result of a tool with a [source guard](/sdk/reference/source-guard), after the scan and the signature feed, when neither blocked it.
+
+1. Only content labeled public is sent, such as web pages, email and MCP results. Content labeled internal is never sent to the detector.
+2. Quard takes the text values in the result, and object keys that read like text: ones with spaces, or longer than 40 characters. Bare numbers, empty text and values under fields named like a secret are left out, and so is the value of a `{ name, value }` pair whose name reads like a secret, as in a list of headers. JSON written inside a text is read without its secret fields.
+3. Short texts are packed together, with blank lines between them, into requests of up to 4,000 characters. A longer text is split into chunks of up to 4,000 characters, at blank lines where it can, then at line breaks, sentence ends or spaces. A chunk never cuts through an IBAN, card number, email address, secret or private key, and a cut paragraph's next chunk starts up to 200 characters back, so a sentence at the cut is read whole once.
+4. Each request is [redacted](/sdk/reference/events#redaction) before it is sent: secrets are removed, and email addresses, IBANs and card numbers are masked.
+5. At most 8 requests per process go to the detector at once. The rest wait, and calls take turns, so a long page can't keep a short read waiting.
+6. Quard records a `decision` with `guard: "source"`, `rule: "detector:<name>"`, the highest risk score as `score`, and the labels given as `reason`. Each answer is recorded as a [`chunk_label`](/sdk/reference/events#event-types) event with the text the detector read.
+
+In enforce mode, Quard waits up to 5 seconds for all requests, then:
+
+- removes each text whose injection chance is `stripAt` or more, and records the decision as `strip`;
+- adds the flag `detector:prompt_injection` when an injection is in text it can't remove, such as an object key;
+- for each answer whose risk score is `flagAt` or more, adds the flag `detector:<label>` with its most likely risky label, such as `detector:payment_fraud`;
+- adds the flag `detector:unchecked` when some request failed or didn't answer in time, so the parts it couldn't check still make later rules stricter.
+
+Flagged content makes later rules stricter, as a [source guard's flags](/sdk/reference/source-guard#what-it-decides) do. An action guard's `from` rule ignores flagged content, and a `neverSeen` rule treats a value first seen there as never seen.
+
+In observe mode, Quard doesn't wait. The agent gets the result at once, and the decision is recorded with `enforced: false` when the labels arrive. When the source guard itself is in observe mode, the detector only observes too.
+
+### Detector errors
+
+```ts
+class DetectorError extends Error {
+    readonly reason: string;
+    constructor(reason: string);
+}
+```
+
+A request fails when the detector throws, gives an answer that doesn't count, such as one with a label Quard doesn't know, or doesn't answer within the 5 seconds. Quard then records one `detector_error` [warning](/sdk/reference/events#event-types) per call, with the first failure's reason, and in enforce mode flags the content `detector:unchecked`.
+
+Throw a `DetectorError` from your own detector to give that reason, such as `"timeout"` or `"http_401"`. Its `message` is `The detector failed: <reason>`, and its `name` is `"DetectorError"`. Any other error is recorded with the reason `error`, and an answer that doesn't count with `bad_reply`.
+
+### Jev
+
+```ts
+function jevDetector(options: JevOptions): Detector;
+
+type JevOptions = { apiKey: string };
+```
+
+`jevDetector()` returns a detector that asks Jev, a model from TypeSafe. Pass your TypeSafe API key:
+
+```ts
+import { jevDetector, quard } from "quard";
+
+quard.configure({ detector: jevDetector({ apiKey: typesafeKey }) });
+```
+
+`typesafeKey` stands for your key, read from wherever you keep secrets.
+
+- It throws a `TypeError`, `jevDetector() needs an apiKey`, when `apiKey` is missing or empty.
+- The detector's `name` is the pinned model version, `jev-1.13.0`. Thresholds are tuned for that version. An answer from another model version fails with the reason `model:<version>`.
+- Each request asks two questions at once: which label fits the text, and whether any part of it tries to instruct an AI agent. The second answer becomes `injection`.
+- One try may take up to 2 seconds. A network error, a timeout, or HTTP 408, 429 or 5xx gets one retry, after 300 to 600 milliseconds, or after the server's `Retry-After` when that is longer. When the server asks for a wait longer than 1.5 seconds, there is no retry.
+- Failures are reported with the reasons `timeout`, `network`, `http_<status>`, `bad_reply` or `model:<version>`.
+- A refused key (HTTP 401) and an answer from another model version each print one console warning, the first time they happen.
+- It only reads what Quard sends: public content, redacted.
+
+## The signature feed
+
+A signature feed is a JSON list of known attack patterns, such as a pickle payload or a download piped into a shell. Quard checks the arguments of every guarded call against it, and the results of source tools.
+
+```ts
+type SignaturesConfig = {
+    file?: string;
+    url?: string;
+    refreshSeconds?: number;
+    mode?: "block" | "observe";
+};
+```
+
+| Option           | Type                    | Default   | What it does                                              |
+| ---------------- | ----------------------- | --------- | --------------------------------------------------------- |
+| `file`           | `string`                | none      | A feed file on disk. Set `file` or `url`, not both.       |
+| `url`            | `string`                | none      | An `http` or `https` URL to download the feed from.       |
+| `refreshSeconds` | whole number, 1 or more | `300`     | How often a `url` feed is downloaded again.               |
+| `mode`           | `"block" \| "observe"`  | `"block"` | `"block"` acts on matches. `"observe"` only records them. |
+
+```ts
+quard.configure({ signatures: { url: "https://feeds.example.com/signatures.json", refreshSeconds: 600 } });
+```
+
+The [policy file](/sdk/reference/policy-file) can set the feed too, with the same fields under `signatures`. Its feed wins over the one set in code, and a relative `file` there is read from the policy file's folder.
+
+The repo has a starter feed of 13 signatures, [`signatures.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/signatures/signatures.json), with a JSON Schema, [`signatures.schema.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/signatures/signatures.schema.json), for editors.
+
+### Feed format
+
+```json
+{
+    "$schema": "./signatures.schema.json",
+    "version": "2026-10-03.1",
+    "signatures": [
+        {
+            "id": "QS-EXEC-006",
+            "title": "Download with curl piped into a shell",
+            "category": "code-execution",
+            "where": ["input", "content"],
+            "all": ["curl"],
+            "any": ["|sh", "|bash", "|zsh"],
+            "none": ["|sha"],
+            "action": "flag",
+            "source": "https://owasp.org/www-community/attacks/Command_Injection"
+        }
+    ]
+}
+```
+
+| Field        | Type                              | What it holds                                                                                                       |
+| ------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `version`    | string                            | The feed's version. Required                                                                                        |
+| `signatures` | list, up to 1,000                 | The signatures. Each `id` must be unique                                                                            |
+| `id`         | string                            | 3 to 40 capital letters, digits or dashes, such as `QS-EXEC-006`                                                    |
+| `title`      | string                            | What the signature catches, up to 120 characters                                                                    |
+| `category`   | string                            | `code-execution`, `unsafe-deserialization`, `supply-chain`, `ssrf`, `path-traversal`, `prompt-injection` or `other` |
+| `where`      | list of `"input"` and `"content"` | `input` checks tool arguments. `content` checks what source tools return                                            |
+| `tools`      | list of tool names, optional      | Only check calls to these tools. Every guarded tool when left out                                                   |
+| `all`        | list of strings, optional         | Every one must be in the text                                                                                       |
+| `any`        | list of strings, optional         | At least one must be in the text                                                                                    |
+| `none`       | list of strings, optional         | None may be in the text                                                                                             |
+| `action`     | `"block"` or `"flag"`             | What a match does                                                                                                   |
+| `source`     | URL, optional                     | Where the pattern is described                                                                                      |
+
+A signature needs at least one `all` or `any` string. Each list holds up to 50 strings of 1 to 200 characters, and each string must hold some visible text. Any other field is an error.
+
+### Matching
+
+- Patterns are plain strings, not regular expressions, so a hostile feed can't freeze the process.
+- Before matching, both the patterns and the text are cleaned: lookalike forms such as full-width letters become plain letters, invisible characters are removed, letters become lower case, and all spaces and line breaks are removed.
+- A signature matches when the text holds every `all` string, at least one `any` string when it has any, and no `none` string.
+- The text checked is every object key, string and number in the arguments or the result.
+
+### What a match does
+
+| Where     | `action: "block"`                             | `action: "flag"`                                                                                    |
+| --------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `input`   | The call is blocked with `signature_matched`  | The call asks a person, as an [approval](/sdk/reference/approval-guard#asks-from-other-guards) does |
+| `content` | The result is withheld with `content_blocked` | The content gets the flag `signature:<id>`, so later rules are stricter                             |
+
+- Every match is recorded as a `decision` with `guard: "signature"`, the signature's `id` as `rule` and `field`, and the reason `signature_matched`. Its `decision` is `block` or `ask` on input, and `block` or `flag` on content.
+- Refusals name the `signature` guard. A blocked call reads "Blocked by the signature guard: it matched the known attack signature QS-PATH-013", and withheld content "Blocked by the signature guard: the content looked unsafe".
+- With `mode: "observe"`, matches are only recorded, with `enforced: false`.
+- Content is checked only for tools with a source guard, and only acts when that source guard is in block mode.
+
+### Loading and updates
+
+- **A file** is read when `configure()` opens it, and `configure()` throws if it is missing or invalid. Before each guarded call, Quard rereads it when at least a second has passed and it changed.
+- **A URL** downloads in the background, at once and then every `refreshSeconds`. It sends the last ETag, so an unchanged feed isn't downloaded again. A download gives up after 10 seconds. While a download is in flight, guarded calls wait for it.
+- **Until a URL feed has loaded once,** Quard fails closed: every guarded call is blocked with `signatures_unavailable`, from the `signature` guard with the rule `feed`. While calls come in, Quard tries the download again at most every 5 seconds. In observe mode, the missing feed is only recorded.
+- **A failed or invalid update** keeps the last good version in use and records a `config_error` [event](/sdk/reference/events#event-types) with `source: "signatures"`.
+- `file`, `url` and `refreshSeconds` are read when `configure()` sets the feed or opens the policy file. A policy file's `signatures.mode` applies live.
+
+## Related
+
+- [An AI detector](/sdk/examples/ai-detector): a detector of your own, in enforce mode.
+- [Hidden instructions](/sdk/examples/hidden-instructions): a source guard's scan, which the detector adds to.
+- [Labels and AI](/concepts/labels#labels-and-ai): why AI never assigns labels.
+- [Policy file](/sdk/reference/policy-file): setting the feed and detector rules in JSON.
+
+## Source
+
+- [`packages/sdk/detectors/detector.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/detectors/detector.ts): `Detector`, `DetectorRules`, the defaults and `DetectorError`
+- [`packages/sdk/detectors/labels.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/detectors/labels.ts): the labels, `DetectorAnswer`, `riskOf()` and `checkAnswer()`
+- [`packages/sdk/detectors/chunks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/detectors/chunks.ts): `chunkSpans()`, how long text is split
+- [`packages/sdk/detectors/jev/jev.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/detectors/jev/jev.ts): `jevDetector()`
+- [`packages/sdk/pipeline/detect/detect.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/detect/detect.ts): `detectContent()`, the wait, strips and flags
+- [`packages/sdk/pipeline/detect/asks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/detect/asks.ts): `asksFor()`, what goes into each request
+- [`packages/sdk/pipeline/content.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/content.ts): `signContent()`
+- [`packages/sdk/policy/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schema.ts): `signaturesConfig`, `detectorRules` and the `detector` check
+- [`packages/sdk/policy/state.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/state.ts): how the feed opens, `signatureMode()` and `effectiveDetectorRules()`
+- [`packages/sdk/signatures/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/signatures/schema.ts): the feed format
+- [`packages/sdk/signatures/matcher.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/signatures/matcher.ts): `matchSignatures()`
+- [`packages/sdk/signatures/clean.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/signatures/clean.ts): `cleanForMatch()`
+- [`packages/sdk/signatures/check.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/signatures/check.ts): `checkSignatureInput()`
+- [`packages/sdk/feeds/file-source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/feeds/file-source.ts): `fileSource()`
+- [`packages/sdk/feeds/url-source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/feeds/url-source.ts): `urlSource()`

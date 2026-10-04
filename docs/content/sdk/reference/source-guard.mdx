@@ -1,0 +1,195 @@
+# Source guard
+
+A source guard wraps a tool that brings outside content in, such as a web fetch, a search, an inbox reader, a file reader or an MCP client. It runs after the tool returns and before the agent sees the result. It labels the result with its exact [origin](/concepts/labels), checks the origin's domain, and scans the text for content aimed at an AI. With the origin `"agent"`, it guards the function that receives [messages from other agents](#messages-from-other-agents).
+
+```ts
+type SourceOptions = {
+    type: "source";
+    name?: string;
+    mode?: "block" | "observe";
+    onBlock?: "return" | "throw";
+    origin: string;
+    originOf?: (input: unknown) => string | undefined;
+    carrierOf?: (input: unknown) => unknown;
+    blockDomains?: string[];
+    allowDomains?: string[];
+    onSuspect?: "flag" | "strip" | "block";
+};
+```
+
+## Options
+
+| Option                    | Type                                      | Default  | What it does                                                                                                                                                                                                                              |
+| ------------------------- | ----------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `origin`                  | `string`                                  | required | A kind, such as `"web"`, `"email"`, `"mcp"` or `"file"`, or a full origin, such as `"mcp:crm"`. See [The origin](#the-origin).                                                                                                            |
+| `originOf`                | `(input: unknown) => string \| undefined` | none     | Returns the part of the origin after the kind, such as a sender, from the call's input. Ignored when `origin` is a full origin or `"agent"`. Code only: a policy file can't hold it.                                                      |
+| `carrierOf`               | `(input: unknown) => unknown`             | none     | Only for `origin: "agent"`. Returns the carrier of the message this call receives, from the call's input: a carrier object or a `baggage` header string. Without it, the guard uses the carrier `quard.resume()` came in with. Code only. |
+| `blockDomains`            | `string[]`                                | none     | Domains whose content is withheld. `"evil.com"` matches only that host. `"*.evil.com"` matches it and its subdomains.                                                                                                                     |
+| `allowDomains`            | `string[]`                                | none     | When set, content from every other domain is withheld, and so is content whose origin names no domain. Same patterns as `blockDomains`.                                                                                                   |
+| `onSuspect`               | `"flag" \| "strip" \| "block"`            | `"flag"` | What to do when the scan finds something. Without a value here, the policy file's [strictness preset](/sdk/reference/policy-file#strictness-presets) decides: `"block"` for `strict`, else `"flag"`.                                      |
+| `name`, `mode`, `onBlock` |                                           |          | See [Options every guard has](/sdk/reference/guard#options-every-guard-has).                                                                                                                                                              |
+
+## The origin
+
+Quard builds the result's exact origin, such as `web:pay.evil.com`, from `origin` and the call's input:
+
+1. When `origin` holds a `:`, Quard uses it as it is.
+2. Else, when `originOf(input)` returns a string, the origin is `origin`, a `:`, and that string.
+3. Else, Quard takes the host of the first URL in the input, then the first bare host name, then the domain of the first email address.
+4. Else, it takes the tool's name.
+
+| Call                                             | Options                                                 | Origin             |
+| ------------------------------------------------ | ------------------------------------------------------- | ------------------ |
+| `fetchPage({ url: "https://Pay.Evil.com/inv" })` | `origin: "web"`                                         | `web:pay.evil.com` |
+| `readEmail({ from: "Bob@x.com" })`               | `origin: "email"`                                       | `email:x.com`      |
+| `search({ q: "cats" })`                          | `origin: "web"`                                         | `web:search`       |
+| `readEmail({ from: "bob@x.com" })`               | `origin: "email"` and an `originOf` that returns `from` | `email:bob@x.com`  |
+| any call                                         | `origin: "mcp:crm"`                                     | `mcp:crm`          |
+
+Trust and sensitivity follow from the origin's kind, the part before the first `:`.
+
+| Kind                     | Trust     | Sensitivity |
+| ------------------------ | --------- | ----------- |
+| `web`, `email`, `mcp`    | untrusted | public      |
+| `file`, `agent`          | untrusted | internal    |
+| `user`, `system`, `tool` | trusted   | internal    |
+| any other kind           | untrusted | internal    |
+
+An [origin override](/sdk/reference/configure#origins) changes this for one exact origin, such as `mcp:crm.acme.internal`.
+
+## Messages from other agents
+
+With `origin: "agent"`, the guard reads a message from another agent. The origin comes from the message's label record, not from the steps above:
+
+| The message                                                                             | Origin                              | Label                                                                                                 | `verified` |
+| --------------------------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------- |
+| A [label record](/sdk/reference/messages) of the same run vouches for exactly this text | `agent:<sender>`                    | The trust and sensitivity the sender had read. An origin override for `agent:<sender>` wins over them | `true`     |
+| No carrier, no record, a record of another run, or text that changed on the way         | `agent:unknown` or `agent:<sender>` | Untrusted and internal, the default for agents. Origin overrides don't apply                          | `false`    |
+
+- An unverified message names its sender in the origin when a record was found but didn't match. Its `message` event still says `from: "unknown"`.
+- Each traced value that the record vouches for keeps the label it had in the sender's run. An IBAN the sender read on a web page is still `web:…` here.
+- In a trusted message, a value no record vouched for stays [model-generated](/concepts/multi-agent#values-the-sender-made-up) for the rest of the run.
+- The guard records a `message` [event](/sdk/reference/events#event-types): the sender, the carrier's parent step and label reference, and whether the record verified the message.
+- After the label, the domain check, the scan, the signature feed and the detector run as for any source.
+
+```ts
+// Each queue message holds its carrier in its attributes
+const receive = guard(rawReceive, {
+    type: "source",
+    name: "receive",
+    origin: "agent",
+    carrierOf: (input) => (input as { attributes?: unknown }).attributes,
+});
+```
+
+[Messages between agents](/sdk/reference/messages) covers the carrier and label records, and [Multi-agent](/concepts/multi-agent) explains it without code.
+
+## The domain check
+
+Quard reads a host from the part of the origin after the kind: the domain of an email address, or else a name with a dot in it. Then:
+
+- A host on `blockDomains` fails the check.
+- With `allowDomains` set, a host not on it fails the check, and so does an origin with no host, such as `web:search`.
+- With only `blockDomains` set, an origin with no host can't be judged. The scan reports `unknown_host`, which counts as suspect.
+
+Content that fails the domain check is blocked, whatever `onSuspect` says.
+
+## The scan
+
+Quard scans the text of the result: every string, number and object key. Patterns run on cleaned text, so hidden characters can't split their words. It can find:
+
+| Finding          | What it means                                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`   | Text that speaks to an AI, such as "ignore all previous instructions", "you are now", "system prompt", "dear assistant", or chat markup like `[INST]` |
+| `tool_call_text` | Text shaped like a tool call, such as `"tool_calls":`, `<tool_call>` or `functions.pay(`                                                              |
+| `invisible_text` | Characters that show nothing, such as zero-width spaces, or styling that hides text, such as `display: none` or `font-size: 0`                        |
+| `unknown_host`   | The origin names no host while `blockDomains` is set                                                                                                  |
+
+The exact patterns are in [`scan.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/scan.ts).
+
+## What it decides
+
+| Decision | When                                                                              | What the agent gets                                                                                                                                                                       |
+| -------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pass`   | The domain check passed and the scan found nothing                                | The result as it is                                                                                                                                                                       |
+| `flag`   | The scan found something and `onSuspect` is `"flag"`                              | The result as it is. Its label carries the findings as flags                                                                                                                              |
+| `strip`  | The scan found something and `onSuspect` is `"strip"`                             | The result with hidden characters removed, and without the lines that look like instructions, a tool call or styling that hides text. What the scan still finds after that stays as flags |
+| `block`  | The domain check failed, or the scan found something and `onSuspect` is `"block"` | A refusal with the reason `content_blocked`. The tool did run, but the agent never sees its result                                                                                        |
+
+Flags matter later in the run. An action guard's `from` rule ignores flagged content as a source of trust, and a `neverSeen` rule treats a value first seen in flagged content as never seen. Calls made after the run read flagged content are recorded with `flagged: true`.
+
+The decision is recorded as a `decision` event with `guard: "source"` and `rule: "source"`. Its `reason` lists the findings, comma-separated.
+
+## After the scan
+
+When the source guard didn't block, two more checks look at the result:
+
+1. The [signature feed](/sdk/reference/detector#the-signature-feed), with the signatures that check `content`. A `block` signature withholds the result, with the reason `content_blocked` from the `signature` guard. A `flag` signature adds the flag `signature:<id>`.
+2. The [detector](/sdk/reference/detector#the-detector), when one is set and the result is labeled public. It can drop chunks likely to be a prompt injection, and add flags such as `detector:prompt_injection`, or `detector:unchecked` for parts it couldn't check.
+
+Then the result joins what the run has read, with its label, and a `content` event is recorded. Values that the call's own arguments hold aren't traced to this result, so a value doesn't gain this origin by being echoed back.
+
+## Observe mode
+
+With `mode: "observe"`, the decision is recorded with `enforced: false` and changes nothing. The result passes as it is, its label has no flags, and the signature feed and the detector only record what they would do.
+
+## Reason codes
+
+| Reason            | Guard in the refusal | When                                                                           |
+| ----------------- | -------------------- | ------------------------------------------------------------------------------ |
+| `content_blocked` | `source`             | The domain check failed, or the scan found something with `onSuspect: "block"` |
+| `content_blocked` | `signature`          | A `block` signature from the feed matched the result                           |
+
+The agent reads:
+
+```text
+Blocked by the source guard: the content looked unsafe. The fetchPage result was withheld. Do not retry it; tell the user what was blocked.
+```
+
+## Examples
+
+```ts
+import { guard } from "quard";
+
+// A web page: untrusted and public. Strip what looks like instructions.
+const fetchPage = guard(rawFetchPage, {
+    type: "source",
+    name: "fetchPage",
+    origin: "web",
+    blockDomains: ["*.evil-pages.net"],
+    onSuspect: "strip",
+});
+
+// Reads mail from one sender. The origin would be the sender's domain,
+// email:acme.com; originOf keeps the whole address: email:bob@acme.com
+const readEmail = guard(rawReadEmail, {
+    type: "source",
+    name: "readEmail",
+    origin: "email",
+    originOf: (input) => (input as { from?: string }).from,
+});
+
+// One MCP server, with a full origin
+const crmLookup = guard(rawCrmLookup, { type: "source", name: "crmLookup", origin: "mcp:crm.acme.internal" });
+```
+
+A tool without a source guard has its result labeled `tool:<name>`, which is trusted and internal by default.
+
+## Related
+
+- [Hidden instructions](/sdk/examples/hidden-instructions): a source guard against a page with hidden instructions.
+- [Agents in two processes](/sdk/examples/agents-in-two-processes): a receive guard with `origin: "agent"`.
+- [Labels and trust](/concepts/labels): origins, trust and sensitivity.
+- [Labels and value tracing](/sdk/internals/labels): how labels work in the code.
+
+## Source
+
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): `SourceOptions`
+- [`packages/sdk/guards/source/source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/source.ts): `originFor()`, `checkSource()` and `receiveMessage()`
+- [`packages/sdk/context/carrier.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/carrier.ts): `incomingMessage()`, which finds the carrier and its record
+- [`packages/sdk/guards/source/scan.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/scan.ts): `scanText()` and its patterns
+- [`packages/sdk/guards/source/strip.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/source/strip.ts): `stripSuspect()`
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): `finishOutput()`, which runs the guard on the result
+- [`packages/sdk/pipeline/content.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/content.ts): the signature and detector checks on content
+- [`packages/shared/labels/mapping.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/mapping.ts): the default trust and sensitivity of each kind
+- [`packages/shared/normalize/domain.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/normalize/domain.ts): `hostMatches()`, the domain patterns

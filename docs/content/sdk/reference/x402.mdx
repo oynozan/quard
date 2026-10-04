@@ -1,0 +1,399 @@
+# x402 payments
+
+Three functions cover [x402](https://docs.x402.org) payments. `quard.x402()` puts the x402 guard on an x402 client, so every payment is checked before the wallet signs it. `quard.x402Fetch()` and `quard.x402Mcp()` record each payment, over HTTP and over MCP, and refuse to send a payment no x402 guard checked. [Payments (x402)](/concepts/payments) explains the idea without code.
+
+```ts
+quard.x402(client, options);
+quard.x402Fetch(fetch);
+quard.x402Mcp(mcpClient);
+```
+
+## Set it up
+
+```ts
+import { x402Client } from "@x402/core/client";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { guard, quard } from "quard";
+
+const wallet = quard.x402(new x402Client() /* your schemes and signer */, {
+    type: "x402",
+    name: "wallet",
+    maxPerRun: 2,
+    maxPaymentsPerRun: 10,
+    untrusted: "block",
+});
+const paidFetch = wrapFetchWithPayment(quard.x402Fetch(fetch), wallet);
+
+const fetchPaid = guard(async ({ url }: { url: string }) => (await paidFetch(url)).text(), {
+    type: "limit",
+    name: "fetchPaid",
+});
+```
+
+- `quard.x402Fetch()` goes under the x402 client, as the `fetch` that `wrapFetchWithPayment()` calls. There it sees the price, the signed payment and the settlement.
+- The paid fetch runs inside a guarded tool, so a refused payment comes back to the model as the tool's result. See [When a payment is refused](#when-a-payment-is-refused).
+- `@x402/core` is an optional peer dependency of `quard`, at `^2.28.0`. Quard needs it only when your app pays.
+
+## quard.x402()
+
+```ts
+function x402<C extends X402Client>(client: C, options: X402Options): C;
+
+type X402Client = {
+    onBeforePaymentCreation(hook: BeforePayment): unknown;
+    onAfterPaymentCreation(hook: AfterPayment): unknown;
+};
+```
+
+Adds the x402 guard to `client` and returns the same client. Any client with these two hooks works, such as `x402Client` from `@x402/core/client`.
+
+- In `onBeforePaymentCreation`, after the server names its price and the client picks a payment option, the guard checks the payment. A refused payment is aborted there, so the wallet never signs it.
+- In `onAfterPaymentCreation`, the guard marks the signed payment as checked, with the host it checked it for. `quard.x402Fetch()` and `quard.x402Mcp()` send only payments marked this way. The process keeps the last 10,000.
+- Before each payment, Quard rereads a changed [policy file](#in-the-policy-file).
+- With the control link on, the guard's rules go to `control` with the rules of guarded tools, under the guard's `name`. Each rule carries its own mode. See [Rules from code](/guides/settings#rules-from-code).
+
+Pass x402 options only to `quard.x402()`. `guard()` throws for them.
+
+| Error message                                                                         | Cause                                                                                                        |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `quard.x402() takes options with type: "x402"`                                        | `options.type` isn't `"x402"`                                                                                |
+| `x402 guard: <option> must be a number of 0 or more`                                  | `maxPerPayment`, `maxPerRun`, `maxPerDay`, `maxPaymentsPerRun` or `approveAbove` is negative or not a number |
+| `x402 guard: the assetCaps entry for <asset> must be atomic units, such as "1000000"` | An `assetCaps` value isn't a whole number of 1 to 78 digits, written as text                                 |
+| `An x402 guard wraps an x402 client: use quard.x402(client, options)`                 | `guard()` got options with `type: "x402"`                                                                    |
+
+## Options
+
+```ts
+type X402Options = {
+    type: "x402";
+    name?: string;
+    mode?: "block" | "observe";
+    onBlock?: "return" | "throw";
+    maxPerPayment?: number;
+    maxPerRun?: number;
+    maxPerDay?: number;
+    maxPaymentsPerRun?: number;
+    allowHosts?: string[];
+    blockHosts?: string[];
+    untrusted?: "block" | "allow";
+    assetCaps?: Record<string, string>;
+    fleetCheck?: boolean;
+    approveAbove?: number;
+};
+```
+
+| Option              | Type                     | Default     | What it does                                                                                                                        | Rule name              |
+| ------------------- | ------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `maxPerPayment`     | `number`                 | 1, observe  | The most one payment may cost, in USD                                                                                               | `max-per-payment`      |
+| `maxPerRun`         | `number`                 | 5, observe  | The most the guard's payments in one run may add up to, in USD                                                                      | `max-per-run`          |
+| `maxPerDay`         | `number`                 | 50, observe | The most the guard's payments may add up to per UTC day, in USD. With the control link on, this covers every process of the project | `max-per-day`          |
+| `maxPaymentsPerRun` | `number`                 | none        | The most payments in one run, whatever the token. It catches loops                                                                  | `max-payments-per-run` |
+| `allowHosts`        | `string[]`               | none        | Only these hosts may be paid. `"acme.com"` matches only that host. `"*.acme.com"` matches it and its subdomains                     | `allow-hosts`          |
+| `blockHosts`        | `string[]`               | none        | These hosts are never paid. Patterns work as in `allowHosts`                                                                        | `block-hosts`          |
+| `untrusted`         | `"block" \| "allow"`     | on, observe | `"block"` refuses a host or payee first seen in untrusted content. `"allow"` turns the check off                                    | `untrusted`            |
+| `assetCaps`         | `Record<string, string>` | none        | Caps for tokens with no known USD value: the token's address, then the cap in atomic units, such as `"1000000"`                     | `asset-caps`           |
+| `fleetCheck`        | `boolean`                | on, observe | Checks the payee against the [fleet check](#the-fleet-check-on-payees). `false` turns it off                                        | `fleet-check`          |
+| `approveAbove`      | `number`                 | none        | Asks a person for a payment above this many USD                                                                                     | `approve-above`        |
+| `name`              | `string`                 | `"x402"`    | The guard's name. Decisions carry it as `tool`, the policy file lists the guard under it, and totals count under it                 |                        |
+| `mode`              | `"block" \| "observe"`   | `"block"`   | The mode of the options you set                                                                                                     |                        |
+| `onBlock`           | `"return" \| "throw"`    | `"return"`  | `"throw"` makes a guarded tool throw a [`GuardBlockedError`](/sdk/reference/refusals#guardblockederror) for a refused payment       |                        |
+
+### Defaults and modes
+
+- An option you set runs in the guard's `mode`, which is `"block"` unless you change it.
+- `maxPerPayment`, `maxPerRun`, `maxPerDay`, `untrusted` and `fleetCheck` are on even when you leave them out. Those product defaults run in observe mode: they record "would block" and let the payment through.
+- To make a default block, set it: `maxPerRun: 5`, `untrusted: "block"` or `fleetCheck: true`. It then follows `mode`.
+- With `mode: "observe"`, every rule observes, apart from the [amount check](#amounts-and-usd).
+
+## The checks
+
+Before each payment, the guard runs its rules in this order and records each one as a `decision` event, allows included:
+
+| Rule                   | Fails when                                                                             | Reason                        |
+| ---------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| `valid-amount`         | The guard can't read the amount. Always blocks, in any mode                            | `x402_invalid_amount`         |
+| `max-per-payment`      | The payment's USD value is above `maxPerPayment`                                       | `x402_over_payment_limit`     |
+| `asset-caps`           | The token has no known USD value, has a cap in `assetCaps`, and the amount is above it | `x402_unknown_value_over_cap` |
+| `block-hosts`          | The host matches `blockHosts`, or the price names no host                              | `x402_host_blocked`           |
+| `allow-hosts`          | The host doesn't match `allowHosts`, or the price names no host                        | `x402_host_blocked`           |
+| `untrusted`            | The paid URL, its host or the payee first appeared in untrusted content                | `x402_untrusted_payee`        |
+| `max-payments-per-run` | This payment would take the run's count above `maxPaymentsPerRun`                      | `x402_too_many_payments`      |
+| `max-per-run`          | This payment would take the run's USD total above `maxPerRun`                          | `x402_over_run_limit`         |
+| `max-per-day`          | This payment would take the day's USD total above `maxPerDay`                          | `x402_over_day_limit`         |
+| `fleet-check`          | `control` quarantined the payee                                                        | `x402_payee_quarantined`      |
+| `approve-above`        | The payment's USD value is above `approveAbove`. The decision is `ask`                 | `approval_required`           |
+
+Then:
+
+1. **Decide.** The strictest enforced result wins: block, then ask, then allow. Rules in observe mode never count.
+2. **Ask.** On ask, the guard asks a person before the wallet signs, because a signed payment soon expires. See [Approval above an amount](#approval-above-an-amount).
+3. **Count.** The guard adds the payment to the run's totals, then to the day's total, then reports the payee to `control`. Each of these can still refuse the payment, such as when another process reached a cap first. When the day cap or the fleet check refuses it, it is taken back out of the run's totals, unless `control` keeps them.
+4. **Allow or refuse.** An allowed payment goes on to the signer. A refused one is aborted. See [When a payment is refused](#when-a-payment-is-refused).
+
+### Amounts and USD
+
+- The guard reads the amount of the option the client picked: `amount` in x402 v2, `maxAmountRequired` in v1. It reads what a signer reads: a safe whole number, or text that `BigInt` reads, such as `"1000000"` or `"0xF4240"`. The amount must not be negative and must have at most 78 digits.
+- An amount it can't read is refused by `valid-amount` in any mode, because a cap can't hold for it. The refusal records the amount as `"0"`.
+- The USD value comes from a fixed list of stablecoins: USDC on Base, Base Sepolia, Ethereum, Polygon, Avalanche, Solana and Solana devnet. Their amounts are divided by 10^6. EVM addresses match in any letter case. Solana addresses match exactly.
+- A token not on the list has no USD value. The USD caps and `approveAbove` skip it. `maxPaymentsPerRun`, the host and payee checks and `assetCaps` still apply.
+- A payment of $0 passes the USD caps. A total equal to a cap passes. Only a total above it is refused.
+
+### Hosts
+
+- The host is the host of the paid URL the price names: `resource.url` in x402 v2, the option's `resource` in v1. It is lowercased, without a trailing dot.
+- A price that names no URL has no host. `allowHosts` and `blockHosts` refuse it.
+- The guard checks the host the server names. `quard.x402Fetch()` then sends the payment only to that host. See [quard.x402Fetch()](#quardx402fetch).
+
+### Untrusted payees
+
+The guard looks for where the run first saw the paid URL, its host and the payee address, as the egress guard does for [untrusted destinations](/sdk/reference/egress-guard#untrusted-destinations):
+
+- For the URL and host, the strongest kind of match decides: the exact value first, then the same host, then the same main domain. For a host in `allowHosts`, a match on the main domain alone is ignored.
+- For the payee, only an exact match counts.
+- If that first appearance was untrusted content, such as a web page, the payment fails the check.
+- A URL, host or payee the run never saw passes the check.
+
+### Totals
+
+- Totals count per guard `name` and per run, across the run's agents. Two guards with the same name share their totals.
+- In a run that spans processes, after [`quard.inject()` or `quard.resume()`](/sdk/reference/messages), `control` keeps the run's totals, as for the limit guard's [per-run limits](/sdk/reference/limit-guard#per-run-limits).
+- `maxPerDay` counts per UTC day, the same way as the limit guard's [per-day limits](/sdk/reference/limit-guard#per-day-limits). With the control link on, `control` keeps one total for the whole project. Without it, the total covers this process only.
+- A payment counts after its checks and any approval, just before it is signed. It still counts if the server later turns it down.
+- Outside `quard.run()`, each payment joins the run where `quard.x402Fetch()` or `quard.x402Mcp()` saw its price. Without either, each payment outside a run starts a new run, so per-run totals can't add up.
+
+### The fleet check on payees
+
+The fleet check works as the limit guard's [fleet check](/sdk/reference/limit-guard#the-fleet-check), with the payee address as the value.
+
+- The value is `wallet:` and the `payTo` address. EVM addresses are lowercased. An address that isn't 20 to 100 letters and digits isn't checked.
+- Wallet addresses are public on chain, so they go to `control` in clear, not hashed.
+- Before the payment, Quard checks the payee against the quarantine list synced from `control`. Just before signing, it reports the payee, and `control` answers with what it quarantines now.
+- A refused payment still reports its payee, marked as blocked.
+- It needs the [control link](/sdk/reference/configure#uploads-and-the-control-link). Without it, the rule records `allow`.
+- A quarantined payee stays blocked until someone marks it as known. See [Quarantine](/guides/summary#quarantine).
+
+### Approval above an amount
+
+`approveAbove` asks the same people as the [approval guard](/sdk/reference/approval-guard#who-answers): the `approver` set in code, else the dashboard through the control link.
+
+- The request's `tool` is the guard's name. Its `input` holds `host`, `resource`, `payTo`, `amount`, `asset`, `usd`, `network` and `scheme`.
+- The guard sets no approval timeout.
+- With no approver and no control link, the payment is refused with `approval_unavailable`.
+- After a yes, the guard runs its checks again, without `approveAbove`, and records them again. A block that came up while it waited still refuses the payment.
+- An "always" answer covers later payments with the same agent, guard name and payment details.
+- Answers are recorded as decisions from the `approval` guard. See [Decision records](/sdk/reference/approval-guard#decision-records).
+
+## Observe mode
+
+A rule in observe mode records "would block" or "would ask", with `enforced: false`, and lets the payment through. Payments still count toward the totals. When counting passes a cap in observe mode, Quard records one "would block" for it, unless the checks before already recorded one for that rule.
+
+## When a payment is refused
+
+The guard records the refusal, then aborts the payment:
+
+- a `decision` event for the rule that refused it, with `enforced: true`;
+- a `payment` event with the stage `refused` and the reason code;
+- with the fleet check on, a report of the payee to `control`, marked as blocked.
+
+The refusal text has a fixed shape:
+
+```text
+Blocked by the x402 guard: <why>. The x402 payment did NOT happen. Do not retry it.
+```
+
+The [reason codes](#reason-codes) give each `<why>`. How the model gets the text depends on where the paid call runs.
+
+### Inside a guarded tool
+
+When the x402 client's error leaves a tool wrapped with [`guard()`](/sdk/reference/guard), the guarded function returns the refusal instead. It is a [`GuardRefusal`](/sdk/reference/refusals#guardrefusal) with `guard: "x402"` and the x402 guard's name as `tool`. The `tool_call` event has the status `blocked`. Your loop sends the refusal back to the model like any tool result.
+
+- `onBlock` comes from the x402 guard's options. With `"throw"`, the guarded function throws a `GuardBlockedError` instead.
+- The payment must happen inside the tool's own call, so Quard can tie the two together.
+- A tool that catches the error itself and returns something else returns what it returned.
+
+### Outside a guarded tool
+
+The x402 client throws an `Error`. `@x402/core` puts `Payment creation aborted: ` before the refusal text, and `@x402/fetch` adds `Failed to create payment payload: ` in front of that. `@x402/mcp` passes the error on as it is. Catch the error and pass its message to the model as the tool's result:
+
+```ts
+let output: string;
+try {
+    output = await (await paidFetch(url)).text();
+} catch (error) {
+    output = (error as Error).message;
+}
+```
+
+## quard.x402Fetch()
+
+```ts
+function x402Fetch(fetch: Fetch): Fetch;
+
+type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+```
+
+Returns a `fetch` that records x402 payments and calls the `fetch` you pass in. Put it under the x402 client, as in [Set it up](#set-it-up).
+
+- **A request with no payment header** goes out as it is. When the answer is a `402`, Quard reads the price: the v2 `PAYMENT-REQUIRED` header first, else a v1 price in the JSON body. It records a `challenged` payment event, using the first option the price lists, and keeps the price and the run for that URL.
+- **A request with a payment header**, `PAYMENT-SIGNATURE` or v1's `X-PAYMENT`, goes out only when an x402 guard checked that exact payment for the request's host. Quard records `signed`, sends it, and reads the settlement from `PAYMENT-RESPONSE` or `X-PAYMENT-RESPONSE`.
+- The response comes back unchanged.
+
+How a paid request ends:
+
+| What the server answers            | Stage     | Recorded with                                                       |
+| ---------------------------------- | --------- | ------------------------------------------------------------------- |
+| A settlement with `success: true`  | `settled` | `transaction`, and `delivered`: `true` when the status is below 400 |
+| A settlement with `success: false` | `failed`  | `reason`: the settlement's `errorReason`, else `settle_failed`      |
+| No settlement, and a new `402`     | `failed`  | `reason`: the new price's `error`, else `payment_rejected`          |
+| No settlement, any other status    | none      |                                                                     |
+
+A settled payment whose response is an error is **paid, not delivered**: `delivered: false`. A settlement that names an `amount`, as an `upto` payment does, records that amount.
+
+### Payments that are not sent
+
+A payment no x402 guard checked never leaves the process, and neither does a payment checked for another host. The request gets a `403` response with the header `x-should-retry: false` and this JSON body:
+
+| Field           | Value                      |
+| --------------- | -------------------------- |
+| `error.type`    | `"quard_blocked"`          |
+| `error.code`    | `"unguarded_x402"`         |
+| `error.message` | One of the two texts below |
+| `error.param`   | `null`                     |
+
+```text
+Blocked by Quard: no x402 guard checked this payment. The x402 payment did NOT happen. Do not retry it.
+Blocked by Quard: the x402 guard checked this payment for another host. The x402 payment did NOT happen. Do not retry it.
+```
+
+The first is for a payment no guard checked. Quard records it as `refused` with the reason `unguarded`, and records an `unguarded_x402` [warning](/sdk/reference/events#warning) once per process. The second is for a host other than the one checked, recorded as `refused` with the reason `host_mismatch`. It is a `403`, not a `402`, because a `402` would ask the client to pay again.
+
+A payment header Quard can't read is not sent either. Quard records only the warning, once per process.
+
+## quard.x402Mcp()
+
+```ts
+function x402Mcp<T extends McpToolClient>(client: T): T;
+
+type McpToolClient = {
+    callTool(params: { name: string; _meta?: Record<string, unknown> }, ...rest: never[]): Promise<unknown>;
+    getServerVersion?(): { name?: string } | undefined;
+};
+```
+
+Wraps an MCP client, such as the `Client` from `@modelcontextprotocol/sdk`, and returns it with a new `callTool()`. Every other method and property passes through. Pay through an x402 MCP client with a guarded x402 client:
+
+```ts
+import { x402Client } from "@x402/core/client";
+import { x402MCPClient } from "@x402/mcp";
+
+const tools = new x402MCPClient(quard.x402Mcp(mcpClient), quard.x402(new x402Client(), { type: "x402" }));
+```
+
+A paid MCP tool sends its price as an error result, or as a JSON-RPC error with code `402`. The payment travels in `_meta["x402/payment"]` and the settlement comes back in the result's `_meta["x402/payment-response"]`.
+
+- **A call with no payment** goes through. When the result is an error result, Quard reads a price from its `structuredContent`, else from the JSON text of its first content item. When the call throws a JSON-RPC error with code `402`, it reads the price from the error's `data`, then throws the error on. A price found is recorded as `challenged`.
+- **A call with a payment** runs only when an x402 guard checked that exact payment. Quard records `signed`, makes the call, and reads the settlement. A settled result that is an error result is recorded with `delivered: false`. An error result with a new price, or a thrown `402` error, is recorded as `failed`.
+- **A payment no guard checked** is never sent. The call returns an error result, `isError: true`, whose text is the "no x402 guard checked this payment" text above. Quard records it as `refused` with the reason `unguarded`, and warns once per process.
+- The host in these records is the server's name from `getServerVersion()`, else `mcp`. The paid URL is the `resource.url` the price names, else `mcp://tool/<name>`.
+- `quard.x402Mcp()` doesn't compare hosts. The guard's host rules apply to the host of the URL the price names, such as `tool` for `mcp://tool/weather`.
+
+## What Quard records
+
+Each payment step is a [`payment` event](/sdk/reference/events#payment), and each rule is a [`decision` event](/sdk/reference/events#decision) with `guard: "x402"`.
+
+| Stage        | Recorded by                                | When                                                                        |
+| ------------ | ------------------------------------------ | --------------------------------------------------------------------------- |
+| `challenged` | `quard.x402Fetch()`, `quard.x402Mcp()`     | A server named a price. Prices the guard went on to refuse are recorded too |
+| `refused`    | the x402 guard, `x402Fetch()`, `x402Mcp()` | The guard refused the payment before signing, or a payment wasn't sent      |
+| `signed`     | `quard.x402Fetch()`, `quard.x402Mcp()`     | A checked payment was sent                                                  |
+| `settled`    | `quard.x402Fetch()`, `quard.x402Mcp()`     | The server settled it                                                       |
+| `failed`     | `quard.x402Fetch()`, `quard.x402Mcp()`     | Settling failed, or the server turned the payment down                      |
+
+- The steps of one paid request, `signed` then `settled` or `failed`, share one step id. A `challenged` event has its own. A `refused` event from the guard has the step id of the guard's decisions.
+- A step joins the current run. Outside a run, it joins the run that saw the price for the same URL, or the same MCP server and tool. Otherwise it starts a new run under the agent `default`. Quard keeps prices for up to 1,000 URLs and tools.
+- The guard's checks outside a run join the run of the newest price that lists the same payment option, preferring one for the same paid URL.
+- Without `quard.x402Fetch()` or `quard.x402Mcp()`, Quard records only the guard's decisions and refusals.
+
+Here is a real `refused` event from the [paid link in a poisoned page](/sdk/examples/paid-link-in-a-page) example:
+
+```json
+{
+    "type": "payment",
+    "runId": "2875dc152b49a12cb7522750a00dc430",
+    "stepId": "e0947f1d4cc47183",
+    "agent": "weather",
+    "at": "2026-10-04T04:14:44.037Z",
+    "stage": "refused",
+    "host": "forecast-pro.example",
+    "resource": "https://forecast-pro.example/berlin/tomorrow",
+    "x402Version": 2,
+    "scheme": "exact",
+    "network": "eip155:84532",
+    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "amount": "10000",
+    "usd": 0.01,
+    "payTo": "0xBAD0000000000000000000000000000000000001",
+    "reason": "x402_untrusted_payee"
+}
+```
+
+The dashboard shows payment steps in the [run view](/guides/runs#read-a-run), and spend in the runs list, the [overview](/guides/overview) and the [Summary](/guides/summary) page.
+
+## Reason codes
+
+| Reason                        | Rule                         | Refusal text, after "Blocked by the x402 guard:"                            |
+| ----------------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| `x402_over_payment_limit`     | `max-per-payment`            | the payment is over the limit for one payment                               |
+| `x402_over_run_limit`         | `max-per-run`                | the payment is over the run limit                                           |
+| `x402_over_day_limit`         | `max-per-day`                | the payment is over the daily limit                                         |
+| `x402_too_many_payments`      | `max-payments-per-run`       | this run made too many payments                                             |
+| `x402_host_blocked`           | `allow-hosts`, `block-hosts` | this host may not be paid                                                   |
+| `x402_untrusted_payee`        | `untrusted`                  | the host or payee first appeared in untrusted content                       |
+| `x402_payee_quarantined`      | `fleet-check`                | the payee is new and many runs paid it at once, so it is blocked everywhere |
+| `x402_unknown_value_over_cap` | `asset-caps`                 | the amount is over the cap for this token                                   |
+| `x402_invalid_amount`         | `valid-amount`               | the payment amount could not be read                                        |
+
+A payment that asked a person and didn't get a yes is refused with the approval step's reason, such as `approval_denied`, in the same x402 shape: "Blocked by the x402 guard: a human denied it. The x402 payment did NOT happen. Do not retry it." See [Reason codes](/sdk/reference/refusals#reason-codes).
+
+## In the policy file
+
+A [policy file](/sdk/reference/policy-file) can set the guard's options under `guards` and the guard's `name`. The first entry there with `type: "x402"` replaces the options in code, from the next payment on. A list with no x402 entry, an empty one included, leaves the options in code in force.
+
+```json
+{
+    "version": "2026-10-04.1",
+    "guards": {
+        "wallet": [{ "type": "x402", "maxPerRun": 1, "maxPaymentsPerRun": 5, "untrusted": "block" }]
+    }
+}
+```
+
+The file takes every option. `maxPaymentsPerRun` must be a whole number there.
+
+## Related
+
+- [Payments (x402)](/concepts/payments): what the guard stops, without code.
+- [A paid link in a poisoned page](/sdk/examples/paid-link-in-a-page): the `untrusted` check, observed and then blocking.
+- [A paid API in a loop](/sdk/examples/paid-api-in-a-loop): `maxPerRun` and `maxPaymentsPerRun` in a loop.
+- [x402 payments internals](/sdk/internals/payments): the code behind this page.
+- [Events](/sdk/reference/events#payment): every field of a payment event.
+
+## Source
+
+- [`packages/sdk/guards/x402/x402.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/x402.ts): `x402()`, the hooks and the refusal
+- [`packages/sdk/guards/x402/client.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/client.ts): `X402Client` and the hook contexts
+- [`packages/sdk/guards/x402/settings.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/settings.ts): the defaults, the modes and `checkX402Options()`
+- [`packages/sdk/guards/x402/checks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/checks.ts): `checkPayment()`, every rule
+- [`packages/sdk/guards/x402/count.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/count.ts): `countPayment()`, run and day totals and the payee report
+- [`packages/sdk/guards/x402/payment.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/payment.ts): `readPayment()`, the amount, host and paid URL
+- [`packages/sdk/guards/x402/frame.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/frame.ts): how a guarded tool returns a refused payment
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): `X402Options`
+- [`packages/sdk/x402/fetch/fetch.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/fetch/fetch.ts): `createX402Fetch()`, which is `quard.x402Fetch()`
+- [`packages/sdk/x402/mcp/mcp.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/mcp/mcp.ts): `x402Mcp()` and `McpToolClient`
+- [`packages/sdk/x402/record/payments.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/record/payments.ts): payment events and the run a step joins
+- [`packages/sdk/x402/checked.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/checked.ts): the payments a guard checked
+- [`packages/sdk/x402/refusal.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/refusal.ts): the texts for payments that are not sent
+- [`packages/shared/x402/read.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/x402/read.ts): reading prices, payments and settlements
+- [`packages/shared/x402/amount.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/x402/amount.ts): `atomicAmount()`
+- [`packages/shared/x402/stablecoins.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/x402/stablecoins.ts): the stablecoin list and `usdValue()`
+- [`packages/shared/refusals/templates.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/refusals/templates.ts): the refusal texts

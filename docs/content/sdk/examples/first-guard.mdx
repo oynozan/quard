@@ -1,0 +1,144 @@
+import { Steps } from "nextra/components";
+
+# 1. Your first guard
+
+A support assistant can text customers. If it misreads a request or gets stuck in a loop, it could flood someone's phone. This example caps texts at two per run, asks the model for three, and shows how the model reacts when the third is refused. Then it runs the same task with `onBlock: "throw"`, which stops the whole run instead.
+
+## Run it
+
+```sh
+node sandbox/01-first-guard.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows.
+
+## Step by step
+
+<Steps>
+
+### Wrap the OpenAI client
+
+```ts
+// A copy of the OpenAI client, with Quard watching every call
+const client = quard.wrap(new OpenAI());
+```
+
+[`quard.wrap()`](/sdk/reference/quard) returns a copy of the client. Every Responses API call made with the copy passes through Quard, which labels what the model reads and checks the tool calls it asks for. The agent loop makes all its model calls with this copy. See [The wrapped client](/sdk/internals/monitor) for how it works.
+
+### Write the tool
+
+```ts
+async function sendSms(input: { to: string; text: string }) {
+    return `sent "${input.text}" to ${input.to}`;
+}
+```
+
+A plain function with nothing about Quard in it. It only pretends to send a text. The model learns about the tool from its definition in `lib/tools.ts`.
+
+### Put a limit guard around it
+
+```ts
+// `name` is the tool name the model sees
+const limitedSms = guard(sendSms, { type: "limit", name: "sendSms", maxCallsPerRun: 2 });
+```
+
+[`guard()`](/sdk/reference/guard) returns a new function that takes the same input. Every call to it goes through the same [nine steps](/concepts/guards#what-happens-on-every-call), which check the call before the tool may run and record what happened. `name` must be the tool name the model sees. `guard()` throws without it.
+
+A [limit guard](/sdk/reference/limit-guard) with `maxCallsPerRun: 2` counts the calls to `sendSms` in the current run and blocks the one that would be third. Only calls that run are counted, so a blocked call doesn't use up the limit.
+
+### Start a run
+
+```ts
+// quard.run() groups the calls into one run, and limits count per run
+await quard.run({ agent: "assistant" }, () => runAgent(client, PROMPT, { sendSms: limitedSms }));
+```
+
+[`quard.run()`](/sdk/reference/quard) starts a run: one task from start to finish, here for an agent named `assistant`. Every model call and tool call inside the function belongs to it, so the limit counts across the whole task. `runAgent` is the sandbox's agent loop. It gets the guarded function, never `sendSms` itself.
+
+### The third text is refused
+
+The task asks for three texts: `'Hi'`, `'Your order shipped'` and `'Thanks!'`. The first two pass the limit and run. On the third, the limit guard blocks: `sendSms` never runs, and the guarded function returns a [refusal](/sdk/reference/refusals) instead of a result. The agent loop in `lib/agent.ts` checks every result for one:
+
+```ts
+const result = tool === undefined ? `Unknown tool: ${call.name}` : await tool(JSON.parse(call.arguments) as never);
+if (isGuardRefusal(result)) {
+    console.log(`    ✗ blocked by the ${result.guard} guard (${result.reason})`);
+    return result.text;
+}
+```
+
+The model reads the refusal's text as the tool's result:
+
+```text
+Blocked by the limit guard: a limit for this run was reached. The sendSms call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+The text comes from a fixed template. It names the guard, the reason and the tool, and never quotes the arguments. The model then tells the user what went out and what was blocked.
+
+### Stop the run instead
+
+```ts
+const strictSms = guard(sendSms, { type: "limit", name: "sendSms", maxCallsPerRun: 2, onBlock: "throw" });
+try {
+    await quard.run({ agent: "assistant" }, () => runAgent(client, PROMPT, { sendSms: strictSms }));
+} catch (error) {
+    if (!(error instanceof GuardBlockedError)) {
+        throw error;
+    }
+    console.log(`  The run stopped: GuardBlockedError (${error.reason})`);
+}
+```
+
+With `onBlock: "throw"`, a block throws a `GuardBlockedError` instead of returning a refusal. The error leaves the tool, the agent loop and `quard.run()`, and the example catches it. `error.reason` holds the same reason code, `limit_reached`, and `error.refusal` holds the refusal. Quard records that the run ended with the status `blocked`, in a `run_finished` [event](/sdk/reference/events).
+
+This is a new run, so the count starts from zero and the first two texts go out again. The model never gets another turn, so there is no answer to print.
+
+</Steps>
+
+## What you'll see
+
+```text
+A limit of two texts per run
+  User: Text +1 555 0100 three separate messages: 'Hi', 'Your order shipped' and 'Thanks!'
+  → sendSms {"to":"+1 555 0100","text":"Hi"}
+    ✓ sent "Hi" to +1 555 0100
+  → sendSms {"to":"+1 555 0100","text":"Your order shipped"}
+    ✓ sent "Your order shipped" to +1 555 0100
+  → sendSms {"to":"+1 555 0100","text":"Thanks!"}
+    ✗ blocked by the limit guard (limit_reached)
+  Model: …
+
+The same limit with onBlock: "throw"
+  User: Text +1 555 0100 three separate messages: 'Hi', 'Your order shipped' and 'Thanks!'
+  → sendSms {"to":"+1 555 0100","text":"Hi"}
+    ✓ sent "Hi" to +1 555 0100
+  → sendSms {"to":"+1 555 0100","text":"Your order shipped"}
+    ✓ sent "Your order shipped" to +1 555 0100
+  → sendSms {"to":"+1 555 0100","text":"Thanks!"}
+  The run stopped: GuardBlockedError (limit_reached)
+```
+
+The model writes the arguments and the answer, so both change from run to run. It may write the number as `+15550100`, for example. `…` stands for the model's answer, which you'll read in its own words. Whatever it writes, the limit guard blocks every text after the second in a run.
+
+## Try this
+
+- **Change the cap.** With `maxCallsPerRun: 3`, all three texts go out. With `1`, only the first one does.
+- **Watch before you block.** Add `mode: "observe"` to the limit. The third text goes out, and Quard records that the guard would have blocked it. To print that record, add `quard.configure({ onEvent: printEvent })` with `printEvent` from `lib/show.ts`. [Example 6](/sdk/examples/observe-mode) does the same.
+- **Share the count.** Call `runAgent` twice inside one `quard.run()`. The limit covers the whole run, so the second task can't send any texts.
+
+## Use it in your app
+
+- Put a limit guard on tools that cost money or reach people, such as texts, emails and refunds.
+- Wrap each task in `quard.run()`, so per-run limits and labels cover the whole task, across every agent in it.
+- Keep the default, `onBlock: "return"`, when the model should explain the block to the user. Use `"throw"` when a block means the task must stop, and catch `GuardBlockedError` where you start the task.
+- Send the refusal's `text` back to the model, as `lib/agent.ts` does. If your loop turns tool results into JSON instead, a refusal becomes an object with `blocked`, `guard`, `reason` and `message`.
+
+## Source
+
+- [`sandbox/01-first-guard.ts`](https://github.com/oynozan/quard/blob/main/sandbox/01-first-guard.ts): the example
+- [`sandbox/lib/agent.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/agent.ts): the agent loop
+- [`packages/sdk/pipeline/guard.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard.ts): `guard()` and the steps every call goes through
+- [`packages/sdk/guards/limit/limit.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/limit.ts): the limit guard
+- [`packages/sdk/core/refusal.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/refusal.ts): `GuardRefusal`, `isGuardRefusal()` and `GuardBlockedError`
+- [`packages/shared/refusals/templates.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/refusals/templates.ts): the refusal texts
+- [`packages/sdk/context/scope.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/scope.ts): `quard.run()`

@@ -1,0 +1,188 @@
+import { Steps } from "nextra/components";
+
+# 10. Approvals in the dashboard
+
+A payments agent pays supplier invoices, and someone on the finance team signs off in the dashboard before money moves. This example walks through four cases, one per step: a guard that asks before every payment, a standing **Always approve** answer, a rule that asks only about large amounts, and a timeout when nobody answers. You do the clicking.
+
+## Run it
+
+```sh
+node sandbox/10-approvals-in-the-dashboard.ts
+```
+
+Run it from the repo root. It needs [the local backend](/sdk/examples#the-local-backend), with `QUARD_AGENT_KEY` set in `sandbox/.env`, as the [sandbox README](https://github.com/oynozan/quard/blob/main/sandbox/README.md) shows. Without an agent key, it stops at once and says so.
+
+Open the dashboard's approvals page, `http://localhost:3100/approvals`, before you start. Each step prints what to click. Step 1 waits until you answer. Step 4 takes 15 seconds.
+
+## Step by step
+
+<Steps>
+
+### Print each ask once
+
+```ts
+// An action rule asks again after the yes, so the link prints once per call
+const asked = new Set<string>();
+quard.configure({
+    onEvent: (event) => {
+        if (event.type !== "decision") {
+            return;
+        }
+        if (event.decision === "ask" && !asked.has(event.stepId)) {
+            asked.add(event.stepId);
+            printEvent(event);
+            console.log("    · waiting. Answer at http://localhost:3100/approvals");
+        }
+        if (event.rule === "always-approved") {
+            console.log("    · answered at once by the earlier Always approve");
+        }
+    },
+});
+```
+
+A decision of `ask` means the call now waits for a person. After a yes, Quard runs the block checks again, so a rule that asked records `ask` a second time for the same step. The set prints the waiting line once per call. A decision with the rule `always-approved` means a standing answer let the call through. See [Events](/sdk/reference/events).
+
+### Every payment asks first
+
+```ts
+title("1 · Every payment asks first. Click Always approve.");
+const payInvoice = guard(pay, { type: "approval", name: "payInvoice" });
+const samePayment = `Pay Acme Ltd 480 EUR for invoice 301 to IBAN ${IBAN}.`;
+await quard.run({ agent: "payments" }, () => runAgent(client, samePayment, { payInvoice }));
+```
+
+An [approval guard](/sdk/reference/approval-guard) has one check, and it always says `ask`, with the reason `approval_required`. No approver is set in code, so the SDK asks in the dashboard, through control:
+
+1. It sends control the call: the run, the step, the agent, the tool, the arguments with secrets removed, a hash of the exact arguments made with your project's [hash key](/sdk/reference/configure#the-hash-key), where each value came from and why the guard asks.
+2. It uploads its buffered events right away, so you can open the run from the request.
+3. Control opens an approval request, and the call waits, with no time limit. While it waits, the SDK sends a heartbeat every 15 seconds, so the dashboard can tell that the process is still alive.
+
+On the [Approvals](/guides/approvals#answer-a-request) page, the request shows the real arguments, not masked, so you can check them. Click **Always approve**. The dashboard saves your answer and a standing grant for this agent, tool and argument hash. Control passes the answer to the waiting SDK, which runs the block checks again, finds none here, and runs the tool. See [Approvals](/concepts/approvals).
+
+### The same payment in a new run
+
+```ts
+// No spaces, so the model sends the exact same arguments in step 2
+const IBAN = "DE89370400440532013000";
+// ...
+title("2 · The same payment again, in a new run. No click needed.");
+await quard.run({ agent: "payments" }, () => runAgent(client, samePayment, { payInvoice }));
+```
+
+The guard asks again, so the waiting line prints. But control first looks for a standing grant with the same agent, tool and argument hash. It finds yours, counts one more use of it and answers at once. The SDK records the approval with the rule `always-approved`, and the payment runs.
+
+A grant holds in any run until someone revokes it. It covers only the exact arguments: if the model wrote the IBAN with spaces, or another amount, the hash would differ and you'd be asked again. That is why this IBAN has no spaces. See [Standing grants](/guides/approvals#standing-grants).
+
+### Ask only above 1000 EUR
+
+```ts
+title("3 · Ask only above 1000 EUR. Approve or deny.");
+const payLarge = guard(pay, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "amount", max: 1000, onFail: "ask" }],
+});
+```
+
+An [action guard](/sdk/reference/action-guard) rule with `onFail: "ask"` asks only when it fails. The 300 EUR payment passes the rule and runs without a question. The 4200 EUR payment fails it, with the reason `amount_over_cap`, and waits. Its request lists that rule under **Checks**.
+
+- **Approve once.** Quard runs the block checks again. The amount rule still says `ask`, but you have already said yes, so only a new block could stop the call. The payment runs.
+- **Deny.** The tool doesn't run. The agent gets a refusal from the approval step, with the reason `approval_denied`. See [Deny a call](/guides/approvals#deny-a-call).
+
+### Nobody answers
+
+```ts
+title("4 · Nobody answers. Wait 15 seconds.");
+const payTimed = guard(pay, { type: "approval", name: "payInvoice", timeout: 15 });
+```
+
+`timeout` is in seconds. After 15 seconds with no answer, the SDK stops waiting, tells control it gave up and refuses the call with the reason `approval_timed_out`. The agent reads:
+
+```text
+Blocked by the approval guard: no one answered the approval request in time. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+The request stays open on the page. Nothing waits on it anymore, so it shows **Stopped**. If someone clicks **Approve once** later, the next identical call uses that answer.
+
+</Steps>
+
+## What you'll see
+
+Steps 1 and 2:
+
+```text
+1 · Every payment asks first. Click Always approve.
+  User: Pay Acme Ltd 480 EUR for invoice 301 to IBAN DE89370400440532013000.
+  → payInvoice {"iban":"DE89370400440532013000","amount":480}
+    · approval guard: ask (approval_required)
+    · waiting. Answer at http://localhost:3100/approvals
+    ✓ paid 480 EUR
+  Model: …
+
+2 · The same payment again, in a new run. No click needed.
+  User: Pay Acme Ltd 480 EUR for invoice 301 to IBAN DE89370400440532013000.
+  → payInvoice {"iban":"DE89370400440532013000","amount":480}
+    · approval guard: ask (approval_required)
+    · waiting. Answer at http://localhost:3100/approvals
+    · answered at once by the earlier Always approve
+    ✓ paid 480 EUR
+  Model: …
+```
+
+Steps 3 and 4, when you approve the large payment:
+
+```text
+3 · Ask only above 1000 EUR. Approve or deny.
+  User: Pay Acme Ltd two invoices to IBAN DE89370400440532013000: 300 EUR for invoice 302 and 4200 EUR for invoice 303.
+  → payInvoice {"iban":"DE89370400440532013000","amount":300}
+    ✓ paid 300 EUR
+  → payInvoice {"iban":"DE89370400440532013000","amount":4200}
+    · action guard: ask (amount_over_cap)
+    · waiting. Answer at http://localhost:3100/approvals
+    ✓ paid 4200 EUR
+  Model: …
+
+4 · Nobody answers. Wait 15 seconds.
+  User: Pay Acme Ltd 75 EUR for invoice 304 to IBAN DE89370400440532013000.
+  → payInvoice {"iban":"DE89370400440532013000","amount":75}
+    · approval guard: ask (approval_required)
+    · waiting. Answer at http://localhost:3100/approvals
+    ✗ blocked by the approval guard (approval_timed_out)
+  Model: …
+  The request is still open at http://localhost:3100/approvals
+```
+
+`…` stands for the model's answers, which change from run to run. The model may ask for the two payments of step 3 in the other order. If you deny the 4200 EUR payment, its last line reads `✗ blocked by the approval guard (approval_denied)`.
+
+Run the file again, and step 1 passes at once too, because your grant from the first run still holds.
+
+In the dashboard, on the [Approvals](/guides/approvals) page:
+
+- Each open request shows the tool, how long it has waited, whether its process is still alive, the arguments, the checks and the path that led to the call.
+- Your grant is listed under **Always approve**, with how often it has been used.
+- Answered requests move to **Decided**. Once a request is answered, Quard keeps only a hash of its arguments and a masked copy.
+
+## Try this
+
+- **Revoke the grant.** Revoke it under **Always approve**, then run the file again. Step 1 asks again.
+- **Answer late.** After step 4 times out, click **Approve once** on its request, which is still open. Run the file again. Step 4's identical call uses that answer and runs without a new click, as long as the model sends the same arguments.
+- **Always approve the large payment.** In step 3, click **Always approve** instead. On the next run, the 4200 EUR payment passes at once. A grant answers any ask for the same agent, tool and arguments, whichever rule asked.
+
+## Use it in your app
+
+- Put an approval guard on tools where every call needs a person, such as deletes or large transfers. Use an action rule with `onFail: "ask"` where only some calls do.
+- Without an approver in code, asks go to the dashboard, which needs the control link: `controlUrl` with `key`. With neither, a call that needs an answer is refused at once with `approval_unavailable`.
+- Set `timeout` when your host stops requests that run too long, and decide what your app does with an `approval_timed_out` refusal.
+- Grants match exact arguments. A tool whose arguments change on every call, for example with a timestamp, never matches a grant.
+
+## Source
+
+- [`sandbox/10-approvals-in-the-dashboard.ts`](https://github.com/oynozan/quard/blob/main/sandbox/10-approvals-in-the-dashboard.ts): the example
+- [`packages/sdk/guards/approval/approval.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/approval/approval.ts): the approval guard
+- [`packages/sdk/pipeline/approval/human.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/human.ts): chooses between the approver and the dashboard
+- [`packages/sdk/pipeline/approval/remote.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/remote.ts): asks through control and reads the answer
+- [`packages/sdk/pipeline/approval/message.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/message.ts): what the SDK sends with an ask
+- [`packages/sdk/transport/link/approvals.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/approvals.ts): waiting, heartbeats and timeouts
+- [`packages/sdk/pipeline/guard.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard.ts): the checks after an approval
+- [`services/control/approvals/place.ts`](https://github.com/oynozan/quard/blob/main/services/control/approvals/place.ts): grants, earlier answers and new requests
+- [`services/control/approvals/deliver.ts`](https://github.com/oynozan/quard/blob/main/services/control/approvals/deliver.ts): passes answers to waiting calls

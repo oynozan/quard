@@ -18,12 +18,13 @@ export function startWatcher(ctx: Context, url: string, open: OpenListener): Wat
         void task.catch((error: Error) => ctx.log(`control: ${name} failed: ${error.message}`));
     };
 
+    // quard_live is for the dashboard, so control skips it
     function heard(notice: Notice): void {
         if (notice.channel === CHANNELS.approvals) {
             run(DECISIONS, delivery.heard(notice.payload));
         } else if (notice.channel === CHANNELS.fleet) {
             run(QUARANTINE, ctx.fleet.refresh(notice.payload));
-        } else {
+        } else if (notice.channel === CHANNELS.keys) {
             const connected = ctx.registry.keyIds().filter((id) => id === notice.payload);
             run(KEYS, closeRevoked(ctx, connected));
         }

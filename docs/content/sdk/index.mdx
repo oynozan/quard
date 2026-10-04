@@ -1,0 +1,116 @@
+import { Steps } from "nextra/components";
+
+# SDK
+
+The Quard SDK runs inside your app. It wraps your OpenAI client and your tools, labels everything your agents read, checks every risky tool call before it runs, and records what happened.
+
+Guards run in your own process, so they work without any backend. Connect the backend to see runs in the [dashboard](/guides/overview), answer approvals there, and share daily limits and the fleet check across every process.
+
+## Requirements
+
+- Node.js 22.12 or later. The SDK ships as an ES module.
+- The official [`openai`](https://www.npmjs.com/package/openai) package. Quard watches calls to the Responses API. Other requests pass through unchanged.
+
+## Install
+
+The SDK lives in this repo at [`packages/sdk`](https://github.com/oynozan/quard/tree/main/packages/sdk), as the package `quard`. It isn't published yet. Inside the repo's pnpm workspace, depend on it like any other package:
+
+```json
+{
+    "dependencies": {
+        "quard": "workspace:*"
+    }
+}
+```
+
+The [sandbox](/sdk/examples) does the same: `import { guard, quard } from "quard"` in every example is the line an app would use. To build the package on its own, run `pnpm --filter quard build`. It writes `packages/sdk/dist`.
+
+## Use the Quard skill
+
+Building with an AI coding agent? The command at the top of every docs page installs the Quard skill. One click copies it:
+
+```sh
+npx skills add oynozan/quard --skill quard
+```
+
+The skill teaches your agent to add Quard to an app: install the SDK, configure it, wrap the OpenAI client, choose and write guards, handle refusals, and use multi-agent runs, payments and the policy file. It works with Claude Code, Codex, Cursor, OpenCode and many other coding agents.
+
+- **For one project.** Run the command in your app's folder. It puts the skill in each agent's skills folder there, such as `.claude/skills`, so you can commit it for your team.
+- **For every project.** Add `-g` to install it for your user instead.
+- **What is inside.** The skill lives in this repo at [`skills/quard`](https://github.com/oynozan/quard/tree/main/skills/quard): `SKILL.md` with the steps, and longer references next to it.
+
+## Quick start
+
+<Steps>
+
+### Wrap your OpenAI client
+
+`quard.wrap()` returns a copy of the client whose requests go through Quard. Use the copy everywhere your agent calls the model.
+
+```ts
+import OpenAI from "openai";
+import { guard, quard } from "quard";
+
+const client = quard.wrap(new OpenAI());
+```
+
+### Guard your tools
+
+`guard()` wraps a tool function. `name` is the tool name the model sees. Here a [limit guard](/sdk/reference/limit-guard) lets `sendSms` run at most twice per run.
+
+```ts
+async function rawSendSms(input: { to: string; text: string }) {
+    return `sent "${input.text}" to ${input.to}`;
+}
+
+const sendSms = guard(rawSendSms, { type: "limit", name: "sendSms", maxCallsPerRun: 2 });
+```
+
+A blocked call doesn't run. It returns a [refusal](/sdk/reference/refusals) instead, which your agent loop sends back to the model like any tool result.
+
+### Run your agent inside a run
+
+`quard.run()` groups everything inside it into one run, so labels and per-run limits count across the whole task.
+
+```ts
+await quard.run({ agent: "assistant" }, () => runAgent(client, prompt, { sendSms }));
+```
+
+`runAgent` is your own agent loop. The sandbox's [`lib/agent.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/agent.ts) is a 40-line one.
+
+### Connect the backend
+
+Your guards work without the backend, because they run in your process. Connect it for everything else. With an agent key, the SDK uploads its events to `webhook` and keeps a live link to `control`.
+
+```ts
+quard.configure({
+    key: process.env.QUARD_AGENT_KEY,
+    webhookUrl: process.env.QUARD_WEBHOOK_URL,
+    controlUrl: process.env.QUARD_CONTROL_URL,
+});
+```
+
+Without the backend:
+
+- Nothing reaches the [dashboard](/guides/overview): no runs, approvals or incidents.
+- An [approval guard](/sdk/reference/approval-guard) blocks with `approval_unavailable`, unless you set an [`approver`](/sdk/reference/approval-guard#an-approver-in-code) function in code.
+- Daily limits and [run limits](/concepts/run-limits) count in each process on its own, not across all of them.
+- Agents in separate processes treat every message as untrusted. Once run limits are switched on, they can't delegate further either. See [A missing or changed message](/concepts/multi-agent#a-missing-or-changed-message).
+- The [fleet check](/guides/summary#quarantine) is skipped, so nothing goes into quarantine.
+
+Create the agent key in the dashboard under [Settings](/guides/settings#agent-keys). It is the only Quard secret your app needs. With it, the SDK also gets your project's [hash key](/sdk/reference/configure#the-hash-key), which hashes sensitive values before they leave your process. See [Configuration](/sdk/reference/configure) for every option.
+
+</Steps>
+
+## What happens on each call
+
+- **Model calls.** Quard labels what the model reads and checks the tool calls it asks for before your app gets them. See [The wrapped client](/sdk/internals/monitor).
+- **Tool calls.** Every guarded call runs the same nine steps: context, permission, labels, checks, decision, approval, run, output and record. See [Guards](/concepts/guards) and [The guard pipeline](/sdk/internals/pipeline).
+- **Records.** Every model call, tool call, label and guard decision becomes an [event](/sdk/reference/events). Secrets are removed and sensitive values hashed before anything leaves your process.
+
+## Where to go next
+
+- [Examples](/sdk/examples): fourteen runnable programs with a real model, explained step by step.
+- [Reference](/sdk/reference/quard): every function, option and type the SDK exports.
+- [How it works](/sdk/internals): the SDK's code, for anyone changing it.
+- [Concepts](/concepts/labels): labels, value tracing, guards and approvals, without code.

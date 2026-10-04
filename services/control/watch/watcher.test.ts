@@ -152,3 +152,26 @@ describe("failures", () => {
         await db.destroy();
     });
 });
+
+describe("dashboard notices", () => {
+    it("are ignored by control", async () => {
+        const db = brokenDb();
+        const ctx = testContext(db, { timing: QUIET });
+        const { connection } = newConnection(ctx, { keyId: "k", projectId: "p" });
+        ctx.registry.ready(connection);
+        const listeners: Listener[] = [];
+        const keyChecks = () => ctx.logs.filter((line) => line.startsWith("control: the key check failed: ")).length;
+        const watcher = startWatcher(ctx, test.url, capture(listeners));
+        await until(() => keyChecks() === 1);
+
+        // A key check would fail on the broken database and log
+        notify(listeners[0], CHANNELS.live, "k");
+        notify(listeners[0], CHANNELS.keys, "k");
+        await until(() => keyChecks() === 2);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(keyChecks()).toBe(2);
+        await watcher.stop();
+        await db.destroy();
+    });
+});

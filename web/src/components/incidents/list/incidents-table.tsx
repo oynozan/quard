@@ -171,8 +171,9 @@ function IncidentRow({ incident, now }: { incident: Incident; now: number }) {
         incident.entryAgent === incident.damageAgent
             ? (incident.entryAgent ?? "—")
             : `${incident.entryAgent} → ${incident.damageAgent}`;
+    // An incident nobody has opened yet stands out in red
     return (
-        <Tr interactive>
+        <Tr interactive className={incident.seen ? undefined : "outline outline-1 -outline-offset-1 outline-danger"}>
             <Td>
                 <RowLink href={`/incidents/${incident.id}`} title={incident.title}>
                     <NameCell icon={<Siren size={18} strokeWidth={0.75} />} name={incident.title} />

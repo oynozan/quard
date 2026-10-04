@@ -5,13 +5,17 @@ export const REMOVED = "[Removed for replay]";
 
 type Item = { type?: unknown; call_id?: unknown } | null;
 
-// The input with the suspect tool result's output removed. The function call
-// that asked for it stays. Undefined when the input holds no such result.
-export function withoutContent(input: unknown[], callId: string | null): unknown[] | undefined {
-    const suspect = (item: unknown) =>
-        callId !== null && (item as Item)?.type === "function_call_output" && (item as Item)?.call_id === callId;
-    if (!input.some(suspect)) {
+function resultOf(callId: string): (item: unknown) => boolean {
+    return (item) => (item as Item)?.type === "function_call_output" && (item as Item)?.call_id === callId;
+}
+
+// The input with the first suspect tool result it holds left out, and that result's call id
+export function withoutContent(input: unknown[], callIds: string[]): { input: unknown[]; callId: string } | undefined {
+    const callId = callIds.find((id) => input.some(resultOf(id)));
+    if (callId === undefined) {
         return undefined;
     }
-    return input.map((item) => (suspect(item) ? { ...(item as object), output: REMOVED } : item));
+    // The function call that asked for the result stays
+    const suspect = resultOf(callId);
+    return { callId, input: input.map((item) => (suspect(item) ? { ...(item as object), output: REMOVED } : item)) };
 }

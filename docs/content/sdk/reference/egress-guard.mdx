@@ -1,0 +1,134 @@
+# Egress guard
+
+An egress guard wraps a tool that sends data out: email, HTTP posts, uploads, webhooks. Before each call, it finds where the data would go and checks three things. The destination must not come from untrusted content. Internal data may only go to allowed destinations. And secrets, card numbers and IBANs in the data are blocked, masked or let through, as you choose.
+
+```ts
+type EgressOptions = {
+    type: "egress";
+    name?: string;
+    mode?: "block" | "observe";
+    onBlock?: "return" | "throw";
+    allow?: string[];
+    destinations?: (input: unknown) => string[];
+    onFail?: "block" | "ask";
+    payload?: { secrets?: DataAction; cards?: DataAction; ibans?: DataAction };
+};
+
+type DataAction = "allow" | "mask" | "block";
+```
+
+## Options
+
+| Option                    | Type                                           | Default                                                                     | What it does                                                                                                                                         |
+| ------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allow`                   | `string[]`                                     | none: no destination is allowed                                             | Allowed destinations. `"acme.com"` matches only that host. `"*.acme.com"` matches it and its subdomains. `"bob@acme.com"` matches one email address. |
+| `destinations`            | `(input: unknown) => string[]`                 | reads fields such as `to` and `url`                                         | Returns the destinations of a call. See [Destinations](#destinations). Code only: a policy file can't hold it.                                       |
+| `onFail`                  | `"block" \| "ask"`                             | `"block"`                                                                   | What happens when internal data would go to a destination that isn't allowed. `"ask"` sends the call to a person.                                    |
+| `payload`                 | `{ secrets?, cards?, ibans? }` of `DataAction` | from the [strictness preset](/sdk/reference/policy-file#strictness-presets) | What to do with each kind of sensitive data in the arguments. See [Sensitive data](#sensitive-data).                                                 |
+| `name`, `mode`, `onBlock` |                                                |                                                                             | See [Options every guard has](/sdk/reference/guard#options-every-guard-has).                                                                         |
+
+## Destinations
+
+By default, Quard reads destinations from the top-level fields of the input named `to`, `cc`, `bcc`, `recipient`, `recipients`, `email`, `emails`, `url`, `endpoint`, `host`, `webhook`, `target` or `destination`, in any letter case. A field may hold a string or a list of strings. In each destination, Quard finds the email addresses, URLs and host names.
+
+For any other shape, such as a tool that takes several arguments, pass `destinations`:
+
+```ts
+const postJson = guard(rawPostJson, {
+    type: "egress",
+    name: "postJson",
+    allow: ["*.acme.com"],
+    // rawPostJson(url, body): the input is the list of arguments
+    destinations: (input) => [(input as [string, unknown])[0]],
+});
+```
+
+## The checks
+
+| Rule                                                | Fails when                                                                                          | Decision     | Reason                               |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------ |
+| `untrusted-destination`                             | A destination first appeared in untrusted content                                                   | always block | `destination_from_untrusted_content` |
+| `allowlist`                                         | The call carries internal data and a destination isn't allowed, or no destination was found         | `onFail`     | `destination_not_allowed`            |
+| `payload:secrets`, `payload:cards`, `payload:ibans` | The arguments hold that kind of data and its action is `block`, or `mask` but it couldn't be masked | block        | `sensitive_data`                     |
+
+Each rule is recorded as a `decision` event with `guard: "egress"`, allows included. The `payload` rules are recorded only for the kinds of data found.
+
+### Untrusted destinations
+
+For each value Quard can trace in a destination, such as an email address, a URL or a host name, it finds where that value first appeared in the run. The strongest kind of match decides: the exact value first, then the same host, then the same main domain. If that first appearance was in untrusted content, such as a web page or an outside email, the call is blocked, whatever `onFail` says.
+
+- When every address in a destination is on `allow`, a match on the main domain alone is ignored.
+- A destination that appeared nowhere earlier in the run passes this check. The allowlist still applies.
+
+### Internal data
+
+A call carries internal data when its [context label](/concepts/labels#the-context-label) is internal, or when a value in its arguments appeared in internal content. The context label turns internal as soon as the run reads anything internal, such as the user's message or the result of one of your own tools. So most calls in an agent loop carry internal data.
+
+Such a call may only go to destinations on `allow`. Every email address, URL and host name found in the destinations must match, and a call where none was found fails. Without `allow`, nothing matches, so every such call fails.
+
+### Sensitive data
+
+Quard looks for three kinds of data in every string and number of the arguments:
+
+| Kind      | What it finds                                                                                                                                             | Masked as                   |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `secrets` | API keys and tokens in known formats, such as `sk-` keys, Quard agent keys, GitHub, Slack, Stripe and Google keys, AWS access keys, JWTs and private keys | `[secret removed by Quard]` |
+| `cards`   | 13 to 19 digits that start with 2 to 6 and pass the Luhn check, with single spaces or dashes allowed between them                                         | `•••• 4242`                 |
+| `ibans`   | IBANs with the right length for their country and valid mod-97 check digits, with or without spaces                                                       | `DE89…3000`                 |
+
+Each kind has an action:
+
+- `block` refuses the call. The refusal names the kind: secret, card number or IBAN.
+- `mask` replaces the value in the arguments before the checks, the approval and the tool see them. The masking is recorded as a `decision` with `rule: "payload:mask"` and `decision: "strip"`. A value that can't be masked, such as a card number passed as a number, blocks the call instead.
+- `allow` lets it through. The decision is still recorded, with the rule `payload:<kind>:allow`.
+
+A kind you leave out of `payload` follows the policy file's [strictness preset](/sdk/reference/policy-file#strictness-presets). Without a policy file, the `balanced` preset applies: secrets `block`, cards `mask`, IBANs `allow`.
+
+## Observe mode
+
+With `mode: "observe"`, every rule is recorded with `enforced: false`. Nothing is masked or blocked, and the call runs with its arguments as they were.
+
+## Reason codes
+
+| Reason                               | Refusal text, after "Blocked by the egress guard:"     |
+| ------------------------------------ | ------------------------------------------------------ |
+| `destination_from_untrusted_content` | the destination first appeared in untrusted content    |
+| `destination_not_allowed`            | internal data may only go to allowed destinations      |
+| `sensitive_data`                     | the data to send holds a sensitive value (card number) |
+
+With `onFail: "ask"`, a failed allowlist check asks a person instead. A denial then comes from the [approval guard](/sdk/reference/approval-guard#reason-codes).
+
+## Labels
+
+An egress guard doesn't label anything. Without a source guard on the same tool, the result is labeled `tool:<name>`.
+
+## Example
+
+```ts
+import { guard } from "quard";
+
+const sendEmail = guard(rawSendEmail, {
+    type: "egress",
+    name: "sendEmail",
+    allow: ["*.acme.com"],
+    onFail: "ask",
+    payload: { cards: "block" },
+});
+```
+
+An email to `finance@acme.com`, an address the user gave, goes out. One to `jane.roe@gmail.com` with internal data waits for a person. One to an address the agent found on a web page is blocked. A card number in the body blocks the call.
+
+## Related
+
+- [Where data can go](/sdk/examples/where-data-can-go): an egress guard with an allowlist.
+- [Value tracing](/concepts/value-tracing): how Quard finds where a destination first appeared.
+
+## Source
+
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): `EgressOptions` and `DataAction`
+- [`packages/sdk/guards/egress/egress.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/egress/egress.ts): `checkEgress()` and `defaultDestinations()`
+- [`packages/sdk/guards/egress/payload.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/egress/payload.ts): `maskArgs()` and `checkPayload()`
+- [`packages/sdk/policy/presets.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/presets.ts): the strictness presets
+- [`packages/shared/redact/sensitive.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/sensitive.ts): `findSensitive()` and `maskSensitive()`
+- [`packages/shared/redact/secrets.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/secrets.ts): the secret patterns
+- [`packages/shared/normalize/domain.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/normalize/domain.ts): `hostMatches()`, the destination patterns

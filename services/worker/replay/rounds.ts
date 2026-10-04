@@ -26,7 +26,7 @@ export type Replay = Progress & {
 };
 
 export type ReplayOptions = {
-    // What the finder already spent on the incident, such as the AI reviewer
+    // What the finder already spent on the incident, such as earlier replay rounds
     spentUsd?: number;
     capUsd?: number;
     // What the first round will likely cost, so it never starts past the cap

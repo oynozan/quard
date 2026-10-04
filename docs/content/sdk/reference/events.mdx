@@ -1,0 +1,322 @@
+# Events
+
+Quard records what happens in your app as events: runs that start and finish, model calls, tool calls, guard decisions, labeled content, detector labels, messages between agents, handoffs, memory reads and writes, x402 payments, warnings and config errors. Read them in code with `onEvent`. When [uploads](/sdk/reference/configure#uploads-and-the-control-link) are on, the SDK also sends them to the backend, after removing secrets and hashing sensitive values.
+
+```ts
+type RunEvent =
+    | RunStartedEvent
+    | RunFinishedEvent
+    | ModelCallEvent
+    | ToolCallEvent
+    | DecisionEvent
+    | ContentEvent
+    | WarningEvent
+    | ChunkLabelEvent
+    | ConfigErrorEvent
+    | MessageEvent
+    | HandoffEvent
+    | MemoryEvent
+    | PaymentEvent;
+```
+
+The package exports `RunEvent`. Narrow it by its `type` field to reach one kind of event.
+
+## Get events in code
+
+```ts
+import { quard, type RunEvent } from "quard";
+
+const events: RunEvent[] = [];
+quard.configure({ onEvent: (event) => events.push(event) });
+```
+
+- Quard calls `onEvent` synchronously, once per event, as it records it. Keep it fast.
+- `onEvent` gets each event before redaction, with real values, such as full tool arguments. Treat what it gets like your own logs. The text in a `chunk_label` is the exception: it is already redacted, as the detector read it.
+- An error thrown in `onEvent` is caught and ignored, so a broken callback can't change what a guarded call does.
+- Tool calls get no `keys` here. Quard adds them only to what it uploads.
+
+## Event types
+
+Every event except `config_error` has these fields:
+
+| Field    | Type   | What it holds                                                                                                                                                    |
+| -------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`   | string | The kind of event                                                                                                                                                |
+| `runId`  | string | The run: 32 hex characters                                                                                                                                       |
+| `stepId` | string | The step, as 16 hex characters: a model call, a call to a guarded tool, a memory read or write, or an x402 payment step. Not on `run_started` and `run_finished` |
+| `agent`  | string | The agent's name                                                                                                                                                 |
+| `at`     | string | When Quard recorded it, as an ISO 8601 time                                                                                                                      |
+
+### `run_started`
+
+Recorded when a run starts: in `quard.run()`, or when a call outside any run starts a new one. A run that [`quard.resume()`](/sdk/reference/quard#quardresume) goes on with started in another process, so it records no `run_started` here.
+
+| Field     | Type   | What it holds                                                                                           |
+| --------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| `origins` | object | The [origin overrides](/sdk/reference/configure#origins) in force, by origin: `trust` and `sensitivity` |
+
+### `run_finished`
+
+Recorded when the function passed to `quard.run()` returns, throws or settles its promise.
+
+| Field    | Type                                   | What it holds                                                                                                                                                                                                                    |
+| -------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status` | `"completed" \| "failed" \| "blocked"` | `failed` when the function threw. `blocked` when it threw a [`GuardBlockedError`](/sdk/reference/refusals#guardblockederror), or the OpenAI client's error for a model call that [run limits](/sdk/reference/run-limits) refused |
+| `error`  | string, optional                       | The error's message, for `failed` and `blocked`                                                                                                                                                                                  |
+
+### `model_call`
+
+Recorded when a Responses API call through a wrapped client ends. A call that run limits refused never goes out, so it records only its `decision` events.
+
+| Field          | Type                                                    | What it holds                                                                                                                      |
+| -------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `parentStepId` | string, optional                                        | The step that led to this agent: the parent agent's latest step, the step that handed over, or the sender's step for a resumed run |
+| `model`        | string                                                  | The model named in the request, or `"unknown"`                                                                                     |
+| `responseId`   | string, optional                                        | The response's id                                                                                                                  |
+| `toolCalls`    | `{ callId, name, arguments }[]`                         | The tool calls the model asked for. `arguments` is the JSON text the model wrote                                                   |
+| `usage`        | `{ inputTokens, cachedTokens, outputTokens }`, optional | Token counts the API reported. Cached tokens are part of the input count                                                           |
+| `agentVersion` | string, optional                                        | A 16-hex hash of the model, instructions and tools the agent ran with                                                              |
+| `requestBody`  | object, optional                                        | The request body that a [replay](/guides/incidents#replay) resends. See [The recorded request](#the-recorded-request)              |
+| `status`       | `"ok" \| "error"`                                       | `error` when the request failed or the API returned an error                                                                       |
+| `durationMs`   | number                                                  | From the request to the end of the response                                                                                        |
+
+#### The recorded request
+
+- Quard keeps `requestBody` only while uploads are on, and only when the body is at most 524,288 characters as JSON.
+- It holds only these fields of the request: `model`, `instructions`, `input`, `tools`, `tool_choice`, `parallel_tool_calls`, `temperature`, `top_p`, `reasoning`, `text`, `max_output_tokens`, `max_tool_calls`, `truncation`, `top_logprobs`, `prompt`, `previous_response_id` and `conversation`. Fields such as `stream`, `store`, `metadata` and `user` are left out.
+- It is [redacted](#redaction) like every event before it leaves the process.
+- While events wait in the buffer, the request bodies they hold add up to at most 32 Mi characters. Past that, the oldest model calls lose theirs, and their replay is limited. See [When replay is limited](/guides/incidents#when-replay-is-limited).
+
+### `tool_call`
+
+Recorded for every call to a guarded function.
+
+| Field        | Type                           | What it holds                                                                                        |
+| ------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `tool`       | string                         | The tool's name                                                                                      |
+| `callId`     | string, optional               | The id of the model's tool call that this call claimed                                               |
+| `arguments`  | any                            | The checked arguments, after any masking by an egress guard                                          |
+| `status`     | `"ok" \| "error" \| "blocked"` | `blocked` when a guard refused the call or withheld its result                                       |
+| `influenced` | boolean                        | The call's context label was untrusted: the run had read untrusted content                           |
+| `flagged`    | boolean                        | Some content the run had read was flagged                                                            |
+| `keys`       | string[], optional             | The traceable values in the arguments. Added only on upload, so search can find them after redaction |
+| `durationMs` | number                         | How long the tool ran                                                                                |
+| `error`      | string, optional               | The error's message, when the tool threw                                                             |
+
+### `decision`
+
+Recorded for every rule that checked a call, allows included.
+
+| Field      | Type                                                         | What it holds                                                                                                                                                                                       |
+| ---------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tool`     | string                                                       | The tool's name. For `max-steps` and `max-cost`, the model's name. For the x402 guard, the guard's `name`                                                                                           |
+| `guard`    | string                                                       | `source`, `action`, `approval`, `egress`, `limit`, `x402`, `permission`, `signature` or `abort`                                                                                                     |
+| `rule`     | string                                                       | The rule's name. See the table below                                                                                                                                                                |
+| `decision` | `"allow" \| "block" \| "ask" \| "pass" \| "strip" \| "flag"` | `pass`, `strip` and `flag` come from checks on a result, and `strip` also from masking                                                                                                              |
+| `mode`     | `"block" \| "observe"`                                       | The rule's mode                                                                                                                                                                                     |
+| `enforced` | boolean                                                      | `true` in block mode. A decision with `false` never changed the outcome                                                                                                                             |
+| `reason`   | string, optional                                             | A [reason code](/sdk/reference/refusals#reason-codes). For a source guard's scan: its findings. For a detector: the labels it gave, and `unchecked` when some requests failed. Both comma-separated |
+| `field`    | string, optional                                             | What the reason is about: a field, a kind of data or a signature id                                                                                                                                 |
+| `policy`   | string, optional                                             | The `version` of the [policy file](/sdk/reference/policy-file) in force                                                                                                                             |
+| `score`    | number, optional                                             | A detector's highest risk score, from 0 to 1                                                                                                                                                        |
+| `rules`    | string, optional                                             | A 16-hex hash of the active rules, as sent to `control`. Set once any tool is guarded                                                                                                               |
+| `request`  | string, optional                                             | The dashboard approval request that answered the call: `apr_` and 16 hex characters                                                                                                                 |
+
+The rules each guard records:
+
+| Guard        | Rules                                                                                                                                                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `permission` | `permission` on each guarded call, and `requested-call` on each tool call a model asked for                                                                                                                                        |
+| `signature`  | a signature's id, or `feed` when the feed couldn't be loaded                                                                                                                                                                       |
+| `limit`      | `max-calls-per-run`, `max-amount-per-run`, `max-calls-per-day`, `max-amount-per-day`, `fleet-check`. With `delegateTo`: `max-depth`, `max-fan-out`, `max-loops`. Before a model call: `max-steps`, `max-cost`                      |
+| `action`     | each rule's `name`, or by default `<field>:from`, `<field>:max` or `<field>:never-seen`                                                                                                                                            |
+| `egress`     | `untrusted-destination`, `allowlist`, `payload:<kind>` for a block, `payload:<kind>:<action>` for data let through, and `payload:mask`. `<kind>` is `secrets`, `cards` or `ibans`                                                  |
+| `approval`   | `approval` when the guard asks, then the answer: `human`, `always-approved`, `timeout`, `aborted`, `no-approver`, `approver-error`, `backend-down`, `unsendable`, `too-deep-to-show` or `arguments-changed`                        |
+| `source`     | `source` for the scan, and `detector:<name>` for a [detector](/sdk/reference/detector#what-the-detector-does)                                                                                                                      |
+| `abort`      | `aborted`, for a call whose caller gave up after the checks. See [Aborted calls](/sdk/reference/guard#aborted-calls)                                                                                                               |
+| `x402`       | `valid-amount`, `max-per-payment`, `asset-caps`, `block-hosts`, `allow-hosts`, `untrusted`, `max-payments-per-run`, `max-per-run`, `max-per-day`, `fleet-check`, `approve-above`. See [The checks](/sdk/reference/x402#the-checks) |
+
+`max-steps` and `max-cost` are recorded only when a model call is over the limit. Their `decision` is `block`, and `mode` is the run limits' mode.
+
+### `content`
+
+Recorded when new content enters the run: each piece of model input, such as the user's message, the instructions or a tool result sent back, each guarded tool's result, each item read through [`quard.memory()`](/sdk/reference/memory), and each traced value that a label record vouched for. Content the run read before isn't recorded again.
+
+| Field         | Type                       | What it holds                                                                                                                                |
+| ------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contentId`   | string                     | Its id in the run: `c`, a number, a dash and 8 hex characters that differ for each run in each process, such as `c1-3f9a0c2e`                |
+| `origin`      | string                     | Where it came from, such as `user`, `tool:getSupplier`, `web:pay.evil.com`, `agent:billing`, `memory:notes` or `unknown`                     |
+| `trust`       | `"trusted" \| "untrusted"` | Its trust                                                                                                                                    |
+| `sensitivity` | `"internal" \| "public"`   | Its sensitivity                                                                                                                              |
+| `flags`       | string[]                   | Source guard findings, `signature:<id>`, `detector:<label>`, `detector:unchecked`, and `flagged` for content whose stored label was flagged  |
+| `keys`        | string[]                   | The values Quard can trace in it, as keys such as `iban:DE89370400440532013000`, `domain:acme.com` or `wallet:` and a lowercased EVM address |
+
+A `content` event holds labels and value keys, never the text itself. No event holds the text of a tool's result or of the model's reply. The model's input does go out in a `model_call`'s `requestBody`, redacted.
+
+### `chunk_label`
+
+Recorded for each request the [detector](/sdk/reference/detector) answered, so people can check the label it gave.
+
+| Field           | Type             | What it holds                                                                                        |
+| --------------- | ---------------- | ---------------------------------------------------------------------------------------------------- |
+| `tool`          | string           | The source tool whose result was checked                                                             |
+| `detector`      | string           | The detector's `name`, such as `jev-1.13.0`                                                          |
+| `chunk`         | number           | Which request of this result it was, from 0                                                          |
+| `text`          | string           | The text the detector read: secrets removed, and email addresses, IBANs and card numbers masked      |
+| `label`         | string           | The most likely [label](/sdk/reference/detector#labels)                                              |
+| `probabilities` | object           | The chance of each label, from 0 to 1                                                                |
+| `score`         | number           | The chance the text is an attack: the chances of the risky labels added up, at most 1                |
+| `injection`     | number, optional | The detector's own answer to whether the text tries to instruct the AI agent reading it, from 0 to 1 |
+
+### `message`
+
+Recorded when a source guard with `origin: "agent"` receives a [message from another agent](/sdk/reference/messages). `agent` is the receiver, and `stepId` is the receive call.
+
+| Field          | Type                       | What it holds                                                            |
+| -------------- | -------------------------- | ------------------------------------------------------------------------ |
+| `from`         | string                     | The sender, or `unknown` when no label record vouched for the message    |
+| `parentStepId` | string, optional           | The sender's step, from the carrier                                      |
+| `labelRef`     | string, optional           | The carrier's label reference: 16 hex characters                         |
+| `verified`     | boolean                    | A label record of the same run and the same text vouched for the message |
+| `trust`        | `"trusted" \| "untrusted"` | The message's trust                                                      |
+| `sensitivity`  | `"internal" \| "public"`   | The message's sensitivity                                                |
+
+### `handoff`
+
+Recorded by the [OpenAI Agents SDK integration](/sdk/reference/openai-agents) when work moves from one agent to another. `agent` is the agent that handed over, and `stepId` is the step it handed over at.
+
+| Field         | Type                       | What it holds                                                                       |
+| ------------- | -------------------------- | ----------------------------------------------------------------------------------- |
+| `to`          | string                     | The agent that takes over                                                           |
+| `via`         | `"handoff" \| "tool"`      | `handoff` passes the conversation on. `tool` runs the agent as a tool               |
+| `trust`       | `"trusted" \| "untrusted"` | The run's [context label](/concepts/labels#the-context-label) at the handoff: trust |
+| `sensitivity` | `"internal" \| "public"`   | The run's context label at the handoff: sensitivity                                 |
+
+### `memory`
+
+Recorded for each read or write through [`quard.memory()`](/sdk/reference/memory).
+
+| Field         | Type                       | What it holds                                                                                                      |
+| ------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `store`       | string                     | The store's `name`                                                                                                 |
+| `op`          | `"read" \| "write"`        | Which it was                                                                                                       |
+| `items`       | number                     | The items read, or 1 for a write                                                                                   |
+| `verified`    | number                     | For a read: the items whose stored labels matched their content. For a write: 1 when the backend stored its labels |
+| `trust`       | `"trusted" \| "untrusted"` | The least trusted label among the items                                                                            |
+| `sensitivity` | `"internal" \| "public"`   | The most sensitive label among the items                                                                           |
+
+### `payment`
+
+Recorded for each step of an [x402 payment](/sdk/reference/x402#what-quard-records): by `quard.x402Fetch()` and `quard.x402Mcp()`, and by the x402 guard when it refuses a payment.
+
+| Field         | Type                                                             | What it holds                                                                                                                                             |
+| ------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stage`       | `"challenged" \| "refused" \| "signed" \| "settled" \| "failed"` | The step. See the table below                                                                                                                             |
+| `host`        | string                                                           | The host paid: the request's host, or the MCP server's name. For a refusal from the guard, the host of the paid URL the price names. Up to 500 characters |
+| `resource`    | string                                                           | The paid URL, with secrets removed. Up to 2,000 characters                                                                                                |
+| `x402Version` | number                                                           | The x402 version, such as `2`                                                                                                                             |
+| `scheme`      | string                                                           | The payment scheme, such as `exact`                                                                                                                       |
+| `network`     | string                                                           | The chain, such as `eip155:84532`                                                                                                                         |
+| `asset`       | string                                                           | The token's address                                                                                                                                       |
+| `amount`      | string                                                           | The amount in atomic units, as decimal text. For a settlement that names an amount, that amount. `"0"` when the guard couldn't read it                    |
+| `usd`         | number or `null`                                                 | The amount in USD, for the stablecoins Quard knows. `null` when the token's USD value is unknown                                                          |
+| `payTo`       | string                                                           | The payee's address                                                                                                                                       |
+| `transaction` | string, optional                                                 | The transaction hash, from the settlement                                                                                                                 |
+| `delivered`   | boolean, optional                                                | On `settled`: `false` when the paid response was an error, "paid, not delivered"                                                                          |
+| `reason`      | string, optional                                                 | On `refused` and `failed`: why. Up to 100 characters                                                                                                      |
+
+| Stage        | When                                                                        | `reason`                                                                                                      |
+| ------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `challenged` | A server named a price. The first option it lists stands for it             | none                                                                                                          |
+| `refused`    | The x402 guard refused the payment before signing, or a payment wasn't sent | an [x402 reason code](/sdk/reference/x402#reason-codes) or an approval reason, `unguarded` or `host_mismatch` |
+| `signed`     | A checked payment was sent                                                  | none                                                                                                          |
+| `settled`    | The server settled the payment                                              | none                                                                                                          |
+| `failed`     | Settling failed, or the server turned the payment down                      | the settlement's `errorReason` or `settle_failed`, or the new price's `error` or `payment_rejected`           |
+
+`signed` and the `settled` or `failed` that follows it share one `stepId`. A `refused` event from the guard shares its `stepId` with the guard's decisions.
+
+### `warning`
+
+Recorded when Quard notices something it can't check. The call goes on.
+
+| Field    | Type             | What it holds                                                                                |
+| -------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `code`   | string           | What happened. See the table below                                                           |
+| `tool`   | string, optional | The tool the warning is about                                                                |
+| `reason` | string, optional | Why it happened, up to 200 characters. For `detector_error`, such as `timeout` or `http_401` |
+
+| Code                      | When                                                                                                                                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unwrapped_tool`          | The model asked for a tool that has no `guard()`                                                                                                                                                    |
+| `unreadable_request`      | A Responses request Quard couldn't read                                                                                                                                                             |
+| `detector_error`          | The detector failed, took too long or gave a bad answer for some of a result. One warning per call, with the first failure's reason. See [Detector errors](/sdk/reference/detector#detector-errors) |
+| `label_record_not_stored` | With uploads or the control link on, `quard.inject()` couldn't store the label record of a message. A receiver in another process will read it as untrusted                                         |
+| `label_record_not_found`  | `quard.resume()` found no label record of that run for the carrier. The agent counts as past the depth limit                                                                                        |
+| `unguarded_x402`          | `quard.x402Fetch()` or `quard.x402Mcp()` kept back a signed payment that no x402 guard checked. Once per process. See [Payments that are not sent](/sdk/reference/x402#payments-that-are-not-sent)  |
+
+### `config_error`
+
+Recorded when a policy file or signature feed fails to load while the app runs. The last good version stays in use. A `config_error` belongs to no run, so it has only these fields:
+
+| Field     | Type                       | What it holds          |
+| --------- | -------------------------- | ---------------------- |
+| `type`    | `"config_error"`           | The kind of event      |
+| `at`      | string                     | When Quard recorded it |
+| `source`  | `"policy" \| "signatures"` | Which one failed       |
+| `message` | string                     | What was wrong         |
+
+## What is uploaded
+
+With uploads on, the SDK sends every event it records to `<webhookUrl>/v1/events`, with `Authorization: Bearer <key>`.
+
+- Events wait in a buffer of up to 10,000. When it is full, the oldest `allow` or `pass` decision is dropped first, else the oldest event. The next batch says how many were dropped.
+- Batches hold up to 500 events and 3 MiB of JSON, and go out about once a second. One event bigger than that goes alone. Each event gets its own id, so a batch sent twice is stored once.
+- An event more than 30 seconds old when sent, or one that waited for a retry, is marked `degraded`: it arrived late.
+- While `webhook` can't be reached, the SDK retries with a wait that doubles up to 60 seconds. A batch refused with a 4xx status other than 408 or 429 is dropped, with one console warning per status.
+
+Label records for [messages](/sdk/reference/messages) and [memory writes](/sdk/reference/memory) don't wait for a batch. The SDK sends them at once to `<webhookUrl>/v1/labels`, redacted, and waits up to 5 seconds for `webhook` to store them.
+
+## Redaction
+
+Before an event leaves the process, the SDK prepares it:
+
+1. A `tool_call` gains `keys`: the traceable values in its arguments.
+2. Every string in the event, object keys included, is redacted:
+    - Secrets are removed. Keys and tokens in known formats keep only their known prefix, such as `sk-proj-…`. A private key becomes `[private key]`. The user and password in a URL such as `https://user:pass@host` are removed. Bearer tokens, `Cookie` and `Authorization` values, and values written like `password=…` or `token: …`, keep only their name.
+    - A field whose name ends in `password`, `passwd`, `pwd`, `secret`, `api_key`, `token`, `authorization` or `cookie` loses its whole value. Case doesn't matter, and the `_` in `api_key` may also be a `-` or left out. So `client_secret`, `sessionToken`, `x-api-key` and `apiKey` all count.
+    - IBANs, card numbers and email addresses are masked, as `DE89…3000`, `4111…1111` and `j…@acme.com`. An email address keeps its domain.
+    - A number that is a card number is masked. A `BigInt` becomes its digits and is redacted like text. Other numbers are kept as they are.
+    - Anything nested more than 32 levels deep, or inside itself, is cut.
+    - Run ids, step ids, parent step ids, the agent version, the rules hash and approval request ids are kept as they are.
+3. Each IBAN and email address in `keys` becomes its mask plus a keyed hash, such as `iban:DE89…3000#` followed by 32 hex characters. The hash is HMAC-SHA-256 with your project's hash key, so the same value always gives the same hash, and search and value tracing still match it. Other keys are redacted like any text.
+
+The SDK gets your project's hash key from the backend with its agent key. Events wait in the buffer until it has the key, so no raw value leaves your process. See [The hash key](/sdk/reference/configure#the-hash-key). The backend redacts each event again when it arrives.
+
+Approval requests in the dashboard are different. The approver must see what they approve, so a request holds the real arguments, with only secrets removed. See [Through the dashboard](/sdk/reference/approval-guard#through-the-dashboard).
+
+## Related
+
+- [What Quard records](/sdk/examples/what-quard-records): the events of one run, printed with `onEvent`.
+- [Runs in the dashboard](/sdk/examples/runs-in-the-dashboard): the same events, uploaded.
+- [Uploads and the control link](/sdk/internals/transport): the code that sends events.
+
+## Source
+
+- [`packages/shared/events/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/events/schema.ts): `RunEvent` and every event type
+- [`packages/sdk/core/recorder.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/recorder.ts): `record()`, the buffer, the request body cap and `onEvent`
+- [`packages/sdk/pipeline/checks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/checks.ts): `recordDecision()`
+- [`packages/sdk/monitor/fetch.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/fetch.ts): `model_call` events and the recorded request
+- [`packages/sdk/monitor/request.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/request.ts): the request fields a replay resends
+- [`packages/sdk/pipeline/detect/detect.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/detect/detect.ts): `chunk_label` events and `detector_error` warnings
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): `tool_call`, `content` and `message` events
+- [`packages/sdk/integrations/openai-agents/frames.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/frames.ts): `handoff` events
+- [`packages/sdk/memory/event.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/event.ts): `memory` events
+- [`packages/sdk/x402/record/payments.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/record/payments.ts): `payment` events and the `unguarded_x402` warning
+- [`packages/sdk/guards/x402/x402.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/x402.ts): the `refused` payment event of the x402 guard
+- [`packages/sdk/context/carrier.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/carrier.ts): the label record warnings
+- [`packages/sdk/transport/prepare.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/prepare.ts): `prepareEvent()`, what leaves the process
+- [`packages/sdk/transport/uploader.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/uploader.ts): `createUploader()`, batches and retries
+- [`packages/shared/events/upload.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/events/upload.ts): the upload batch and its limits
+- [`packages/shared/redact/redactor.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/redactor.ts): `createRedactor()`
+- [`packages/shared/redact/event.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/event.ts): `redactEvent()`
+- [`packages/shared/redact/secrets.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/secrets.ts): `removeSecrets()` and the secret field names

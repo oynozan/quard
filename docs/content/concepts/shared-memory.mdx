@@ -29,7 +29,7 @@ The wrapped store has the same methods as yours. Any of these may be there:
 
 ## How labels are kept
 
-- **On write**, Quard stores the item's labels in the backend before the item is written: the label of everything the run had read, and the label of each traced value in it. They are keyed by a hash of the content. Sensitive values are stored as keyed hashes, never in clear.
+- **On write**, Quard stores the item's labels in the backend before the item is written: the label of everything the run had read, and the label of each traced value in it. They are keyed by a hash of the content. Each traced value is stored as a keyed hash, never in clear.
 - **On read**, Quard looks the labels up by the same hash. They come back in any agent, process or later run.
 - **Values keep their origin.** An IBAN that came from a web page reads back as `web:…`, not as memory, so a rule that wants it from your supplier records still blocks it.
 - **Memory labels outlive runs.** They are not deleted when a run is, so an old note keeps its label.
@@ -51,4 +51,4 @@ A team's [origin override](/concepts/labels#changing-the-defaults) for `memory:<
 
 ## In the dashboard
 
-Every read and write is recorded in the run, with the store, how many items it touched and how many of them had labels. Agent pages show memory calls in their own lane under [Recent calls](/guides/agents#agent-page).
+Every read and write is recorded in the run, with the store, how many items it touched and how many of them had labels.

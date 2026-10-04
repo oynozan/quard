@@ -50,6 +50,9 @@ const TOOLS = [
     }),
     define("saveNote", "Save a note for later", { key: ["string", "Short name"], text: ["string", "Note text"] }),
     define("readNote", "Read a saved note", { key: ["string", "Short name"] }),
+    define("runShell", "Run one shell command in the project and return its output", {
+        command: ["string", "The exact shell command to run"],
+    }),
 ];
 
 export function definitions(names: string[]): OpenAI.Responses.FunctionTool[] {

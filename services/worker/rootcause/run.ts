@@ -27,12 +27,14 @@ export type StoredLabel = {
 
 export type StoredDecision = {
     stepId: string;
+    agent: string;
     tool: string;
     guard: string;
     rule: string;
     decision: string;
     mode: "block" | "observe";
     enforced: boolean;
+    at: Date;
 };
 
 export type StoredRun = {
@@ -55,10 +57,13 @@ export function keysOf(step: StoredStep): string[] {
     return listIn(step.detail, "keys").filter((key): key is string => typeof key === "string");
 }
 
-// The call ids a model call asked for
-export function callIdsOf(step: StoredStep): string[] {
+type ToolCall = { callId?: unknown; name?: unknown } | null;
+
+// The call ids a model call asked for, only those of one tool when it is named
+export function callIdsOf(step: StoredStep, tool?: string): string[] {
     return listIn(step.detail, "toolCalls")
-        .map((call) => (call as { callId?: unknown } | null)?.callId)
+        .filter((call) => tool === undefined || (call as ToolCall)?.name === tool)
+        .map((call) => (call as ToolCall)?.callId)
         .filter((id): id is string => typeof id === "string");
 }
 

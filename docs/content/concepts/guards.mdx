@@ -10,7 +10,7 @@ A guard wraps a tool and checks every call to it. When the check fails, the tool
 | Action   | Tools that change something: payments, emails, deletes, deploys           | Rules on the arguments and their labels, such as "the IBAN must come from supplier records"                                                                                       | Allow, block or ask a person |
 | Approval | High-stakes tools                                                         | Nothing: it always asks a person first                                                                                                                                            | Run or block                 |
 | Egress   | Tools that send data out: email, HTTP posts, uploads                      | Where the data goes and how sensitive it is. Internal data may only go to allowed destinations, never to one that first appeared in untrusted content                             | Allow, block or ask a person |
-| Limit    | Any tool                                                                  | Calls, amounts and cost per run, agent or day, and a new value suddenly used by many agents. On a send or delegate tool, also delegation depth, fan-out and loops                 | Allow or block               |
+| Limit    | Any tool                                                                  | Calls and amounts per run or per day, and a new value suddenly used by many runs (the fleet check). On a send or delegate tool, also delegation depth, fan-out and loops          | Allow or block               |
 | x402     | An [x402](/concepts/payments) payment client                              | Each payment before it is signed: USD caps per payment, run and day, paid hosts, payees first seen in untrusted content, and new payees paid by many runs                         | Allow, block or ask a person |
 
 A source guard runs after its tool returns, before the agent sees the output. The x402 guard runs before the wallet signs a payment. The others run before the call.
@@ -46,7 +46,7 @@ Rules live in your app's code, and optionally in a policy file your team can edi
 The agent gets a refusal instead of the tool's result. It says what was stopped, why, and not to retry:
 
 ```text
-Blocked by egress guard: x@evil.com first appeared in web content. The email was NOT sent. Do not retry.
+Blocked by the egress guard: the destination first appeared in untrusted content. The sendEmail call did NOT run. Do not retry it; tell the user what was blocked.
 ```
 
 Refusals come from fixed templates and never quote untrusted content, so a blocked page can't use a refusal to speak to the model. Errors thrown by the tool itself are recorded and passed on unchanged.
@@ -70,5 +70,5 @@ Guards run inside your app, so most checks keep working:
 | Per-day limits                             | Count locally, and block once the local count reaches the cap |
 | Fleet check and quarantine list            | Use the last synced copy, up to 24 hours old                  |
 | Label lookups                              | A label that can't be looked up counts as untrusted           |
-| Detector                                   | What it could not check is flagged, and a warning says why    |
+| Detector                                   | Keeps working, because your app calls it directly             |
 | Decision records                           | Kept and sent when the backend is back, marked as sent late   |

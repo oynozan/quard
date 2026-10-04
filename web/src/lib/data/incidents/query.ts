@@ -1,11 +1,12 @@
 import "server-only";
-import { getIncident as storedIncident, getRun, listIncidents as storedIncidents } from "@quard/db";
+import { getIncident as storedIncident, getRun, lastWorkerSeen, listIncidents as storedIncidents } from "@quard/db";
 import { cache } from "react";
 import { runDetailOf } from "../runs/live/detail";
-import { projectScope } from "../scope";
+import { projectScope, requestTime } from "../scope";
 import type { Incident } from "../types";
 import { incidentDetailOf } from "./live/detail";
 import { incidentOf } from "./live/incident";
+import { workerRunning } from "./live/worker";
 import type { IncidentDetail } from "./types";
 
 // ponytail: the list holds the newest 200; page through them when a project opens more
@@ -27,5 +28,6 @@ export const getIncident = cache(async (id: string): Promise<IncidentDetail | nu
     if (!row) return null;
     // The incident row references its run, so the run is always there
     const run = (await getRun(db, project.id, row.runId))!;
-    return incidentDetailOf(row, runDetailOf(run, Date.now()));
+    const now = await requestTime();
+    return incidentDetailOf(row, runDetailOf(run, now), workerRunning(await lastWorkerSeen(db), now));
 });

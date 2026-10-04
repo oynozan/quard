@@ -1,0 +1,227 @@
+# Refusals and errors
+
+When a guard blocks a call, the tool doesn't run, and the guarded function returns a refusal in place of a result. A source guard can also withhold a result after the tool ran. The model reads the refusal as the tool's result: it says what was stopped, why, and not to retry. With `onBlock: "throw"`, the guarded function throws a `GuardBlockedError` instead. A model call that [run limits](/sdk/reference/run-limits) refuse fails with an [API error](#model-calls-over-a-run-limit) instead. An x402 payment the [x402 guard](/sdk/reference/x402) refuses is never signed, and the refusal reaches the model as described in [Refused payments](#refused-payments).
+
+```text
+Blocked by the action guard: the iban value did not come from an allowed source. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+Refusal text comes only from fixed templates. It never quotes argument values or outside content, so a blocked page can't use a refusal to talk to the model. Besides fixed words, it holds only the tool's name, field names from your rules, and signature ids, which can only hold capital letters, digits and dashes.
+
+## GuardRefusal
+
+```ts
+class GuardRefusal {
+    readonly blocked: true;
+    readonly guard: string;
+    readonly tool: string;
+    readonly reason: ReasonCode;
+    readonly field: string | undefined;
+    readonly text: string;
+
+    constructor(input: { guard: string; tool: string; reason: ReasonCode; field?: string });
+
+    toString(): string;
+    toJSON(): { blocked: true; guard: string; reason: ReasonCode; message: string };
+}
+```
+
+| Field     | What it holds                                                                                                                     |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `blocked` | Always `true`                                                                                                                     |
+| `guard`   | The guard that blocked: `source`, `action`, `approval`, `egress`, `limit`, `x402`, `permission`, `signature` or `abort`           |
+| `tool`    | The tool's name, from the guard's `name`. For a model call over a run limit, the model's name. For the x402 guard, its own `name` |
+| `reason`  | The [reason code](#reason-codes)                                                                                                  |
+| `field`   | What the reason is about, when it names something: a field, a kind of data or a signature id. Otherwise `undefined`               |
+| `text`    | The refusal text the model reads                                                                                                  |
+
+- `toString()` returns `text`, so `String(refusal)` and template strings give the refusal text.
+- `toJSON()` returns `{ blocked, guard, reason, message }`, where `message` is `text`. So `JSON.stringify(refusal)` gives a small JSON object, for loops and frameworks that send JSON back to the model.
+
+A refusal is a value, not an error: send it back to the model like any tool result.
+
+```ts
+const output = await sendEmail(args);
+const text = typeof output === "string" ? output : JSON.stringify(output);
+```
+
+## isGuardRefusal()
+
+```ts
+function isGuardRefusal(value: unknown): value is GuardRefusal;
+```
+
+Returns `true` when `value` is a `GuardRefusal`. Use it to tell a refusal from a tool's own result.
+
+```ts
+import { isGuardRefusal } from "quard";
+
+const out = await payInvoice({ iban, amount: 4950 });
+if (isGuardRefusal(out)) {
+    console.warn(`blocked by the ${out.guard} guard (${out.reason})`);
+}
+```
+
+## GuardBlockedError
+
+```ts
+class GuardBlockedError extends Error {
+    readonly refusal: GuardRefusal;
+
+    constructor(refusal: GuardRefusal);
+
+    get guard(): string;
+    get reason(): ReasonCode;
+}
+```
+
+Thrown in place of a refusal when the guard that blocked sets `onBlock: "throw"`. Its `name` is `"GuardBlockedError"` and its `message` is the refusal text. `guard` and `reason` read from `refusal`.
+
+A `GuardBlockedError` that ends a `quard.run()` records the run as `blocked`, not `failed`.
+
+## onBlock
+
+Every guard takes `onBlock`:
+
+| Value                | What a block does                                 |
+| -------------------- | ------------------------------------------------- |
+| `"return"` (default) | The guarded function returns a `GuardRefusal`     |
+| `"throw"`            | The guarded function throws a `GuardBlockedError` |
+
+Use `"throw"` when a block should stop your own code, not only the model's next step. [Several guards on one tool](/sdk/reference/guard#several-guards-on-one-tool) explains which guard's `onBlock` applies. With the [OpenAI Agents SDK](/sdk/reference/openai-agents), `"throw"` stops the Agents SDK run, and `run()` rejects with the `GuardBlockedError`.
+
+```ts
+const sendSms = guard(rawSendSms, { type: "limit", name: "sendSms", maxCallsPerRun: 2, onBlock: "throw" });
+
+try {
+    await quard.run({ agent: "assistant" }, () => runAgent(client, prompt, { sendSms }));
+} catch (error) {
+    if (error instanceof GuardBlockedError) {
+        console.warn(`stopped: ${error.reason}`);
+    }
+}
+```
+
+## Reason codes
+
+Every refusal text has the same shape:
+
+```text
+Blocked by the <guard> guard: <why>. The <tool> call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+For `content_blocked` the tool did run, so the second sentence is `The <tool> result was withheld.` In the table, `<field>` is the refusal's `field`, or "argument" when it has none.
+
+A refusal from the x402 guard has its own shape, for its own reason codes and for the approval reasons it uses:
+
+```text
+Blocked by the x402 guard: <why>. The x402 payment did NOT happen. Do not retry it.
+```
+
+| Reason code                          | Guard                 | `<why>`                                                                               |
+| ------------------------------------ | --------------------- | ------------------------------------------------------------------------------------- |
+| `permission_denied`                  | `permission`          | this agent is not allowed to use this tool                                            |
+| `value_not_from_allowed_origin`      | `action`              | the `<field>` value did not come from an allowed source                               |
+| `value_model_generated`              | `action`              | the `<field>` value did not appear in any content this run read                       |
+| `amount_over_cap`                    | `action`              | the `<field>` value is over the allowed limit                                         |
+| `recipient_never_seen`               | `action`              | the `<field>` value has not been seen in trusted content                              |
+| `rule_failed`                        | `action`              | the `<field>` value failed a rule                                                     |
+| `destination_not_allowed`            | `egress`              | internal data may only go to allowed destinations                                     |
+| `destination_from_untrusted_content` | `egress`              | the destination first appeared in untrusted content                                   |
+| `sensitive_data`                     | `egress`              | the data to send holds a sensitive value (`<field>`)                                  |
+| `limit_reached`                      | `limit`               | a limit for this run was reached                                                      |
+| `daily_limit_reached`                | `limit`               | a daily limit for this tool was reached                                               |
+| `value_quarantined`                  | `limit`               | the `<field>` value is new and many runs used it at once, so it is blocked everywhere |
+| `approval_required`                  | `approval`            | it needs a human approval                                                             |
+| `approval_unavailable`               | `approval`            | it needs a human approval and none could be asked                                     |
+| `approval_denied`                    | `approval`            | a human denied it                                                                     |
+| `approval_timed_out`                 | `approval`            | no one answered the approval request in time                                          |
+| `backend_unavailable`                | `approval`            | it needs the Quard backend, which could not be reached                                |
+| `content_blocked`                    | `source`, `signature` | the content looked unsafe                                                             |
+| `signature_matched`                  | `signature`           | it matched the known attack signature `<field>`                                       |
+| `signatures_unavailable`             | `signature`           | the attack signature feed could not be loaded                                         |
+| `call_aborted`                       | `abort`               | the call was cancelled before it ran                                                  |
+| `x402_over_payment_limit`            | `x402`                | the payment is over the limit for one payment                                         |
+| `x402_over_run_limit`                | `x402`                | the payment is over the run limit                                                     |
+| `x402_over_day_limit`                | `x402`                | the payment is over the daily limit                                                   |
+| `x402_too_many_payments`             | `x402`                | this run made too many payments                                                       |
+| `x402_host_blocked`                  | `x402`                | this host may not be paid                                                             |
+| `x402_untrusted_payee`               | `x402`                | the host or payee first appeared in untrusted content                                 |
+| `x402_payee_quarantined`             | `x402`                | the payee is new and many runs paid it at once, so it is blocked everywhere           |
+| `x402_unknown_value_over_cap`        | `x402`                | the amount is over the cap for this token                                             |
+| `x402_invalid_amount`                | `x402`                | the payment amount could not be read                                                  |
+
+- `permission`: the tool isn't in the agent's tool list from [`quard.run()`](/sdk/reference/quard#quardrun), `quard.agent()` or `quard.resume()`.
+- `abort`: the caller gave up on the call after its checks. See [Aborted calls](/sdk/reference/guard#aborted-calls).
+- `limit_reached` comes from per-run limits, and from the [run limits](/sdk/reference/run-limits): depth, fan-out and loops on a limit guard with `delegateTo`, and steps and cost on model calls.
+- `approval_timed_out` also covers a call aborted while it waited for an answer.
+- `signature`: the [signature feed](/sdk/reference/detector#the-signature-feed).
+- For `sensitive_data`, `<field>` is `secret`, `card number` or `IBAN`. For `signature_matched`, it is the signature's id.
+- `x402`: the [x402 guard](/sdk/reference/x402#reason-codes). A payment it asked a person about and didn't get a yes for is refused by the `x402` guard with the approval reason, such as `approval_denied`.
+- Each guard's page says when it uses each code.
+- [Decision events](/sdk/reference/events#event-types) carry the same codes in `reason`, for asks and for rules in observe mode too.
+
+## Model calls over a run limit
+
+When the [run limits](/sdk/reference/run-limits) are enforced, the wrapped client refuses a model call over the step or cost limit before it leaves the process. It answers the OpenAI client itself, with an HTTP 403 response that the client doesn't retry. The response's `error` holds:
+
+| Field     | Value                                                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `type`    | `"quard_blocked"`                                                                                                              |
+| `code`    | `"limit_reached"`                                                                                                              |
+| `message` | The refusal text, such as "Blocked by the limit guard: a limit for this run was reached. The gpt-5.4-mini call did NOT run. …" |
+
+The OpenAI client throws this as its usual API error for a 403. A `quard.run()` that ends with that error is recorded as `blocked`, as for a `GuardBlockedError`.
+
+## Refused payments
+
+A payment the [x402 guard](/sdk/reference/x402#when-a-payment-is-refused) refuses is aborted before the wallet signs it, and the x402 client throws an `Error` whose message holds the refusal text.
+
+- Inside a guarded tool, the guarded function returns a `GuardRefusal` with `guard: "x402"` instead of passing the error on. With `onBlock: "throw"` on the x402 guard, it throws a `GuardBlockedError`.
+- Outside one, catch the error and send its message to the model.
+
+A signed payment that no x402 guard checked is never sent. [`quard.x402Fetch()`](/sdk/reference/x402#payments-that-are-not-sent) answers it with a `403` whose `error.type` is `"quard_blocked"` and `error.code` is `"unguarded_x402"`. [`quard.x402Mcp()`](/sdk/reference/x402#quardx402mcp) returns an MCP error result. Both carry this text:
+
+```text
+Blocked by Quard: no x402 guard checked this payment. The x402 payment did NOT happen. Do not retry it.
+```
+
+## Errors
+
+Errors your tool throws are recorded and passed on unchanged: the guarded function rejects with the same error. Quard turns only its own decisions into refusals.
+
+The SDK itself throws in these cases:
+
+| Thrown by              | Error message starts with                                  | When                                                                          |
+| ---------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| a guarded function     | the refusal text, as a `GuardBlockedError`                 | A guard with `onBlock: "throw"` blocked the call                              |
+| a `guardedTool()` call | the abort signal's reason                                  | The Agents SDK aborted the call before it started                             |
+| `guard()`              | `Unknown guard type:`                                      | A guard's `type` isn't one of the six                                         |
+| `guard()`              | `An x402 guard wraps an x402 client`                       | A guard's `type` is `"x402"`                                                  |
+| `quard.x402()`         | `quard.x402() takes options with type: "x402"`             | `options.type` isn't `"x402"`                                                 |
+| `quard.x402()`         | `x402 guard:`                                              | A cap is negative or not a number, or an `assetCaps` value isn't atomic units |
+| `guard()`              | `An approval timeout must be a positive number of seconds` | An approval guard's `timeout` is zero, negative or not a number               |
+| `guard()`              | `guard() needs options.name`                               | No guard sets `name`, or it is empty                                          |
+| `quard.agent()`        | `quard.agent() must be called inside quard.run()`          | There is no current run                                                       |
+| `quard.inject()`       | `quard.inject() must be called inside quard.run()`         | There is no current run                                                       |
+| `quard.memory()`       | `quard.memory() needs options.name`                        | `name` is missing, empty or longer than 200 characters                        |
+| `jevDetector()`        | `jevDetector() needs an apiKey`                            | `apiKey` is missing or empty. A `TypeError`                                   |
+| `quard.configure()`    | see [What throws](/sdk/reference/configure#what-throws)    | An option, the policy file or a feed file is invalid                          |
+
+## Related
+
+- [Your first guard](/sdk/examples/first-guard): a refusal, then `onBlock: "throw"`.
+- [When a guard blocks](/concepts/guards#when-a-guard-blocks): refusals without code.
+- [Run limits](/sdk/examples/run-limits): a model call refused by a run limit.
+- [A paid API in a loop](/sdk/examples/paid-api-in-a-loop): a payment refused outside a guarded tool.
+
+## Source
+
+- [`packages/sdk/core/refusal.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/refusal.ts): `GuardRefusal`, `isGuardRefusal()`, `GuardBlockedError` and `BLOCKED_ERROR_TYPE`
+- [`packages/sdk/monitor/fetch.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/fetch.ts): `refusedResponse()`, the 403 for a model call over a run limit
+- [`packages/sdk/pipeline/abort.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/abort.ts): `callAborted()`, the `call_aborted` refusal
+- [`packages/sdk/guards/x402/x402.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/x402.ts): the x402 guard's refusal
+- [`packages/sdk/x402/refusal.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/x402/refusal.ts): the text for a payment no x402 guard checked
+- [`packages/shared/refusals/templates.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/refusals/templates.ts): `ReasonCode` and `refusalText()`, the fixed templates
+- [`packages/sdk/pipeline/guard.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard.ts): `refuse()`, which picks `onBlock`, and the errors `guard()` throws
+- [`packages/sdk/context/scope.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/scope.ts): how a `GuardBlockedError` ends a run

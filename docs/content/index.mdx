@@ -26,11 +26,11 @@ flowchart LR
     people([Your team]) --> dashboard
 ```
 
-- **The SDK** runs inside your app. It wraps your OpenAI client and your tools, and runs its checks in your process before a tool is called.
+- **The SDK** runs inside your app. It wraps your OpenAI client and your tools, and runs its checks in your process before a tool is called. The [SDK docs](/sdk) cover it.
 - **The backend** stores what happened, keeps shared counters and holds approval requests until someone answers. The worker finds the cause of incidents in the background.
 - **The dashboard** is where your team watches runs, answers approvals and looks into incidents. The [user guides](/guides/getting-started) cover it.
 
-Quard is self-hosted. It runs in your own cloud with Docker and Postgres, so traces stay in your network.
+Quard is a hosted service: sign in to the dashboard with GitHub or email, create an agent key, and your agents send their runs there. You can also run it yourself with Docker and Postgres, so traces stay in your network.
 
 ## Key ideas
 
@@ -46,7 +46,7 @@ Every piece of content gets a label that says where it came from:
 - **Trust**: trusted or untrusted.
 - **Sensitivity**: internal or public.
 
-The origin is a recorded fact. It never comes from the content itself or from an AI. Trust and sensitivity follow from the origin: web pages, outside email and MCP servers are untrusted by default, while your users and your own tools are trusted.
+The origin is a recorded fact. It never comes from the content itself or from an AI. Trust and sensitivity follow from the origin: web pages, email and MCP servers are untrusted by default, while your users and your own tools are trusted.
 
 Quard also traces values. For each argument of a tool call, it lists every place the value appeared earlier in the run, across all agents. An IBAN that first showed up on a web page keeps that origin, even after it passes through another agent. A value found nowhere earlier is marked **model-generated**.
 
@@ -54,18 +54,18 @@ Quard also traces values. For each argument of a tool call, it lists every place
 
 A guard wraps a tool and checks every call to it. There are six kinds:
 
-| Guard    | Wrap it around                                                    | What it does                                                                              |
-| -------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Source   | Tools that bring content in: web fetch, search, inbox, files, MCP | Labels the output and scans it for bad domains, hidden instructions and invisible text    |
-| Action   | Tools that change something: payments, emails, deletes, deploys   | Checks the arguments and their labels against rules, then allows, blocks or asks a person |
-| Approval | High-stakes tools                                                 | Always asks a person first                                                                |
-| Egress   | Tools that send data out: email, uploads, HTTP posts              | Keeps internal data away from destinations that are not allowed                           |
-| Limit    | Any tool                                                          | Caps calls, amounts and cost per run, agent or day                                        |
-| x402     | An x402 payment client                                            | Checks each payment before it is signed: caps, paid hosts and untrusted payees            |
+| Guard    | Wrap it around                                                    | What it does                                                                                |
+| -------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Source   | Tools that bring content in: web fetch, search, inbox, files, MCP | Labels the output and scans it for bad domains, hidden instructions and invisible text      |
+| Action   | Tools that change something: payments, emails, deletes, deploys   | Checks the arguments and their labels against rules, then allows, blocks or asks a person   |
+| Approval | High-stakes tools                                                 | Always asks a person first                                                                  |
+| Egress   | Tools that send data out: email, uploads, HTTP posts              | Keeps internal data away from destinations that are not allowed                             |
+| Limit    | Any tool                                                          | Caps calls and amounts per run or per day, and stops a new value suddenly used by many runs |
+| x402     | An x402 payment client                                            | Checks each payment before it is signed: caps, paid hosts and untrusted payees              |
 
 A blocked call never reaches the tool. The agent gets a short refusal that says what was stopped and why.
 
-Rules live in your code. A new rule can run in **observe** mode first: it records "would block" or "would ask" but lets the call through.
+Rules live in your code, and optionally in a policy file your team can edit while agents run. A new rule can run in **observe** mode first: it records "would block" or "would ask" but lets the call through.
 
 ### Approvals
 
@@ -82,6 +82,8 @@ A new bank account, recipient or domain that suddenly shows up across many runs 
 ## Where to go next
 
 - New to the dashboard? Start with [Getting started](/guides/getting-started).
+- Adding Quard to an app? Start with the [SDK](/sdk), then run the [examples](/sdk/examples).
+- Building with an AI coding agent? Install the [Quard skill](/sdk#use-the-quard-skill).
 - A call is waiting for you? See [Approvals](/guides/approvals).
 - Looking into a failure? See [Incidents](/guides/incidents).
 - Running agents that work together? See [Multi-agent](/concepts/multi-agent), [Run limits](/concepts/run-limits) and [Shared memory](/concepts/shared-memory).

@@ -1,0 +1,194 @@
+# guard()
+
+`guard()` wraps a tool function. Every call to the wrapped function runs Quard's checks first, and a blocked call never reaches your function. It gets a [refusal](/sdk/reference/refusals) instead, which your agent loop sends back to the model like any tool result.
+
+```ts
+function guard<F extends (...args: never[]) => unknown>(
+    fn: F,
+    options: GuardOptions | GuardOptions[],
+): (...args: Parameters<F>) => Promise<Awaited<ReturnType<F>> | GuardRefusal>;
+```
+
+## Parameters
+
+| Parameter | Type                               | What it is                                                                                                                                                           |
+| --------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fn`      | a function                         | Your tool. It can be sync or async and take any number of arguments.                                                                                                 |
+| `options` | `GuardOptions` or `GuardOptions[]` | One guard, or a list of guards for the same tool. Each has a `type`: `"source"`, `"action"`, `"approval"`, `"egress"` or `"limit"`. See [Guard types](#guard-types). |
+
+## Return value
+
+A function with the same parameters as `fn`. It always returns a promise, which resolves to one of:
+
+- what `fn` returned, when every check passed;
+- a `GuardRefusal`, when a guard blocked the call or withheld its result, or when the [x402 guard](/sdk/reference/x402#inside-a-guarded-tool) refused a payment the tool made and the tool threw.
+
+Errors that `fn` throws are recorded and passed on unchanged. With `onBlock: "throw"`, a block throws a `GuardBlockedError` instead of returning a refusal.
+
+```ts
+import { guard, isGuardRefusal } from "quard";
+
+async function rawSendSms(input: { to: string; text: string }) {
+    return `sent "${input.text}" to ${input.to}`;
+}
+
+const sendSms = guard(rawSendSms, { type: "limit", name: "sendSms", maxCallsPerRun: 2 });
+
+const out = await sendSms({ to: "+1 555 0100", text: "Hi" });
+if (isGuardRefusal(out)) {
+    console.warn(out.guard, out.reason);
+}
+```
+
+## Options every guard has
+
+| Option    | Type                   | Default                           | What it does                                                                                                                                                                                                                                                                       |
+| --------- | ---------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`    | `GuardType`            | required                          | Which guard this is.                                                                                                                                                                                                                                                               |
+| `name`    | `string`               | required on one guard of the tool | The tool name the model sees. Quard uses it to match the model's tool calls, check permissions, name the tool in refusals and keep a rule's history across deploys. It is needed because a function's own name can differ, such as `rawSendSms`, or be lost when code is minified. |
+| `mode`    | `"block" \| "observe"` | `"block"`                         | `"observe"` records what the guard would do, "would block" or "would ask", and lets the call run. Approval guards have no `mode`. See [Block mode and observe mode](/concepts/guards#block-mode-and-observe-mode).                                                                 |
+| `onBlock` | `"return" \| "throw"`  | `"return"`                        | `"throw"` throws a [`GuardBlockedError`](/sdk/reference/refusals#guardblockederror) instead of returning a refusal.                                                                                                                                                                |
+
+Each guard type adds its own options. See the pages for the [source](/sdk/reference/source-guard), [action](/sdk/reference/action-guard), [approval](/sdk/reference/approval-guard), [egress](/sdk/reference/egress-guard) and [limit](/sdk/reference/limit-guard) guards.
+
+A [policy file](/sdk/reference/policy-file) can replace a tool's options while the app runs. From the next call on, a tool listed in the file uses the file's options in place of the ones in code.
+
+## Several guards on one tool
+
+Pass a list to put several guards on one tool. All of them check every call.
+
+```ts
+const payInvoice = guard(rawPayInvoice, [
+    { type: "action", name: "payInvoice", rules: [{ field: "iban", from: ["tool:getSupplier"] }] },
+    { type: "limit", maxAmountPerRun: { field: "amount", max: 10000 } },
+]);
+```
+
+- Only one guard needs `name`. The first `name` in the list is the tool's name.
+- Before the call, the checks run in a fixed order: the [signature feed](/sdk/reference/detector#the-signature-feed), then every limit guard, every action guard, every egress guard and, last, the approval guard. The order doesn't change the outcome. The strictest result wins: block, then ask, then allow. Rules in observe mode never count.
+- A source guard checks the result after the tool runs. If the list holds several source guards, only the first one is used.
+- `onBlock` comes from the first guard in the list of the same type as the guard that blocked. A block from the approval step counts as the approval guard's. When that guard doesn't set `onBlock`, or the list has no guard of that type, as for the permission check, the signature feed and an [aborted call](#aborted-calls), the first `onBlock` set anywhere in the list applies.
+
+## What guard() throws
+
+`guard()` checks its options when you call it, before any tool call:
+
+| Error message                                                         | Cause                                                           |
+| --------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `Unknown guard type: <type>`                                          | A guard's `type` isn't one of the six                           |
+| `An x402 guard wraps an x402 client: use quard.x402(client, options)` | A guard's `type` is `"x402"`                                    |
+| `An approval timeout must be a positive number of seconds`            | An approval guard's `timeout` is zero, negative or not a number |
+| `guard() needs options.name: the tool name the model sees`            | No guard in the list sets `name`, or the first one set is empty |
+
+## How arguments are checked
+
+- One argument is checked as itself. Several arguments are checked as a list, so field paths start with the position, such as `[1].amount`.
+- A field path uses dots and brackets, such as `invoice.amount` or `items[0].to`. A rule on a field also covers the values nested inside it.
+- Quard copies plain data (strings, numbers, arrays and plain objects) once, when the call starts. The checks, the approver and your tool all get that copy, so code that changes the arguments while a call waits can't change what runs.
+- Values that aren't plain data, such as a `Date` or another class instance, are passed as they are. If one changes after an approval, the call is refused with `approval_required`.
+- The tool runs inside the call's run. Model calls and guarded calls the tool makes join that run.
+
+## Tool calls the model asked for
+
+When a model asks for a tool call through a [wrapped client](/sdk/reference/quard#quardwrap), Quard records the request and checks it against the agent's tools. When your loop then calls the guarded function, `guard()` claims that request:
+
+- It looks for an open request for the same tool with the same arguments. Inside a run, only requests from that run count.
+- A request the client marked as blocked is refused at once, with its reason. Outside a run, changing the arguments doesn't avoid this: an open blocked request for the same tool still counts.
+- Outside a run, the guarded call joins the run and agent of the request.
+- Quard keeps the label it gives the tool's result. When your loop sends the result back to the model, the client labels it with that label. The refusal of a call that never ran is labeled `system`, so it never counts as outside content.
+
+A tool the model calls that has no `guard()` can only be recorded, never stopped. The client records an `unwrapped_tool` warning for it. When its result goes back to the model, the client labels it with the origin `unknown`: untrusted and internal by default. Tools an agent framework runs itself, such as the [OpenAI Agents SDK's](/sdk/reference/openai-agents) handoffs, get no warning, and the output the framework writes for them is labeled `system`.
+
+## The steps of a call
+
+Every call to a guarded function goes through the same steps. [Guards](/concepts/guards#what-happens-on-every-call) explains them without code, and [The guard pipeline](/sdk/internals/pipeline) walks through the code.
+
+1. **Context.** Find the run and the agent: the current run, the run of the claimed request, or a new run under the agent `default`. The agent's depth comes from the run too.
+2. **Permission.** Refuse the call with `permission_denied` when the agent may not use this tool.
+3. **Labels.** Label each argument with every place its value appeared earlier in the run. An egress guard that masks data does so first.
+4. **Checks.** Run the signature feed, then the limit, action, egress and approval guards. A limit guard with `delegateTo` also checks the [run limits](/sdk/reference/run-limits) on depth, fan-out and loops.
+5. **Decision.** The strictest enforced result wins: block, then ask, then allow.
+6. **Approval.** On ask, wait for a person, then run the block checks again. See [Approval guard](/sdk/reference/approval-guard).
+7. **Run.** Count the call against its limits, then run the tool with exactly the checked arguments. In a run that spans processes, the per-run counts go through `control`. A call whose caller gave up is refused here and counts nothing.
+8. **Output.** Label the result and add it to what the run has read. With a source guard, the result is first scanned and checked against the signature feed and the detector.
+9. **Record.** Every step records its decisions as [events](/sdk/reference/events), allows included.
+
+Before step 1, Quard rereads a changed policy file or feed file, so an edit applies from this call on.
+
+## Aborted calls
+
+`guard()` itself never aborts a call. The [OpenAI Agents SDK integration](/sdk/reference/openai-agents) passes each call the abort signal the Agents SDK gives it. The Agents SDK fires that signal when it gives up on a call: on the tool's timeout, when the app aborts the run, or when a sibling call fails.
+
+| When the signal fires                       | What happens                                                                                                                                         | Recorded as                                                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Before the call starts                      | Nothing is checked or recorded. The call rejects with the signal's reason                                                                            | Nothing                                                                                                          |
+| Before or while the call waits for approval | Quard stops waiting and refuses the call. A request in the dashboard is dropped in `control`, so no one approves a call that is gone                 | A decision from the `approval` guard, rule `aborted`, reason `approval_timed_out`                                |
+| After the checks, before the tool runs      | Quard refuses the call, and the tool never runs. Its counts are taken back, except the per-run counts `control` keeps for a run that spans processes | A decision from the `abort` guard, rule `aborted`, reason [`call_aborted`](/sdk/reference/refusals#reason-codes) |
+
+## Guard types
+
+```ts
+const GUARD_TYPES = ["source", "action", "approval", "egress", "limit", "x402"] as const;
+
+type GuardType = (typeof GUARD_TYPES)[number];
+
+function isGuardType(value: unknown): value is GuardType;
+
+type GuardOptions = SourceOptions | ActionOptions | ApprovalOptions | EgressOptions | LimitOptions | X402Options;
+```
+
+| Type       | Wrap it around                         | Runs                       | Reference                                       |
+| ---------- | -------------------------------------- | -------------------------- | ----------------------------------------------- |
+| `source`   | Tools that bring outside content in    | After the tool returns     | [Source guard](/sdk/reference/source-guard)     |
+| `action`   | Tools that change something            | Before the call            | [Action guard](/sdk/reference/action-guard)     |
+| `approval` | High-stakes tools                      | Before the call            | [Approval guard](/sdk/reference/approval-guard) |
+| `egress`   | Tools that send data out               | Before the call            | [Egress guard](/sdk/reference/egress-guard)     |
+| `limit`    | Any tool                               | Before the call            | [Limit guard](/sdk/reference/limit-guard)       |
+| `x402`     | An x402 client, through `quard.x402()` | Before a payment is signed | [x402 payments](/sdk/reference/x402)            |
+
+The first five go to `guard()`. The x402 guard wraps an x402 client instead of a tool, with [`quard.x402()`](/sdk/reference/x402#quardx402). `guard()` throws for it. Its decisions carry `guard: "x402"` and the guard's name as `tool`.
+
+`RuleResult` is the result of one rule on one call. [Decision events](/sdk/reference/events#event-types) carry the same fields.
+
+```ts
+type RuleResult = AllowResult | FailResult;
+
+type AllowResult = {
+    guard: GuardType | "permission" | "signature" | "abort";
+    rule: string;
+    mode: "block" | "observe";
+    decision: "allow";
+};
+
+type FailResult = {
+    guard: GuardType | "permission" | "signature" | "abort";
+    rule: string;
+    mode: "block" | "observe";
+    decision: "block" | "ask";
+    reason: ReasonCode;
+    field?: string;
+};
+```
+
+`ReasonCode` is one of the [reason codes](/sdk/reference/refusals#reason-codes). `"permission"` is the check of the agent's tools, `"signature"` the [signature feed](/sdk/reference/detector#the-signature-feed), and `"abort"` the refusal of an [aborted call](#aborted-calls).
+
+## Related
+
+- [Your first guard](/sdk/examples/first-guard): a limit guard on a real agent.
+- [Guards](/concepts/guards): what guards do, without code.
+- [OpenAI Agents SDK](/sdk/reference/openai-agents): `guardedTool()`, which runs every call through `guard()`.
+- [Rules from code](/guides/settings#rules-from-code): the rules the dashboard shows. With the control link on, the SDK sends them to `control` by name, with a hash that decision events carry.
+
+## Source
+
+- [`packages/sdk/pipeline/guard.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard.ts): `guard()`, `guardWithSignal()` and `runPipeline()`
+- [`packages/sdk/pipeline/abort.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/abort.ts): `callAborted()`
+- [`packages/sdk/monitor/framework-tools.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/framework-tools.ts): `unguardedOutputLabel()`, the label of a result no guard labeled
+- [`packages/sdk/pipeline/checks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/checks.ts): `preChecks()` and `decide()`
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): `runTool()` and `finishOutput()`
+- [`packages/sdk/pipeline/snapshot.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/snapshot.ts): `snapshot()`, the private copy of the arguments
+- [`packages/sdk/context/registry.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/registry.ts): `claimCall()`, which claims a requested tool call
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): the options of every guard type
+- [`packages/sdk/guards/types.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/types.ts): `GUARD_TYPES` and `isGuardType()`
+- [`packages/sdk/guards/x402/frame.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/x402/frame.ts): how a tool returns a payment the x402 guard refused
+- [`packages/sdk/guards/call.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/call.ts): `GuardCall` and `RuleResult`

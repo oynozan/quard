@@ -8,7 +8,7 @@ export const HEALTH_URL = "/api/health";
 
 // A refresh while offline makes Next reload the whole page, maybe onto a browser error page.
 // A session that ran out counts as up, so the refresh can send the person to sign in.
-async function serverAnswers(): Promise<boolean> {
+export async function serverAnswers(): Promise<boolean> {
     try {
         const response = await fetch(HEALTH_URL, { cache: "no-store" });
         return response.status < 500;

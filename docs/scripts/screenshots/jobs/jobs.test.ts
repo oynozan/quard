@@ -15,6 +15,29 @@ function guideImages() {
         .map((link) => path.basename(link.href, ".webp"));
 }
 
+// Numbered items of the list these lines start with, nested lines skipped
+function countCallouts(lines: string[]) {
+    let count = 0;
+    for (const line of lines) {
+        if (/^\d+\. /.test(line)) count++;
+        else if (line.trim() !== "" && !/^\s/.test(line)) break;
+    }
+    return count;
+}
+
+// How many numbered callouts sit under each guide image, by image name
+function calloutsByImage() {
+    const counts = new Map<string, number>();
+    for (const file of mdxFiles(path.join(DOCS, "content"))) {
+        const lines = readFileSync(file, "utf8").split("\n");
+        lines.forEach((line, index) => {
+            const image = /^!\[[^\]]*\]\(\/images\/guides\/([\w-]+)\.webp\)/.exec(line);
+            if (image) counts.set(image[1] as string, countCallouts(lines.slice(index + 1)));
+        });
+    }
+    return counts;
+}
+
 describe("screenshot jobs", () => {
     it("have unique names and dashboard paths", () => {
         const names = JOBS.map((job) => job.name);
@@ -28,5 +51,10 @@ describe("screenshot jobs", () => {
 
     it("cover exactly the screenshots the docs use", () => {
         expect(JOBS.map((job) => job.name).sort()).toEqual([...new Set(guideImages())].sort());
+    });
+
+    it("have one mark for each numbered callout under their image", () => {
+        const callouts = calloutsByImage();
+        for (const job of JOBS) expect([job.name, job.marks.length]).toEqual([job.name, callouts.get(job.name)]);
     });
 });

@@ -9,7 +9,7 @@ import { Notice, WarningRule } from "@/components/kit/feedback/feedback";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { Replay, ReplayRound } from "@/lib/data/incidents/types";
-import { formatCost, formatP, REPLAY_TONE, REPLAY_WORD } from "../lib/labels";
+import { formatCost, formatP, REPLAY_TONE, REPLAY_WORD, WORKER_DOWN } from "../lib/labels";
 import { Disclosure } from "./disclosure";
 import { RoundCells } from "./round-cells";
 
@@ -26,9 +26,10 @@ function summary(replay: Replay): string {
     return `${replay.rounds.length} rounds. Harmful with the content ${last.totalWith.harmful} of ${last.totalWith.runs}, without ${last.totalWithout.harmful} of ${last.totalWithout.runs}. p ${formatP(last.pValue)}.`;
 }
 
-export function ReplayResults({ replay }: { replay: Replay }) {
+export function ReplayResults({ replay, workerRunning }: { replay: Replay; workerRunning: boolean }) {
     const last = replay.rounds.at(-1);
-    const pending = replay.status === "running" ? replay.rounds.length + 1 : null;
+    const stalled = !workerRunning && (replay.status === "queued" || replay.status === "running");
+    const pending = replay.status === "running" && workerRunning ? replay.rounds.length + 1 : null;
     const rows = replay.rounds.map((round) => ({
         key: String(round.round),
         cells: [
@@ -74,8 +75,8 @@ export function ReplayResults({ replay }: { replay: Replay }) {
             }
         >
             <p aria-live="polite" className="mb-4 inline-flex items-center gap-2 text-[13px] text-ink">
-                {pending ? <Spinner /> : <StatusSquare tone={REPLAY_TONE[replay.status]} />}
-                {statusWord(replay)}
+                {pending ? <Spinner /> : <StatusSquare tone={stalled ? "warning" : REPLAY_TONE[replay.status]} />}
+                {stalled ? WORKER_DOWN : statusWord(replay)}
             </p>
 
             <div role="img" aria-label={summary(replay)} className="flex flex-col gap-[10px]">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useLive } from "@/components/live/status";
 import { Greeting } from "@/components/overview/greeting";
 import { columnOverlay } from "@/lib/charts/cells";
 import { heroLayout, HERO_DATA_ROWS } from "@/lib/charts/hero";
@@ -24,6 +25,8 @@ type HeroChartProps = {
 
 // The greeting over the last 24 hours of model calls as green cell columns
 export function HeroChart({ greeting, values: given, endsAt }: HeroChartProps) {
+    // The cursor and the live square follow the event stream
+    const live = useLive();
     const [ref, width] = useWidth<HTMLDivElement>(978);
     const [hover, setHover] = useState<number | null>(null);
     const [table, setTable] = useState(false);
@@ -78,7 +81,7 @@ export function HeroChart({ greeting, values: given, endsAt }: HeroChartProps) {
                 <Greeting text={greeting} />
                 <div className="flex items-center gap-[14px] pb-[5px]">
                     <Readout label={`Model calls per ${per}`} value={empty ? "—" : formatInt(total)} suffix="in 24h" />
-                    <LiveMark />
+                    <LiveMark live={live} />
                     <HeaderDivider />
                     <TableToggle pressed={table} onToggle={() => setTable(!table)} />
                 </div>
@@ -137,7 +140,7 @@ export function HeroChart({ greeting, values: given, endsAt }: HeroChartProps) {
                                     <path d={overlay.lit} fill="var(--mint)" />
                                 </>
                             ) : null}
-                            <rect className="cursor-blink" {...layout.cursor} fill="var(--signal)" />
+                            {live ? <rect className="cursor-blink" {...layout.cursor} fill="var(--signal)" /> : null}
                         </svg>
 
                         {empty ? (

@@ -17,7 +17,13 @@ const TITLE: Record<IncidentCategory, (found: Found) => string> = {
 
 // An incident as the lists show it. Until the verdict is found, the title says where the finder is.
 export function incidentOf(row: IncidentRow): Incident {
-    const base = { id: row.id, runId: row.runId, replay: replayStatus(row), openedAt: row.openedAt.getTime() };
+    const base = {
+        id: row.id,
+        runId: row.runId,
+        replay: replayStatus(row),
+        openedAt: row.openedAt.getTime(),
+        seen: row.seenAt !== null,
+    };
     const verdict = row.verdict;
     if (!verdict) {
         const title = row.findState === "failed" ? "Root cause not found" : "Finding the root cause";

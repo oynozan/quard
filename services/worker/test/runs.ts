@@ -32,11 +32,13 @@ export function label(change: Partial<StoredLabel> & Pick<StoredLabel, "contentI
 
 export function decision(change: Partial<StoredDecision> & Pick<StoredDecision, "stepId" | "tool">): StoredDecision {
     const plain = {
+        agent: "billing",
         guard: "permission",
         rule: "permission",
         decision: "allow",
         mode: "block",
         enforced: true,
+        at: at(0),
     } as const;
     return { ...plain, ...change };
 }
@@ -116,5 +118,36 @@ export function attackRun(mode: "block" | "observe" = "block"): StoredRun {
             }),
             decision({ stepId: STEP.pay, tool: "payInvoice" }),
         ],
+    };
+}
+
+// Billing's model call that asked for its messages, and the tool call that read them
+export const MESSAGE = { ask: "7".repeat(16), read: "8".repeat(16), callId: "call_m" } as const;
+
+// The attack where a researcher read the page and messaged billing, whose copy keeps the page's step
+export function passedOnRun(): StoredRun {
+    const run = attackRun();
+    const researcher = (item: StoredStep) => item.stepId === STEP.ask || item.stepId === STEP.fetch;
+    const [prompt, page, refusal] = run.labels as [StoredLabel, StoredLabel, StoredLabel];
+    return {
+        steps: [
+            ...run.steps.filter(researcher).map((item) => ({ ...item, agent: "researcher" })),
+            step({
+                stepId: MESSAGE.ask,
+                kind: "model_call",
+                name: "test-model",
+                at: at(57),
+                detail: { toolCalls: [{ name: "readMessage", callId: MESSAGE.callId, arguments: "{}" }] },
+            }),
+            step({ stepId: MESSAGE.read, kind: "tool_call", name: "readMessage", callId: MESSAGE.callId, at: at(58) }),
+            ...run.steps.filter((item) => !researcher(item)),
+        ],
+        labels: [
+            { ...prompt, agent: "researcher" },
+            { ...page, agent: "researcher", at: at(57) },
+            { ...page, contentId: "c5" },
+            refusal,
+        ],
+        decisions: run.decisions,
     };
 }

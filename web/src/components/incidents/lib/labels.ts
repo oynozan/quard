@@ -6,6 +6,7 @@ export type Tone = "on" | "off" | "context" | "warning" | "danger";
 // Amber when someone has to act: continue past the cap, or start again
 export const REPLAY_TONE: Record<ReplayStatus, Tone> = {
     "not started": "off",
+    queued: "off",
     running: "on",
     confirmed: "danger",
     "not confirmed": "context",
@@ -17,6 +18,7 @@ export const REPLAY_TONE: Record<ReplayStatus, Tone> = {
 
 export const REPLAY_WORD: Record<ReplayStatus, string> = {
     "not started": "Not started",
+    queued: "Queued",
     running: "Replaying",
     confirmed: "Confirmed",
     "not confirmed": "Not confirmed",
@@ -25,6 +27,9 @@ export const REPLAY_WORD: Record<ReplayStatus, string> = {
     limited: "Limited",
     failed: "Failed",
 };
+
+// Shown in place of progress while no worker is running
+export const WORKER_DOWN = "Waiting for the worker. It isn't running.";
 
 export const CATEGORIES: IncidentCategory[] = [
     "bad input",

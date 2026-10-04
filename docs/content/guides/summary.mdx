@@ -2,69 +2,114 @@
 
 The Summary page is the monthly report for all your agents together. Every other page looks at one thing: one run, one incident or one agent. Summary looks across every agent over the last 30 days and shows where problems keep coming from, so you can decide what to fix.
 
-Use it for a regular review, for example once a week. It answers four questions, and holds one to-do list:
+Use it for a regular review, for example once a week. It answers these questions, and holds one to-do list:
 
 | Section               | What it answers                                                     |
 | --------------------- | ------------------------------------------------------------------- |
 | Where incidents start | Which sources and tools keep causing incidents?                     |
 | What guards block     | What gets blocked, and when?                                        |
 | Agents and links      | Which agents let untrusted content in, and which handoffs carry it? |
-| Run limits            | How many runs would the default limits stop?                        |
+| Run limits            | How many runs reach each run limit? (not counted yet)               |
+| x402 spend            | What did agents pay, and to which agents, hosts and payees?         |
+| Payees                | Which wallets were paid for the first time, and which are held?     |
 | Quarantine            | Which new values are blocked everywhere and wait for a person?      |
 
-With no data yet, each chart and table stays in place with a short message, such as **No blocks in the last 30 days**, and each run limit shows a dash.
+**Last 30 days** at the top right gives the exact dates the page covers. The 30 days are counted in UTC and include today.
+
+Charts, filters, the **Table** button, hover readouts and the drawer work as on every other page. See [Common controls](/guides/getting-started#common-controls).
 
 ## Where incidents start
 
 ![Where incidents start](/images/guides/summary-incidents.webp)
 
-1. **By entry source.** The origins where incidents began, such as an email domain or a web page, with how many incidents each one started. **Untrusted** counts the incidents that began from untrusted content.
-2. **By damaging tool.** The tools that did the damage.
+1. **By entry source.** The [origins](/concepts/labels) where incidents began, such as a web page (`web:…`), an inbox (`email:…`), shared memory (`memory:…`) or another agent (`agent:…`). Each row shows how many incidents that origin started and its share of them all. **Untrusted** counts the incidents that began from untrusted content.
+2. **By damaging tool.** The tools that made the harmful call at the end of each incident, with the same count and share.
+
+The number next to the section title is the total number of incidents. Only incidents that already have a verdict count. An incident still being worked out by the root-cause finder shows up here once its verdict is ready. See [Incidents](/guides/incidents).
 
 ## What guards block
 
 ![What guards block](/images/guides/summary-blocks.webp)
 
-1. **Guard filter.** Show every guard or one kind, with how many calls each one blocked. Only guards that blocked something are listed.
-2. **Blocks per day.** Blocks per day over 30 days, with today's count above. Hover a column to read its day.
-3. **Blocks by hour.** Blocks by weekday and hour, in UTC. Brighter cells mean more blocks, and **Busiest hour** names the peak.
+1. **Guard type.** Shows blocks from every guard, or from one kind only. Each button shows how many calls that kind blocked. The kinds are Source, Action, Egress, Limit, Approval and Permission, and only kinds that blocked something are listed. **Permission** counts calls stopped because the agent was not allowed to use that tool, for example a delegated agent using a tool its parent did not grant. See [what happens on every call](/concepts/guards#what-happens-on-every-call).
+2. **Blocks per day.** One column per UTC day, oldest on the left and today on the right. **Today** is today's count. When you pick a guard type, the title changes to that kind, such as **Action blocks per day**. Hover a column to read its count and day. On a narrow screen, one column can cover a few days.
+3. **Blocks by hour, all guards.** Blocks by weekday (rows) and hour of the day in UTC (columns), for every guard, whatever the filter says. Each cell adds up that weekday and hour over the 30 days. **Busiest hour** names the hour with the most blocks. Hover a cell to read its count, weekday and hour.
+
+Only real blocks count. A rule in [observe mode](/concepts/guards#block-mode-and-observe-mode) that would have blocked a call is not counted here. Payments the [x402 guard](/concepts/payments) refused are not counted either. They show on each [run page](/guides/runs#payments).
+
+In the hour chart, a dark cell means no blocks. Lit cells go from dark green to bright green in five steps: 1 to 5 blocks, 6 to 11, 12 to 19, 20 to 29, and 30 or more. The scale at the top right, from **0** to **30+**, shows these steps. The grey strip under the grid adds up each hour across the week, so the tallest bar is the busiest hour.
 
 ## Agents and links
 
 ![Agents and links](/images/guides/summary-links.webp)
 
-1. **Entry points.** The agents that most often let untrusted content in.
-2. **Turning points.** The agents whose model calls most often decided to act on it.
-3. **Untrusted links.** The links between agents that carried untrusted content, with how many of their delegations carried it and what share that is. The largest share comes first.
+1. **Entry points.** The agents that most often let untrusted content into an incident: the agent at the incident's [entry point](/glossary).
+2. **Turning points.** The agents whose model calls most often decided to act on it: the agent at the incident's [turning point](/glossary).
+3. **Untrusted links.** The links between agents that carried untrusted content. **Link** names the agent that handed work off and the agent that took it. **Delegations** counts the times the first agent handed work to the second. **Untrusted** counts the ones where the receiving agent's first model call had already read untrusted content. **Untrusted share** is that as a share of the delegations, drawn as a meter. The largest share comes first. Links that never carried untrusted content are left out. Only delegations made with `quard.agent()` in one process count here. Messages, handoffs and delegations across processes are left out, so this table can be empty while the [Agents page](/guides/agents#read-the-agent-graph) shows untrusted links.
+
+For the full graph of who delegates to whom, see [Agents](/guides/agents#agent-graph).
 
 ## Run limits
 
-Every run has limits on delegation depth, fan-out, loops, steps and cost. They are product defaults, so they start in observe mode: they record but never stop a run until your team switches them on in code.
+Every run has limits on delegation depth, fan-out, loops, steps and cost. See [Run limits](/concepts/run-limits) for what each one counts and its default.
 
 ![Run limits](/images/guides/summary-limits.webp)
 
-1. **Would stop.** Runs that reached this limit while it was in observe mode. They were recorded, not stopped.
-2. **Stopped.** Runs this limit stopped, because it is switched on.
-3. **The limit.** The limit itself, above a meter of how many runs reached it.
+1. **A limit.** One tile for each limit: **Depth**, **Fan-out**, **Loops**, **Steps** and **Cost**.
+2. **Runs at the limit.** How many runs went over this limit in the last 30 days. **would stop** means the run limits are in observe mode: those runs went over and ran on. **stopped** means the limits are switched on, and those runs were stopped. All run limits share one mode, which comes from the newest limit decision.
+3. **Rule.** The rule name the guard decisions use, such as `max-loops`. Hover it to read it in full.
+4. **Meter.** The count as a bar, measured against the limit with the most runs, so the tiles compare at a glance.
 
-| Limit   | Default per run                                       |
-| ------- | ----------------------------------------------------- |
-| Depth   | 3 levels of delegation                                |
-| Fan-out | 10 helpers per agent                                  |
-| Loops   | 5 handoffs back and forth between the same two agents |
-| Steps   | 200 model calls across all agents                     |
-| Cost    | $5                                                    |
+While no run has gone over any limit in the last 30 days, every tile shows a dash. A run's own limit decisions show on its [run page](/guides/runs#read-a-run), as guard decisions on the step that went over.
+
+## x402 spend
+
+This section shows what your agents paid with [x402](/concepts/payments) in the last 30 days, in US dollars. Only settled payments count. A payment that settled but did not deliver still counts, because the money was spent.
+
+![x402 spend](/images/guides/summary-spend.webp)
+
+1. **x402 spend.** The number next to the title counts the settled payments.
+2. **Spend per day.** One column per UTC day, oldest on the left and today on the right. **Total** is the spend over the 30 days. **Value unknown**, when there are any, counts the payments in a token with no known US dollar value. Those have no dollar amount, so the charts leave them out. Hover a column to read its spend and day.
+3. **By agent.** The agents that paid the most, with the amount and its share of the total.
+4. **By host.** The hosts that were paid the most, such as `forecast-pro.example`. For a paid MCP tool, the host is the MCP server's name.
+5. **By payee.** The wallets that were paid the most, shortened, such as `0xBAD0…0001`.
+
+The payee bars are green and the others grey, so the two kinds of list are easy to tell apart. The color is not a warning.
+
+## Payees
+
+![Payees](/images/guides/summary-payees.webp)
+
+1. **New payees.** Wallets whose first settled payment was in the last 30 days, newest first. A new payee is worth a look: it may be a new supplier, or a wallet an attacker put in front of an agent.
+2. **Quarantined payees.** Wallets the [fleet check](#quarantine) put in quarantine, newest first.
+
+| Column      | Table              | What it shows                                                                                                                         |
+| ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Payee       | Both               | The wallet, shortened. Hover it for the full address                                                                                  |
+| Network     | New payees         | The chain of its first payment, such as **Base Sepolia**. Hover it for the network as recorded                                        |
+| First paid  | New payees         | The day of its first settled payment. Hover it for the full date                                                                      |
+| Runs        | New payees         | How many runs paid it. Hover it to see the agents                                                                                     |
+| Spent       | New payees         | What it was paid in the 30 days. Hover it when some payments had no known US dollar value, such as **Plus 1 with no known USD value** |
+| Quarantined | Quarantined payees | The day it went into quarantine. **observe only** means the fleet check was still in observe mode, so it was recorded but not blocked |
+| Runs        | Quarantined payees | How many separate runs used the wallet                                                                                                |
+| Blocked     | Quarantined payees | How many attempts to pay it were blocked                                                                                              |
+| Paid        | Quarantined payees | What it was paid in settled payments, at any time                                                                                     |
 
 ## Quarantine
 
-The fleet check watches recipients, bank accounts and domains that are new to your fleet, first seen less than 7 days ago. Once a fifth separate run uses one within 24 hours, Quard blocks it everywhere and puts it in quarantine. In its first 7 days, the check only records: the heading shows **Observe mode until** a date, and each value reads **Would block**.
+The [fleet check](/sdk/examples/fleet-check) watches IBANs, email addresses, domains and the wallets that x402 payments go to, when they are new to your fleet, first seen less than 7 days ago. Once a fifth separate run uses one within 24 hours, Quard blocks it everywhere and puts it in quarantine. In its first 7 days, the check only records: a value still goes into quarantine, but nothing is blocked.
 
 ![Quarantine](/images/guides/summary-quarantine.webp)
 
-1. **A quarantined value.** The masked value and its field, the agents that used it, when it was quarantined, how many attempts were blocked and the last attempt. Once more than 6 values wait, a filter shows one kind at a time: IBAN, email or domain.
-2. **Mark as known.** Opens the value so you can release it.
-3. **Watching.** New values on their way to the limit, with how many runs used them out of 5.
-4. **More at 1 run.** Values seen in only one run, folded away. Click to show them.
+1. **Quarantine.** How many values wait for a person.
+2. **Observe mode until.** Shown while the check is in its first 7 days. Until that date, it only records.
+3. **A quarantined value.** The masked value with an icon for its kind (a bank for an IBAN, an envelope for an email, a globe for a domain, a wallet for an x402 payee, whose address is shown in full) and the field it was first seen in, such as `iban`. **Agents** lists the agents that used it. **Quarantined** is the date it went into quarantine. **Would block** under the date means it was quarantined in observe mode, so it is recorded but not blocked. **Blocked** counts the attempts that were stopped. **Last attempt** is how long ago an agent last used it. Hover a cell to see the full date or the full list of agents.
+4. **Mark as known.** Opens the value so you can release it. See [Release a value](#release-a-value).
+5. **Watching.** New values on their way to quarantine. **First seen** is how long ago an agent first used it. **Runs to block** shows how many separate runs used it in the last 24 hours, out of 5.
+
+Values seen in more than one run are listed first. The rest fold into one link, such as **3 more at 1 run**. Click it to show them, and **Show fewer** to fold them again.
+
+Once more than 6 values wait, a filter appears above the list: **All**, **IBAN**, **Email** and **Domain**, each with its count. Wallets have no button of their own and show under **All**. If the kind you pick has nothing in it, the list says so, such as **No quarantined IBANs**, with a **Show all** button.
 
 ## Release a value
 
@@ -72,6 +117,64 @@ Release a value only after you have checked it, for example a new supplier's ban
 
 ![Marking a value as known](/images/guides/summary-mark-known.webp)
 
-1. **The value.** The value you are about to release, with a copy button.
-2. **Details.** Its kind, field and agents, when it was first seen and quarantined, the runs that used it, the blocked attempts and the last attempt.
-3. **Mark as known.** Unblocks the value fleet-wide. Every other guard still checks it.
+1. **Fingerprint.** A hash that names this exact value, with a **Copy** button. For a domain, it shows the domain itself, such as `domain:acme.com`.
+2. **Quarantined value.** Its kind and masked value, the field it was first seen in, the agents that used it, when it was first seen and quarantined, how many runs used it, the blocked attempts and the last attempt.
+3. **Mark as known.** Unblocks the value fleet-wide. Every other guard still checks it. While it saves, the button reads **Marking as known…** and the drawer stays open.
+4. **Cancel.** Closes the drawer without changing anything.
+
+Once marked, the value leaves the list and a message confirms it, such as **DE89…3000 marked as known**. Quard records who marked it, and the fleet check never quarantines that value again. If someone else released it first, the message says **is no longer in quarantine** and the list updates. If saving fails, the message says **Could not mark … as known** and the value stays in quarantine.
+
+## What you can click
+
+| Area              | Element                                    | What it does                                                                                                     |
+| ----------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Every chart       | **Table**                                  | Shows the chart's numbers as a table. **Chart** switches back.                                                   |
+| Every chart       | Hover, or focus and press the arrow keys   | Highlights a bar, column or cell and reads its value. **Home** and **End** jump to the ends. **Escape** lets go. |
+| Bar charts        | A cut-off name                             | Hover it to see the full name.                                                                                   |
+| What guards block | **All guards** and each guard type         | Changes the per-day chart to that kind of guard. The hour chart always shows all guards.                         |
+| Payees            | Hover a payee, network or date             | Shows the full wallet address, the network as recorded, or the full date.                                        |
+| New payees        | Hover **Runs** or **Spent**                | Shows the agents that paid it, or how many payments had no known US dollar value.                                |
+| Quarantine        | **All**, **IBAN**, **Email**, **Domain**   | Shows one kind of value. Only appears once more than 6 values wait.                                              |
+| Quarantine        | **Show all**                               | Clears the kind filter when the picked kind is empty.                                                            |
+| Quarantine        | Hover a value, agents or date              | Shows the kind and value, the full list of agents, or the full date.                                             |
+| Quarantine        | **Mark as known**                          | Opens the release drawer for that value. Hover it for a short hint.                                              |
+| Watching          | **… more at 1 run** and **Show fewer**     | Shows or folds the values seen in only one run.                                                                  |
+| Release drawer    | **Copy**                                   | Copies the fingerprint. The button reads **Copied** for a moment.                                                |
+| Release drawer    | **Mark as known**                          | Releases the value.                                                                                              |
+| Release drawer    | **Cancel**, the close button or **Escape** | Closes the drawer without changing anything.                                                                     |
+| Error message     | **Try again**                              | Loads the page again.                                                                                            |
+
+Rows in the tables and bars in the charts don't open anything. To look into an incident, an agent or a run, use [Incidents](/guides/incidents), [Agents](/guides/agents) or [Runs](/guides/runs).
+
+## What the parts mean
+
+| Part                        | Meaning                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| Number next to a title      | How many items the section counts: incidents, settled x402 payments, or values in quarantine.   |
+| Number and percent on a bar | The count, then its share of the total in that chart.                                           |
+| Green and grey bars         | Lists side by side. The color tells the lists apart. It is not a warning.                       |
+| Light green on hover        | The bar or column you are reading. In the hour chart, a light ring marks the cell.              |
+| **UTC**                     | The hour chart uses UTC time, not your local time.                                              |
+| Meter                       | A row of small squares that fill up: the untrusted share of a link, or a value's runs out of 5. |
+| **Would block**             | The check would have blocked this value but only recorded it, because it was in observe mode.   |
+| Dash (—)                    | Nothing to show yet, or not known.                                                              |
+
+## Before there is data
+
+The page keeps its layout from the start, so you know where things will appear. Each part shows a short message instead:
+
+| Part                  | Message                                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Where incidents start | **No incidents in the last 30 days**, and **Untrusted** shows a dash                                            |
+| What guards block     | **No blocks in the last 30 days**, and **Today** and **Busiest hour** show a dash                               |
+| Entry points          | **No agent was an entry point**                                                                                 |
+| Turning points        | **No agent was a turning point**                                                                                |
+| Untrusted links       | **No agent-to-agent link carried untrusted content**                                                            |
+| Run limits            | A dash on every tile                                                                                            |
+| x402 spend            | **No x402 spend in the last 30 days** on each chart, and the count next to the title is 0                       |
+| New payees            | **No new payee in the last 30 days**                                                                            |
+| Quarantined payees    | **No payee in quarantine**                                                                                      |
+| Quarantine            | **Nothing in quarantine**, with the fields the check watches, such as **Watching the iban, to and url fields.** |
+| Watching              | **No new values are being counted**                                                                             |
+
+While the page loads, the charts show a moving shimmer and the tables show grey placeholder rows. If the data can't be read, the page says **The fleet view could not be loaded.** Guards keep running while this happens. Click **Try again** to reload it.

@@ -1,0 +1,164 @@
+import { Steps } from "nextra/components";
+
+# 11. Daily limits
+
+A support agent can refund orders and a billing agent can pay invoices. Your company allows at most 3 refunds and 1000 EUR of payments a day, however many processes run these agents. A per-run limit, as in [example 1](/sdk/examples/first-guard), starts over with every run. A per-day limit keeps one count per UTC day for the whole project, and control keeps that count. This example sets both kinds of daily cap, then puts them in observe mode.
+
+## Run it
+
+```sh
+node sandbox/11-daily-limits.ts
+```
+
+Run it from the repo root. It needs [the local backend](/sdk/examples#the-local-backend), with `QUARD_AGENT_KEY` set in `sandbox/.env`, as the [sandbox README](https://github.com/oynozan/quard/blob/main/sandbox/README.md) shows. Without an agent key, it stops at once and says so.
+
+Then run it again. The count goes on from where it stopped, so calls that ran the first time are refused. It starts over at midnight UTC.
+
+## Step by step
+
+<Steps>
+
+### At most 3 refunds a day
+
+```ts
+title("At most 3 refunds a day");
+const refundOrder = guard(refund, { type: "limit", name: "refundOrder", maxCallsPerDay: 3 });
+await quard.run({ agent: "support" }, () =>
+    runAgent(client, "Refund orders 1001, 1002, 1003 and 1004.", { refundOrder }),
+);
+```
+
+A [limit guard](/sdk/reference/limit-guard) with `maxCallsPerDay` counts the calls to its tool per UTC day, across the project. For each call:
+
+1. **Check.** With the other checks, before the call, the guard adds this call to today's count as this process knows it. If the total is over the cap, the call is blocked with the reason `daily_limit_reached`.
+2. **Count.** Just before the tool runs, the SDK asks control to add the call, and sends the cap along. Control adds it in a single database statement, and only while the project's total stays at or under the cap. Two processes at the cap can't both get through.
+3. **Answer.** Control replies with the new total, and the SDK keeps it. If control refused to add the call, the call is blocked with the same reason.
+
+Refunds 1001 to 1003 run. Refund 1004 would be the fourth, so it is refused, and the model tells the user.
+
+### At most 1000 EUR a day
+
+```ts
+title("At most 1000 EUR of payments a day");
+const payInvoice = guard(pay, {
+    type: "limit",
+    name: "payInvoice",
+    maxAmountPerDay: { field: "amount", max: 1000 },
+});
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, `Pay three invoices to IBAN ${IBAN}: 400 EUR, 300 EUR and 500 EUR.`, { payInvoice }),
+);
+```
+
+`maxAmountPerDay` adds up the `amount` argument instead of counting calls. 400 and 300 EUR run, which makes 700 EUR. Another 500 EUR would make 1200 EUR, so that payment is refused. An amount that is negative or not a number is refused too, because it could lower the count.
+
+The count belongs to the tool, not to the agent. Every agent that pays through `payInvoice` shares it.
+
+### The same caps in observe mode
+
+```ts
+title("The same caps in observe mode");
+quard.configure({
+    onEvent: (event) => {
+        if (event.type === "decision") {
+            printEvent(event);
+        }
+    },
+});
+const watchedRefunds = guard(refund, { type: "limit", name: "refundOrder", mode: "observe", maxCallsPerDay: 3 });
+const watchedPayments = guard(pay, {
+    type: "limit",
+    name: "payInvoice",
+    mode: "observe",
+    maxAmountPerDay: { field: "amount", max: 1000 },
+});
+```
+
+With `mode: "observe"`, the guard still checks and records what it would do, but lets the call run. On a first run of the day, refunds stand at 3 and payments at 700 EUR. Refund 1005 and another 500 EUR both go over, so each records a `block` decision in observe mode, printed as "would block", and runs. See [Block mode and observe mode](/concepts/guards#block-mode-and-observe-mode).
+
+Observed calls still count. Their count goes to control without a cap, so control always adds it. After this part, today's totals are 4 refunds and 1200 EUR.
+
+### Run it again
+
+When a process connects, control sends it the day's counts. In `packages/sdk/transport/link/control.ts`:
+
+```ts
+link.listen({
+    ready: (message) => {
+        for (const count of message.counters) {
+            noteDayUsed(count.day, count.tool, count.counter, count.used);
+        }
+        knownVersions().forEach(sendAgent);
+    },
+});
+```
+
+A new process starts with today's totals, not from zero. The second time you run the file, the first refund and the first payment are refused at once, and so is every call after them. The observe part runs again and keeps counting.
+
+</Steps>
+
+## What you'll see
+
+The first run of the day:
+
+```text
+At most 3 refunds a day
+  User: Refund orders 1001, 1002, 1003 and 1004.
+  → refundOrder {"orderId":"1001"}
+    ✓ refunded order 1001
+  → refundOrder {"orderId":"1002"}
+    ✓ refunded order 1002
+  → refundOrder {"orderId":"1003"}
+    ✓ refunded order 1003
+  → refundOrder {"orderId":"1004"}
+    ✗ blocked by the limit guard (daily_limit_reached)
+  Model: …
+
+At most 1000 EUR of payments a day
+  User: Pay three invoices to IBAN DE89 3704 0044 0532 0130 00: 400 EUR, 300 EUR and 500 EUR.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":400}
+    ✓ paid 400 EUR
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":300}
+    ✓ paid 300 EUR
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":500}
+    ✗ blocked by the limit guard (daily_limit_reached)
+  Model: …
+
+The same caps in observe mode
+  User: Refund order 1005, then pay 500 EUR to IBAN DE89 3704 0044 0532 0130 00.
+  → refundOrder {"orderId":"1005"}
+    · limit guard would block (daily_limit_reached), but only observes
+    ✓ refunded order 1005
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":500}
+    · limit guard would block (daily_limit_reached), but only observes
+    ✓ paid 500 EUR
+  Model: …
+```
+
+`…` stands for the model's answers, which change from run to run. If the model pays in another order, whichever payment would pass 1000 EUR is the one refused.
+
+On the second run, the refunds and payments of the first two parts are all refused. The model may stop asking after the first refusal, because the agent loop tells it not to retry a blocked call.
+
+In the dashboard, each run's page shows the refused calls with their reason. The observed ones show as marks with an outline on the timeline and count under **Would block** in the run's summary. See [Read a run](/guides/runs#read-a-run).
+
+## Try this
+
+- **Two processes at once.** On a UTC day when you haven't run the file yet, start it in two terminals at the same time. They share one count, so between them the first part refunds at most 3 orders.
+- **Per run instead.** Change `maxCallsPerDay: 3` to `maxCallsPerRun: 3` in the first part. That count starts over with each run and never goes to control, so every run of the file refunds 3 orders.
+- **Without control.** Stop control and run the file. The SDK can't reach it, so it counts in the process only, from zero. [Example 13](/sdk/examples/backend-down) shows this on purpose.
+
+## Use it in your app
+
+- Per-day limits need the control link: `controlUrl` with `key`. Without it, each process counts on its own, from zero.
+- Use `maxCallsPerDay` for counts and `maxAmountPerDay` for money. One limit guard can hold both, next to per-run limits and the [fleet check](/sdk/examples/fleet-check).
+- The day is the UTC day, for every process and every agent that uses the tool.
+- Try a new cap in observe mode first. The run pages show how often it would have blocked.
+
+## Source
+
+- [`sandbox/11-daily-limits.ts`](https://github.com/oynozan/quard/blob/main/sandbox/11-daily-limits.ts): the example
+- [`packages/sdk/guards/limit/daily.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/daily.ts): the check against today's count
+- [`packages/sdk/pipeline/count/days.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/days.ts): counting through control, or in the process
+- [`packages/sdk/transport/link/control.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/control.ts): takes the day's counts when the link connects
+- [`services/control/counters/count.ts`](https://github.com/oynozan/quard/blob/main/services/control/counters/count.ts): control's side of a count
+- [`db/queries/control/counters.ts`](https://github.com/oynozan/quard/blob/main/db/queries/control/counters.ts): adds to the shared count without passing the cap

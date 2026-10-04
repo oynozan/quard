@@ -1,0 +1,260 @@
+# Testing and building
+
+The repo tests with Vitest, and every package with tests keeps 100% coverage. This page covers how to run the checks, the helpers the SDK's tests use, the end-to-end tests, and how to build the package.
+
+## Run the checks
+
+Run these from the repo root:
+
+| Command                                                      | What it does                                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `pnpm test`                                                  | Runs every package's tests, with coverage                                       |
+| `pnpm --filter quard test`                                   | Runs the SDK's tests, with coverage                                             |
+| `pnpm --filter quard exec vitest run pipeline/guard.test.ts` | Runs one test file of the SDK, without coverage                                 |
+| `pnpm typecheck`                                             | Type-checks every package. `pnpm --filter quard typecheck` checks only the SDK. |
+| `pnpm lint`                                                  | Runs ESLint on everything outside `web/` and `docs/`, then their own lint       |
+| `pnpm format`                                                | Formats everything with Prettier. `pnpm format:check` only checks.              |
+| `pnpm --filter quard schemas`                                | Writes the JSON Schemas of the policy file and the signature feed again         |
+| `pnpm --filter quard build`                                  | Builds the package into `packages/sdk/dist`                                     |
+
+CI runs `format:check`, `lint`, `typecheck` and `test` on every push to `main` and every pull request, then builds the docs. See [`.github/workflows/ci.yml`](https://github.com/oynozan/quard/blob/main/.github/workflows/ci.yml).
+
+## Tests and coverage
+
+The SDK's `vitest.config.ts`, like those of `packages/shared`, `db` and the services, uses `packageConfig()` from [`vitest.shared.ts`](https://github.com/oynozan/quard/blob/main/vitest.shared.ts) at the repo root:
+
+```ts
+// Every package keeps 100% coverage (see AGENTS.md)
+export function packageConfig() {
+    return defineConfig({
+        test: {
+            // The workspace runs every package at once, so heavy tests get room on a busy machine
+            testTimeout: 15_000,
+            coverage: {
+                provider: "v8",
+                include: ["**/*.ts"],
+                exclude: ["**/*.test.ts", "**/*.config.ts", "test/**", "dist/**", "coverage/**"],
+                thresholds: { 100: true },
+            },
+        },
+    });
+}
+```
+
+- Coverage must stay at 100% for lines, branches, functions and statements. The test run fails below that, and so does CI.
+- A test file sits next to the code it tests, such as `monitor/fetch.ts` and `monitor/fetch.test.ts`.
+- `test/` holds helpers. It is left out of coverage.
+- The tests in one file share the SDK's module-level state, so test files that touch it call `resetAll()` after each test. See [How tests reset it](/sdk/internals#how-tests-reset-it).
+
+## Test helpers
+
+The helpers live in [`packages/sdk/test`](https://github.com/oynozan/quard/tree/main/packages/sdk/test):
+
+| File                        | What it gives you                                                                                                                                                                                                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reset.ts`                  | `resetAll()`: clears the configuration, the event buffer, the registry, "always" answers, label records, memory labels, day counts and agent versions, and stops uploads and the link.                                                                                     |
+| `call.ts`                   | `makeCall(input, content, tool)`: a `GuardCall` built from content the run read, to test one guard. `makeAskableCall()` does the same with real run and step ids, as control checks them. `withoutRunEdges()` drops `run_started` and `run_finished` events.               |
+| `events.ts`                 | `decisionsOf(events)`: only the decision events.                                                                                                                                                                                                                           |
+| `fake-responses.ts`         | `fakeResponses(next)`: a `fetch` that answers each Responses API call with the next turn, as JSON or as an event stream sent in 17-byte chunks. A turn can carry token `usage`. It keeps every request body. `toolOutputs(body)` names the tool results a request carries. |
+| `agent.ts`                  | `runAgent(client, tools, prompt, stream)`: a tiny agent loop. It asks the model, runs the tools it asks for, and repeats, for up to 5 turns.                                                                                                                               |
+| `openai-agents.ts`          | For the Agents SDK: `scriptedClient(scripts)`, an OpenAI client that answers each agent from its own script of turns, `testAgent(name)`, an agent whose instructions are its name, `modelCalls(events)` and `toolResults(body)`.                                           |
+| `mail-run.ts`               | `mailRun()`: an Agents SDK run whose mail agent reads a web page, then sends an email that the SDK's own `needsApproval` stops. `runIds(events)` lists the runs in a list of events.                                                                                       |
+| `fake-socket.ts`            | `fakeSockets()` and `fakeLink()`: sockets for the control link that tests drive by hand. `sentOf(socket, type)` returns the messages of one type, and throws if the SDK sent anything control would refuse. `READY` and `HELLO` are ready-made messages.                   |
+| `day-counts.ts`             | `dayControl()`, a control link for per-day count tests, with `sentDays()`, `takenDays()`, `counted()` and `reconnect()`.                                                                                                                                                   |
+| `run-counts.ts`             | `countRun()` and `countAll()`: answer a `run_count` the way control does, all of the counts or none.                                                                                                                                                                       |
+| `control-server.ts`         | `startControlServer(key, labels)`: a stand-in for control on a real WebSocket. It answers hello, asks, counts, run counts, fleet reports and lookups from `labels`, and lets a test answer asks, push messages, drop connections and wait for a message.                   |
+| `webhook-server.ts`         | `startWebhookServer(labels)`: a stand-in for webhook over HTTP. It keeps uploaded events, and pushes label records into `labels`, so a stand-in control given the same list can answer lookups.                                                                            |
+| `detector.ts`               | Fake detectors and ready-made answers for detector tests: `fake(answer)`, `INJECTED`, `ARTICLE`, `risky` and long sample pages.                                                                                                                                            |
+| `files.ts`                  | Temporary folders, JSON files, and the path of `examples/`.                                                                                                                                                                                                                |
+| `fixtures/linked-app.ts`    | A small app with a control link, which the exit tests run as a child process.                                                                                                                                                                                              |
+| `fixtures/agent-process.ts` | One agent of a run that spans two processes: `send` plays the orchestrator and prints the message with its baggage, `receive` plays the billing agent.                                                                                                                     |
+
+### Test one guard
+
+`makeCall()` builds the call a guard sees, with content the run already read. From [`guards/action/action.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.test.ts):
+
+```ts
+const IBAN = "DE89370400440532013000";
+const fromSupplier = { type: "action" as const, rules: [{ field: "iban", from: ["tool:getSupplier"] }] };
+
+it("blocks a value that came from somewhere else", () => {
+    const call = makeCall({ iban: IBAN }, [["web:evil.com", `IBAN ${IBAN}`]]);
+
+    expect(checkAction(call, fromSupplier)[0]).toMatchObject({
+        decision: "block",
+        reason: "value_not_from_allowed_origin",
+        field: "iban",
+    });
+});
+```
+
+### Test an agent with a fake model
+
+`fakeResponses()` plays the model, and `runAgent()` plays your app. From [`e2e/payment.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/e2e/payment.test.ts):
+
+```ts
+// The model reads the page first, then pays the IBAN it saw
+const attack = fakeResponses((body) => {
+    const done = toolOutputs(body);
+    if (done.length === 0) {
+        return { calls: [{ name: "fetchPage", args: { url: "https://invoices.evil-pay.com/inv/114" } }] };
+    }
+    if (done.length === 1) {
+        return { calls: [{ name: "payInvoice", args: { iban: IBAN, amount: 4950 } }] };
+    }
+    return { text: "I could not pay the invoice." };
+});
+
+function client(fetch: typeof attack.fetch) {
+    return quard.wrap(new OpenAI({ apiKey: "test", fetch, maxRetries: 0 }));
+}
+```
+
+The test then runs `runAgent(client(attack.fetch), tools, PROMPT, stream)` inside `quard.run()`, once as plain JSON and once as a stream.
+
+### Test with a fake control link
+
+`fakeSockets()` stands in for the WebSocket, so a test can answer as control would. From [`pipeline/guard-control.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard-control.test.ts):
+
+```ts
+// A control link over a fake socket, connected unless told otherwise
+function linked(ready: ReadyMessage | false = READY, timing: Partial<ControlTiming> = {}) {
+    events = [];
+    configure({ onEvent: (event) => events.push(event) });
+    const fake = fakeSockets();
+    control = createControl({
+        url: "ws://c",
+        key: "k",
+        open: fake.open,
+        timing,
+    });
+    setActiveControl(control);
+    return { fake, socket: ready === false ? fake.last() : fake.connect(ready) };
+}
+```
+
+A test reads what the SDK sent with `sentOf(socket, "ask")`, and answers with `socket.reply({ type: "decided", askId, answer: "once" })`. `timing` shortens the waits, such as `downMs`, so tests of a lost link stay fast. The link takes its hash key from `ready`, so `READY` carries one.
+
+### Test the Agents SDK integration
+
+`scriptedClient()` answers each agent from its own script, by the agent's instructions, so no test needs a network. From [`e2e/openai-agents.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/e2e/openai-agents.test.ts):
+
+```ts
+const { bodies, result } = run(
+    {
+        orchestrator: [{ calls: [FETCH] }, { calls: [HANDOFF] }],
+        billing: [{ calls: [PAY] }, { text: "I did not pay: the bank details came from a web page." }],
+    },
+    tools,
+);
+await result;
+
+expect(tools.rawPay).not.toHaveBeenCalled();
+```
+
+`run()` there builds the agents with `testAgent()` and starts them with `quardRunner({ client }).run(...)`. The test then checks the events: one run, the agent of each model call, and the `handoff` event.
+
+### Test agents in two processes
+
+Two ways, from the fastest to the most real:
+
+- **In one process.** [`e2e/multi-agent.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/e2e/multi-agent.test.ts) sends with `quard.inject()` and receives with `quard.resume()` in the same test. `forgetRuns()` from `labels/records.ts` drops the kept runs in between, so the receiver acts as if it ran elsewhere.
+- **In real processes.** [`e2e/two-processes.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/e2e/two-processes.test.ts) starts `startWebhookServer()` and `startControlServer()` on one shared list of label records, then runs `fixtures/agent-process.ts` twice: once to send, once to receive with the baggage the first one printed.
+
+## End-to-end tests
+
+The tests in [`packages/sdk/e2e`](https://github.com/oynozan/quard/tree/main/packages/sdk/e2e) use the SDK the way an app does, through `index.ts`, with a fake model or a stand-in control where they need one. They run with the other tests.
+
+| File                         | What it shows                                                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `payment.test.ts`            | An agent reads a web page with an IBAN and an injected instruction, then tries to pay that IBAN. Also laundering attempts, a supplier IBAN that is paid, and permissions. |
+| `control-link.test.ts`       | The SDK against a stand-in control over a real WebSocket: approvals, reconnects, `backend_unavailable`, shared per-day counts and the fleet check.                        |
+| `process-exit.test.ts`       | Runs `test/fixtures/linked-app.ts` as a child process. The link never keeps an app alive by itself, only while a call waits for approval.                                 |
+| `policy-live.test.ts`        | Edits to the policy file apply from the next call, without a restart. A broken edit keeps the last good version.                                                          |
+| `signatures.test.ts`         | The starter signature feed against attack samples and near misses, its modes, and feeds from a URL.                                                                       |
+| `egress-data.test.ts`        | Secrets, card numbers and IBANs in an email are blocked, masked or allowed.                                                                                               |
+| `detector.test.ts`           | An AI detector in observe mode and in enforce mode.                                                                                                                       |
+| `non-json-arguments.test.ts` | Guarded tools called with values JSON can't hold, such as a `BigInt` or an object inside itself.                                                                          |
+| `multi-agent.test.ts`        | An orchestrator reads a web IBAN and delegates the payment. The billing agent's payment is blocked. Both processes are simulated in one.                                  |
+| `two-processes.test.ts`      | The same with real processes, through stand-ins for webhook and control.                                                                                                  |
+| `untrusted-message.test.ts`  | A destination named in an untrusted message stays untrusted.                                                                                                              |
+| `message-print.test.ts`      | A message changed on the way, even one that keeps every string, reads back as untrusted.                                                                                  |
+| `made-up-values.test.ts`     | An IBAN the sender's model made up stays model-generated in the receiver.                                                                                                 |
+| `made-up-in-prompts.test.ts` | A made-up IBAN that app code puts into the instructions or the user input is still not seen.                                                                              |
+| `made-up-in-tools.test.ts`   | A made-up IBAN read through memory or a message inside a guarded tool is still not seen.                                                                                  |
+| `unknown-content.test.ts`    | Content from a run that read nothing stays unknown through a message or shared memory.                                                                                    |
+| `memory.test.ts`             | Shared memory between two agents in separate runs, in one process and across processes.                                                                                   |
+| `memory-print.test.ts`       | Memory items that change or hide text lose the labels a trusted writer gave them.                                                                                         |
+| `print-key.test.ts`          | The prints of short content can't be tested against a guess without the project's hash key.                                                                               |
+| `project-key.test.ts`        | Webhook and control hand out the project's hash key to the agent key, and nothing leaves unhashed before the SDK has it.                                                  |
+| `run-limits.test.ts`         | Delegation depth and fan-out on a guarded delegate tool, and steps and cost on the wrapped client.                                                                        |
+| `run-counters.test.ts`       | One run in two processes whose counters meet in a stand-in control, and refused calls in such a run.                                                                      |
+| `openai-agents.test.ts`      | Handoffs and agents run as tools on the OpenAI Agents SDK, with a web IBAN blocked in another agent's payment.                                                            |
+
+## JSON Schemas for the policy file and the feed
+
+Editors check `quard.policy.json` and `signatures.json` against JSON Schema files in [`packages/sdk/examples`](https://github.com/oynozan/quard/tree/main/packages/sdk/examples). [`policy/schemas.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schemas.test.ts) writes them from the Zod schemas:
+
+```ts
+// Editors check policy and feed files against these files as people
+// type. `pnpm --filter quard schemas` rewrites them after a change.
+function schemaFile(schema: z.ZodType): string {
+    return `${JSON.stringify(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }), null, 4)}\n`;
+}
+```
+
+- After you change `policy/schema.ts` or `signatures/schema.ts`, run `pnpm --filter quard schemas`. It runs `vitest run schemas --update`, which rewrites `examples/policy/quard.policy.schema.json` and `examples/signatures/signatures.schema.json`.
+- Without that, `policy/schemas.test.ts` fails, because the files no longer match.
+- Prettier skips both files, because the test writes them.
+
+## Build the package
+
+`pnpm --filter quard build` runs tsdown with [`tsdown.config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/tsdown.config.ts):
+
+```ts
+export default defineConfig({
+    // The Agents SDK integration is its own entry, so the core needs no @openai/agents
+    entry: { index: "index.ts", "openai-agents": "integrations/openai-agents/index.ts" },
+    format: "esm",
+    platform: "node",
+    target: "node22.12",
+    // The build program leaves tests out and holds the shared sources, so
+    // all declarations come from one TypeScript program
+    tsconfig: "tsconfig.build.json",
+    dts: { eager: true },
+    // Bundle shared code and its types so users install one package
+    deps: {
+        alwaysBundle: ["@quard/shared"],
+        dts: { alwaysBundle: ["@quard/shared"] },
+    },
+});
+```
+
+- It writes `dist/index.mjs` and `dist/openai-agents.mjs`, each with its `.d.mts` types. `package.json` exports them as `quard` and `quard/openai-agents`. Its `files` field limits the package to `dist`.
+- The output is an ES module for Node 22.12 and later, the same version `engines` asks for.
+- `tsconfig.build.json` leaves out tests, `test/`, `e2e/` and config files, and takes in the sources of `packages/shared`.
+- `@quard/shared` is bundled in, code and types. `tldts`, `ws` and `zod` stay imports, so they install as dependencies.
+- `@openai/agents` is an optional peer dependency, `^0.18.0`. Only `quard/openai-agents` imports it, so an app that doesn't use the Agents SDK doesn't need it. The repo installs it as a dev dependency for the tests.
+- `SDK_VERSION` in `transport/link/version.ts` goes to control in `hello`. A test keeps it equal to the version in `package.json`, so change both together.
+
+## Repo rules
+
+From [AGENTS.md](https://github.com/oynozan/quard/blob/main/AGENTS.md):
+
+- **Size.** A file has at most 300 lines. TSX, other web files and Markdown are exempt. Split code into many folders.
+- **Format.** 4 spaces, formatted with Prettier. The root `.prettierrc` sets a print width of 120.
+- **Comments.** Short, with no long lines.
+- **Tests.** Every change ships with tests, and coverage stays at 100%.
+- **Writing.** Plain English in code, comments and docs.
+
+## Source
+
+- [`vitest.shared.ts`](https://github.com/oynozan/quard/blob/main/vitest.shared.ts): the shared test settings and the coverage gate
+- [`packages/sdk/test`](https://github.com/oynozan/quard/tree/main/packages/sdk/test): test helpers
+- [`packages/sdk/e2e`](https://github.com/oynozan/quard/tree/main/packages/sdk/e2e): end-to-end tests
+- [`packages/sdk/policy/schemas.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schemas.test.ts): the JSON Schema files
+- [`packages/sdk/tsdown.config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/tsdown.config.ts): the build
+- [`packages/sdk/package.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/package.json): scripts, exports and dependencies
+- [`package.json`](https://github.com/oynozan/quard/blob/main/package.json): the workspace scripts
+- [`.github/workflows/ci.yml`](https://github.com/oynozan/quard/blob/main/.github/workflows/ci.yml): what CI runs
+- [AGENTS.md](https://github.com/oynozan/quard/blob/main/AGENTS.md): the coding rules

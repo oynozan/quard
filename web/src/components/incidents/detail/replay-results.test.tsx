@@ -4,9 +4,11 @@ import type { Replay } from "@/lib/data/incidents/types";
 import { replayOf } from "../../../../test/incidents-search/replay";
 import { ReplayResults } from "./replay-results";
 
-function show(replay: Replay) {
-    return render(<ReplayResults replay={replay} />);
+function show(replay: Replay, workerRunning = true) {
+    return render(<ReplayResults replay={replay} workerRunning={workerRunning} />);
 }
+
+const WAITING = "Waiting for the worker. It isn't running.";
 
 // The With, Without and p readouts above the rounds, as one line of text
 function readouts() {
@@ -97,6 +99,37 @@ describe("ReplayResults", () => {
         const pending = within(chart()).getByText("Round 2").parentElement as HTMLElement;
         expect(pending.textContent).toBe("Round 2Running…");
         expect(pending.querySelectorAll("svg.animate-pulse")).toHaveLength(2);
+    });
+
+    it("says queued, with no spinner or pending row, until the worker claims the replay", () => {
+        show(replayOf([], [], { status: "queued" }));
+        const line = screen.getByText("Queued");
+        expect(line.querySelector(".spinner")).toBeNull();
+        expect(line.querySelector(".border-line-strong")).toBeTruthy();
+        expect(within(chart()).queryByText("Round 1")).toBeNull();
+        expect(within(chart()).getByText("No rounds yet")).toBeTruthy();
+    });
+
+    it("says the worker isn't running instead of queued", () => {
+        show(replayOf([], [], { status: "queued" }), false);
+        expect(screen.getByText(WAITING).querySelector(".bg-warning")).toBeTruthy();
+        expect(screen.queryByText("Queued")).toBeNull();
+    });
+
+    it("says the worker isn't running instead of replaying, with no pending row", () => {
+        show(replayOf([[4, 0, 0.0238]], [], { status: "running" }), false);
+        const line = screen.getByText(WAITING);
+        expect(line.querySelector(".spinner")).toBeNull();
+        expect(line.querySelector(".bg-warning")).toBeTruthy();
+        expect(screen.queryByText(/^Replaying/)).toBeNull();
+        expect(within(chart()).getByText("Round 1")).toBeTruthy();
+        expect(within(chart()).queryByText("Round 2")).toBeNull();
+    });
+
+    it("names a finished replay by its own word while no worker is running", () => {
+        show(replayOf([[5, 0, 0.004]], [], { status: "confirmed" }), false);
+        expect(screen.getByText("Confirmed")).toBeTruthy();
+        expect(screen.queryByText(WAITING)).toBeNull();
     });
 
     it("names the final status when the replay could not reproduce the harm", () => {

@@ -9,9 +9,10 @@ const THRESHOLD = 0.0182;
 
 type ReplayFields = Pick<IncidentRow, "replayState" | "replay">;
 
-// "running" only while the worker has the replay; a limit wins over the stored state
+// "running" only once a worker claimed the replay, and a limit wins over the stored state
 export function replayStatus(row: ReplayFields): ReplayStatus {
-    if (row.replayState === "requested" || row.replayState === "running") return "running";
+    if (row.replayState === "requested") return "queued";
+    if (row.replayState === "running") return "running";
     if (row.replay?.limited) return "limited";
     if (row.replayState === "failed") return "failed";
     return row.replay?.outcome ?? "not started";

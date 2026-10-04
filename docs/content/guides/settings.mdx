@@ -2,32 +2,46 @@
 
 Settings has four tabs: agent keys, accounts, retention, and the rules your code reports. Anyone who signs in can manage settings. On a new install the tables are empty, and creating the first key sets up the project.
 
+The open tab is part of the page address, so a reload or a shared link opens the same tab. **Agent keys** is plain `/settings`. The others add `?tab=accounts`, `?tab=retention` or `?tab=code`.
+
 ## Agent keys
 
-The SDK sends events to Quard with an agent key.
+The SDK sends events to Quard with an agent key. It is the only Quard secret an agent needs. Use one key per app that runs agents.
 
 ![Agent keys](/images/guides/settings-keys.webp)
 
-1. **Tabs.** Switch between the four parts of settings. Agent keys counts the active keys, and Rules from code counts the rules.
-2. **Create key.** Opens the form for a new key.
-3. **A key.** Its name and prefix, when it was created, when it was last used and its status.
-4. **Revoke.** Asks you to confirm in place, then turns the key off. Agents using it are refused from then on.
-5. **A revoked key.** Revoked keys stay in the list, dimmed, with how long ago they were revoked. Hover to see the exact time.
+1. **Tabs.** Switch between the four parts of settings. The number on **Agent keys** counts the active keys. The number on **Rules from code** counts the rules.
+2. **Create key.** Opens the drawer for a new key.
+3. **A key.** Its name and its prefix, the first 12 characters of the key, such as `qk_live_e553…`. **Created** is the day it was made. **Last used** says how long ago an app last sent events with it, or **Not used yet**. Hover a date to see the exact time. **Active** with a green square means agents can use it.
+4. **Revoke.** Turns the key off. Hover it for a hint. The first click swaps it for **Cancel** and a red **Revoke**. Click the red **Revoke** to confirm, or **Cancel** or Escape to keep the key. Agents using a revoked key are refused within seconds.
+
+Active keys come first, newest first. Revoked keys stay in the list below them, dimmed, with no button. Their status reads **Revoked** with a hollow square and how long ago, such as **Just now** or **5 min ago**. Hover it to see the exact time. A key can't be turned back on. Create a new one instead.
+
+If revoking fails, a note above the table says why, such as **This key is already revoked or no longer exists.**
 
 ### Create a key
 
 ![Creating a key](/images/guides/settings-create-key.webp)
 
-1. **Name.** A name you will recognize, such as the app that uses it. Two active keys cannot share a name.
-2. **Create key.** Creates the key.
+1. **Close.** Closes the drawer without making a key. Escape does the same.
+2. **Name.** A name you will recognize, such as the app that uses it. It can have up to 48 characters. Two active keys can't share a name.
+3. **Create key.** Creates the key. It reads **Creating key…** while it works, and the drawer can't be closed until it is done.
+4. **Cancel.** Closes the drawer without making a key.
 
-The full key is shown once, right after you create it. Copy it then and store it as a secret. The form also shows how to pass the key to the SDK. Keys start with `qk_live_`. After you click **I saved the key**, only its prefix is shown.
+A problem with the name shows under the field: **Give the key a name, such as the app that will use it.**, **Keep the name under 48 characters.** or **An active key already has this name.**
+
+Once the key exists, the drawer turns into **Key created**:
+
+- **Copy this key now. It is shown only once.** The full key, with a **Copy** button. Keys start with `qk_live_`. Quard stores only a hash of the key, so no one can show it again. Store it as a secret.
+- **Key.** The key's name and prefix.
+- **Use it.** How to pass the key to the SDK with `quard.configure`, beside the webhook and control addresses. See [Configuration](/sdk/reference/configure).
+- **I saved the key.** Closes the drawer. From then on only the prefix is shown.
 
 ## Accounts
 
 ![Accounts](/images/guides/settings-accounts.webp)
 
-1. **No accounts to manage.** Anyone who signs in can use Quard. There are no invites or roles.
+1. **No accounts to manage.** Anyone who signs in with email or GitHub can use Quard. There are no invites or roles, so the table stays empty.
 
 ## Retention
 
@@ -35,23 +49,88 @@ What Quard keeps, and for how long.
 
 ![Retention](/images/guides/settings-retention.webp)
 
-1. **Retention.** Runs are kept for 30 days by default. Runs tied to an incident are kept for 1 year, so their verdict and replay keep working. Memory labels are kept, so shared memory keeps its labels in later runs. The fleet's first-seen index is kept for 1 year, so old values don't look new again. Approval arguments are kept only until the request is answered.
-2. **Redaction.** IBANs, card numbers, emails and secrets are never stored in clear. Secrets are removed before anything leaves your app. IBANs, cards and emails become keyed hashes plus a mask, such as `DE89…3000`, so search and value tracing still work. The hash key belongs to your install and never leaves it.
+1. **Retention.** Each kind of data and how long Quard keeps it:
+    - **Runs.** The number of days your project keeps runs, 30 days unless your project changed it.
+    - **Runs tied to an incident.** 1 year, so their verdict and replay keep working.
+    - **Memory labels.** **Kept**: they are not deleted with runs, so [shared memory](/concepts/shared-memory) keeps its labels in later runs.
+    - **Fleet first-seen index.** 1 year, so old values don't look new again to the [fleet check](/guides/summary#quarantine).
+    - **Approval arguments.** **Until decided**: the full arguments of a request are kept only until someone answers it.
+2. **Redaction.** IBANs, card numbers, emails and secrets are never stored in clear. Secrets are removed before anything leaves your app. IBANs, cards and emails become keyed hashes plus a mask, such as `DE89…3000`, so search and value tracing still work. **Stored as** names the hash: HMAC-SHA-256. Each project hashes with its own key, made from the server's `QUARD_HASH_KEY`. Agents get their project's key with their agent key, and `QUARD_HASH_KEY` never leaves the server.
+
+This tab is read-only.
 
 ## Rules from code
 
-Rules live in your code, not in the dashboard. This tab shows what your apps report, and you cannot edit it here. To change a rule, edit the code and redeploy. **Show example** at the bottom of the tab shows a short rule in code.
+Rules live in your code or in a [policy file](/sdk/reference/policy-file), not in the dashboard. This tab shows what the SDK in your apps reports, and you can't edit it here. To change a rule, edit the code and redeploy, or edit the policy file.
 
 ![Rules from code](/images/guides/settings-code.webp)
 
-1. **Connected apps.** Each app that runs the SDK: its agents, SDK version and agent key, the hash of its rules and when it changed, when the app was last seen and whether it is connected.
-2. **Rules.** Each rule: its name and what it does, its guard type, its mode, the tools it guards, the apps that run it and its hash. **Block** rules stop calls, **Observe** rules only record, and approval rules always ask. Once rules are listed, you can search them and filter by guard type or mode.
+1. **Connected apps.** Each app that runs the SDK, named after the agent key it connects with, and the machine it runs on. **SDK** is the SDK version, **Agent key** the key's prefix and **Rules hash** a fingerprint of the app's active rules. **Last seen** is now for a connected app, or when its last connection closed. **State** is **Connected** with a green square or **Offline** with a hollow one. Offline apps come first. An app offline for more than 30 days drops off the list, with its rules.
+2. **Search and filters.** Search rules by name, tool, app or hash. **All guards** picks one guard type: source, action, approval, egress or limit. **All modes** picks **Block**, **Observe** or **Always asks**. These only show once the apps report rules.
+3. **Rules.** One row per rule, for each rule set an app runs. The count beside **Rules** is every rule, or the rules shown while you search or filter.
+4. **Origin overrides.** Origins whose default trust or sensitivity your code or policy file changed. See [Origin overrides](#origin-overrides).
+5. **Show example.** Shows a short rule written in code. Click again, on **Hide example**, to fold it.
+
+### The rule columns
+
+| Column | What it shows                                                                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rule   | The rule's name. [Run limits](/concepts/run-limits) show as `max-depth`, `max-fan-out`, `max-loops`, `max-steps` and `max-cost`                                                                               |
+| Guard  | The [kind of guard](/concepts/guards#the-six-kinds): Source, Action, Approval, Egress or Limit                                                                                                                |
+| Mode   | **Block** with a green square stops calls. **Observe** with a grey square only records what the rule would have done. **Always asks**, with a hollow square, is an approval guard, which always asks a person |
+| Tools  | The tools the rule guards. **Whole run** means the rule names no tool, as for run limits                                                                                                                      |
+| Apps   | The connected apps that run the rule. The same rule shows on more than one row when apps run different rule sets                                                                                              |
+| Hash   | The rules hash of the rule set it belongs to. It matches **Rules hash** in Connected apps                                                                                                                     |
+
+The rules shown are the ones an app's open connections run, or for an offline app, the ones its newest connection ran.
 
 ### Origin overrides
 
-Teams can change the trust or sensitivity of one origin in code, for example to trust their own MCP server. Quard lists the overrides your recent runs report.
+Teams can change the trust or sensitivity of one origin in code or in the policy file, for example to trust their own MCP server. See [Changing the defaults](/concepts/labels#changing-the-defaults) and [Origins](/sdk/reference/configure#origins). Quard lists the overrides that your 200 newest runs report, so nothing changes trust without a trace.
 
-![Origin overrides](/images/guides/settings-overrides.webp)
+| Column    | What it shows                                                                             |
+| --------- | ----------------------------------------------------------------------------------------- |
+| Override  | The origin as an origin chip, with its new trust. Hover it to see its new sensitivity too |
+| Default   | The trust and sensitivity it replaces, such as `untrusted · public`                       |
+| Agents    | The agents whose runs reported it                                                         |
+| Last seen | How long ago a run last reported it. Hover it for the exact time                          |
 
-1. **An override.** The origin and its new label, the default it replaces, the agents whose runs reported it, and when it was last seen.
-2. **Another override.** Every override is listed, so nothing changes trust without a trace.
+## What you can click
+
+Tabs, hover dates and origin chips work as on every page. See [Common controls](/guides/getting-started#common-controls).
+
+| Area            | Element                                                          | What it does                                                                               |
+| --------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Every tab       | **Agent keys**, **Accounts**, **Retention**, **Rules from code** | Switches the tab and puts it in the page address                                           |
+| Agent keys      | **Create key**                                                   | Opens the drawer for a new key. With no keys yet, the button under the table does the same |
+| Agent keys      | **Revoke**                                                       | Asks to confirm in its place. Hover it for a hint                                          |
+| Agent keys      | Red **Revoke**                                                   | Revokes the key. It reads **Revoking…** while it works                                     |
+| Agent keys      | **Cancel** beside it, or Escape                                  | Keeps the key                                                                              |
+| Agent keys      | A date or a revoked status                                       | Shows the exact time on hover                                                              |
+| Create key      | **Name**                                                         | Takes the key's name                                                                       |
+| Create key      | **Create key**                                                   | Creates the key                                                                            |
+| Create key      | **Cancel**, the close button or Escape                           | Closes the drawer without making a key                                                     |
+| Key created     | **Copy**                                                         | Copies the full key. It reads **Copied** for a moment                                      |
+| Key created     | **I saved the key**                                              | Closes the drawer. The full key is gone from then on                                       |
+| Rules from code | **Search rules**                                                 | Filters the rules as you type. On this tab, `/` jumps to it                                |
+| Rules from code | **All guards**                                                   | Shows one guard type                                                                       |
+| Rules from code | **All modes**                                                    | Shows one mode                                                                             |
+| Rules from code | **Clear filters**                                                | Empties the search and resets both filters, when they leave no rules                       |
+| Rules from code | A cut-off tool or app list                                       | Shows the full list on hover                                                               |
+| Rules from code | Origin chip                                                      | Shows its origin, trust and sensitivity on hover                                           |
+| Rules from code | **Show example** / **Hide example**                              | Shows or folds the code example. Hover it for a hint                                       |
+
+Accounts and Retention have nothing to click.
+
+## With no data yet
+
+Every tab keeps its column titles, with a note under them:
+
+- **Agent keys** reads **No agent keys yet** and _One key per app that runs agents._, with a **Create key** button. Its count shows 0.
+- **Accounts** always reads **No accounts to manage**.
+- **Retention** reads **No project yet** and _Creating the first agent key sets up the project._ **Redaction** still shows.
+- **Rules from code** reads **No SDK connected yet**, **No rules reported yet** and **No origin overrides yet**. The rule search and filters stay hidden, and the count shows 0. A search or filter that matches nothing reads **No rules match**, with **Clear filters**.
+
+While settings load, the tab names and grey bars stand in for the page. If they can't load, the page says **Could not load settings. Nothing was changed.** **Try again** loads it again.
+
+If creating a key fails, the drawer says why, such as **Could not create the key. Try again.** or **Sign in again to change agent keys.** when your session ended.

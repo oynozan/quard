@@ -38,18 +38,17 @@ export function storedReplay(fields: Partial<StoredReplay> = {}): StoredReplay {
     };
 }
 
-// A stored incident with its verdict found, the note pending and no replay yet
+// A stored incident with its verdict found, not opened yet and no replay yet
 export function incidentRow(fields: Partial<IncidentRow> = {}): IncidentRow {
     return {
         id: "inc_0123456789abcdef",
         runId: RUN,
         openedAt: at(6),
+        seenAt: null,
         findState: "done",
         findError: null,
-        reviewState: "pending",
         replayState: "idle",
         verdict: storedVerdict(),
-        reviewer: null,
         replay: null,
         spentUsd: 0,
         capUsd: 5,

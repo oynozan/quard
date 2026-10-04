@@ -50,6 +50,7 @@ export const INCIDENTS: Incident[] = [
         damageAgent: "billing",
         replay: "running",
         openedAt: NOW - 3 * MINUTE,
+        seen: true,
     },
     {
         id: "inc_117",
@@ -62,6 +63,7 @@ export const INCIDENTS: Incident[] = [
         damageAgent: "deploy-bot",
         replay: "confirmed",
         openedAt: NOW - 2 * 60 * MINUTE,
+        seen: true,
     },
 ];
 

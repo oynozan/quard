@@ -1,7 +1,8 @@
 import { generateStaticParamsFor, importPage } from "nextra/pages";
+import { InstallSkill } from "../../components/install-skill/install-skill";
 import { useMDXComponents as getMDXComponents } from "../../mdx-components";
 
-// One route serves every page in content/
+// One route serves every page in content/, each under the skill install command
 export const generateStaticParams = generateStaticParamsFor("mdxPath");
 
 export async function generateMetadata(props: PageProps<"/[[...mdxPath]]">) {
@@ -17,6 +18,7 @@ export default async function Page(props: PageProps<"/[[...mdxPath]]">) {
     const { default: MDXContent, toc, metadata, sourceCode } = await importPage(params.mdxPath);
     return (
         <Wrapper toc={toc} metadata={metadata} sourceCode={sourceCode}>
+            <InstallSkill />
             <MDXContent {...props} params={params} />
         </Wrapper>
     );

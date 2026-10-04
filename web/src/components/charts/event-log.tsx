@@ -1,3 +1,4 @@
+import { LiveCursor } from "@/components/live/live-sign";
 import { formatClock } from "@/lib/format";
 import type { DecisionEvent, Outcome } from "@/lib/data/types";
 
@@ -37,7 +38,7 @@ export function EventLog({ events, emptyText = "No guard decisions yet" }: Event
             ) : (
                 <p className="font-sans font-light text-ink-muted">{emptyText}</p>
             )}
-            <span aria-hidden className="cursor-blink mt-1 block h-[10px] w-1 bg-signal" />
+            <LiveCursor />
         </div>
     );
 }

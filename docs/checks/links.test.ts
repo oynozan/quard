@@ -42,6 +42,10 @@ describe("reading Markdown", () => {
             "find-a-run-1",
         ]);
     });
+
+    it("keeps code in a heading as part of its id", () => {
+        expect([...headingIds("### `message`\n### The `guard()` call")]).toEqual(["message", "the-guard-call"]);
+    });
 });
 
 describe("finding pages", () => {

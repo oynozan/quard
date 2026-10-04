@@ -8,7 +8,7 @@ import { startPings } from "../socket/ping.ts";
 import { handleUpgrades } from "../socket/upgrade.ts";
 import type { OpenListener } from "../watch/listen.ts";
 import { startWatcher } from "../watch/watcher.ts";
-import { createContext, type ContextOptions } from "./context.ts";
+import { createContext, type Context, type ContextOptions } from "./context.ts";
 import { closeServer, closeSockets } from "./shutdown.ts";
 
 // The SDK never sends more than 1 MB at once
@@ -23,9 +23,9 @@ export type StartOptions = ContextOptions & {
 
 export type ControlServer = { port: number; close(): Promise<void> };
 
-function listen(port: number): Promise<Server> {
+function listen(ctx: Context, port: number): Promise<Server> {
     return new Promise((resolve, reject) => {
-        const server = serve({ fetch: createApp().fetch, port }, () => resolve(server)) as Server;
+        const server = serve({ fetch: createApp(ctx).fetch, port }, () => resolve(server)) as Server;
         server.once("error", reject);
     });
 }
@@ -33,7 +33,7 @@ function listen(port: number): Promise<Server> {
 // The health route and the SDK's WebSocket on one port, plus the background work
 export async function startControl(options: StartOptions): Promise<ControlServer> {
     const ctx = createContext(options);
-    const server = await listen(options.port);
+    const server = await listen(ctx, options.port);
     const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD });
     handleUpgrades(ctx, server, wss);
     const stopPings = startPings(ctx.registry, ctx.timing.pingMs);

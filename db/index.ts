@@ -3,6 +3,8 @@ export { connect } from "./connect/connect.ts";
 export type { Db } from "./connect/connect.ts";
 export { CHANNELS, notify } from "./notify/channels.ts";
 export type { Channel } from "./notify/channels.ts";
+export { approvalsNotice, runNotices, runsNotice } from "./notify/live.ts";
+export type { RunNotices } from "./notify/live.ts";
 export { openListener } from "./notify/listen.ts";
 export type { Listener, Notice } from "./notify/listen.ts";
 export { modelCallBuckets, runStartBuckets } from "./queries/activity.ts";
@@ -90,11 +92,12 @@ export { getModelCalls } from "./queries/incidents/calls.ts";
 export type { ModelCallRecord } from "./queries/incidents/calls.ts";
 export { incidentCounts } from "./queries/incidents/counts.ts";
 export type { IncidentCounts } from "./queries/incidents/counts.ts";
-export { claimIncidentJob, deferIncidentJob } from "./queries/incidents/jobs.ts";
+export { claimIncidentJob, deferIncidentJob, retryIncidentJob } from "./queries/incidents/jobs.ts";
 export { getIncident, incidentsForAgent, incidentsForRuns, listIncidents } from "./queries/incidents/list.ts";
 export { requestReplay } from "./queries/incidents/replay.ts";
 export type { ReplayRequest } from "./queries/incidents/replay.ts";
-export { failFind, saveReplay, saveReview, saveVerdict } from "./queries/incidents/save.ts";
+export { failFind, saveReplay, saveVerdict } from "./queries/incidents/save.ts";
+export { markIncidentSeen } from "./queries/incidents/seen.ts";
 export type {
     ClaimedJob,
     IncidentCategory,
@@ -103,7 +106,6 @@ export type {
     ReplayCount,
     ReplayOutcome,
     StoredReplay,
-    StoredReview,
     StoredRound,
     StoredVerdict,
     TracedValue,
@@ -153,4 +155,6 @@ export { searchKeys } from "./queries/search/value-keys.ts";
 export type { SearchKeys } from "./queries/search/value-keys.ts";
 export { findValue } from "./queries/search/values.ts";
 export type { CallMatchRow, ContentMatchRow, MatchLabel, ValueMatchRow, ValueSearch } from "./queries/search/values.ts";
+export { beatWorker, lastWorkerSeen } from "./queries/workers.ts";
+export type { WorkerInfo } from "./queries/workers.ts";
 export type { Database } from "./schema/database.ts";

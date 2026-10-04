@@ -8,7 +8,6 @@ import { fakeResponses, toolOutputs } from "../../../packages/sdk/test/fake-resp
 import { resetAll } from "../../../packages/sdk/test/reset.ts";
 import { flushUploads } from "../../../packages/sdk/transport/configure.ts";
 import { createApp } from "../../webhook/app.ts";
-import { REVIEW_MODEL } from "../jobs/review.ts";
 import { REMOVED } from "../replay/without.ts";
 import { runNextJob } from "../runner/jobs.ts";
 import { CALL_USD, OPENAI, payingModel, USAGE } from "../test/model.ts";
@@ -135,7 +134,7 @@ function turningCall(): ModelCall | undefined {
 }
 
 describe("the M1 payment attack", { timeout: 30_000 }, () => {
-    it("gets a verdict, a reviewer note and a replay that confirms the web page caused the payment", async () => {
+    it("gets a verdict and a replay that confirms the web page caused the payment", async () => {
         const projectId = await createProject(test.db, "Acme");
         await uploadAttack(projectId);
         const [opened] = await listIncidents(test.db, projectId, { limit: 10 });
@@ -161,30 +160,14 @@ describe("the M1 payment attack", { timeout: 30_000 }, () => {
         });
         const entry = found!.verdict!.entry;
 
-        // The reviewer's note, written from the verdict with its values hidden
-        const reviewer = fakeResponses(() => ({
-            text: "A web page held an IBAN.\n\nThe agent paid it.",
-            usage: USAGE,
-        }));
-        expect(await runNextJob({ db: test.db, openai: OPENAI, fetch: reviewer.fetch })).toBe(
-            `review ${id}: note written`,
-        );
-        expect(reviewer.bodies).toMatchObject([{ model: REVIEW_MODEL, store: false }]);
-        expect(JSON.stringify(reviewer.bodies)).toContain("[IBAN 1]");
-        expect(JSON.stringify(reviewer.bodies)).not.toContain("DE89");
-        const note = (await getIncident(test.db, projectId, id))?.reviewer;
-        expect(note).toMatchObject({ paragraphs: ["A web page held an IBAN.", "The agent paid it."] });
-        const reviewUsd = note && "costUsd" in note ? note.costUsd : 0;
-        expect(reviewUsd).toBeGreaterThan(0);
-
         // The replay, started from the incident page
-        expect(await runNextJob({ db: test.db, openai: OPENAI })).toBeUndefined();
-        expect(await requestReplay(test.db, projectId, id, { by: "ana@acme.com" })).toBe("started");
         const model = payingModel();
+        expect(await runNextJob({ db: test.db, openai: OPENAI, fetch: model.fetch })).toBeUndefined();
+        expect(await requestReplay(test.db, projectId, id, { by: "ana@acme.com" })).toBe("started");
         expect(await runNextJob({ db: test.db, openai: OPENAI, fetch: model.fetch })).toBe(`replay ${id}: confirmed`);
         expect(await getIncident(test.db, projectId, id)).toMatchObject({
             replayState: "done",
-            spentUsd: expect.closeTo(reviewUsd + 10 * CALL_USD, 9),
+            spentUsd: expect.closeTo(10 * CALL_USD, 9),
             replay: {
                 model: MODEL,
                 harmfulCall: { tool: "payInvoice", keys: [entry.key] },

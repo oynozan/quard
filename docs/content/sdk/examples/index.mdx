@@ -1,0 +1,146 @@
+# Run the examples
+
+The [sandbox](https://github.com/oynozan/quard/tree/main/sandbox) holds 28 small programs, numbered 00 to 27. Example 0 checks that a Quard install works, and example 27 calls a paid API with no model. The other 26 use the SDK with a real OpenAI model. Each one sets up a situation from real life, such as a billing agent paying invoices, gives the model a task and a few guarded tools, and prints what happens. The pages in this section walk through them one at a time.
+
+Every example imports the SDK the way an app would: `import { guard, quard } from "quard"`. In the sandbox, that package is the SDK's source in [`packages/sdk`](https://github.com/oynozan/quard/tree/main/packages/sdk), so a change to the SDK shows up in the next run, with no build. `quard/openai-agents`, which [example 24](/sdk/examples/openai-agents-sdk) uses, works the same way.
+
+## Set up
+
+1. Use Node.js 24 or later, as the repo asks. Node runs the examples' TypeScript files directly.
+2. Run `pnpm install` at the repo root.
+3. Copy `sandbox/.env.example` to `sandbox/.env` and put your OpenAI API key in it.
+
+```sh
+OPENAI_API_KEY=sk-...
+```
+
+The examples use `gpt-5.4-mini`. To use another model, set `OPENAI_MODEL` in the same file. A variable already set in your shell wins over the file. `sandbox/.env` is never committed.
+
+Without a key, every example that talks to the model stops at once and says where to put it.
+
+## Run an example
+
+From the repo root:
+
+```sh
+node sandbox/01-first-guard.ts
+```
+
+All of them, in order:
+
+```sh
+for f in sandbox/[0-9]*.ts; do echo "== $f"; node "$f"; done
+```
+
+Each example that uses the model makes a handful of model calls. Example 5 stops to ask you about payments in the terminal. Examples 9, 10, 11, 12, 15 and 22 stop at once with a message unless `sandbox/.env` holds the keys for [the local backend](/sdk/examples#the-local-backend). Example 0 checks a running install, so it needs one too.
+
+## A real model decides
+
+A real model reads each task and chooses the tool calls, so the wording, the arguments and sometimes the steps change from run to run. One run may send three texts in one turn, the next one at a time. The model may write an IBAN with spaces or without.
+
+Quard's guards are plain code, not AI. The same call in the same run always gets the same decision. The exception is a [detector](/sdk/reference/detector), a check you write yourself, which can ask a model, as in [example 19](/sdk/examples/ai-detector). The example pages show the lines the sandbox prints for the calls the model usually makes, with `…` where the model's own words go.
+
+## Read the output
+
+The agent loop and the examples print these lines:
+
+| Line                                | What it means                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `User: …`                           | The task the example gives the model                                                                          |
+| `→ tool {…}`                        | A tool call the model asked for, with the arguments it wrote                                                  |
+| `✓ …`                               | The call went through. This is the result the model reads next                                                |
+| `✗ blocked by the … guard (reason)` | A guard stopped the call or withheld its result. The model reads a [refusal](/sdk/reference/refusals) instead |
+| `? Approve …`                       | Example 5 asks you to approve a call                                                                          |
+| `· …`                               | An [event](/sdk/reference/events) the example prints, such as a label or a guard decision                     |
+| `Model: …`                          | The model's final answer                                                                                      |
+
+A line with no indent is a section title.
+
+## The shared files
+
+The examples use the files in [`sandbox/lib`](https://github.com/oynozan/quard/tree/main/sandbox/lib):
+
+| File                                                                                      | What it does                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/agent.ts)             | `runAgent()`, a plain agent loop on the Responses API. It sends the task and the tool definitions, runs each tool the model asks for and sends the results back, for up to eight model calls. A refusal goes back to the model as its text. It returns the model's last answer. |
+| [`tools.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/tools.ts)             | The tool definitions the model sees, such as `sendSms`, `payInvoice`, `delegate` and `saveNote`: name, description and fields. A tool you add to an example needs a definition here too.                                                                                        |
+| [`show.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/show.ts)               | `title()` prints a section title. `printEvent()` prints one line per event and skips quiet decisions: allow and pass. It has lines for runs, labels, model calls, tool calls, decisions, warnings, messages between agents, handoffs and memory reads and writes.               |
+| [`terminal.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/terminal.ts)       | `askInTerminal()`, an approver that asks you in the terminal: once, always or deny. Any other answer denies. `closeTerminal()` lets the process exit.                                                                                                                           |
+| [`env.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/env.ts)                 | Loads `sandbox/.env`, checks the OpenAI key and picks the model. With `QUARD_AGENT_KEY` set, it connects the SDK to the local backend and warns if webhook doesn't answer. `needsDashboard()` stops an example that needs the backend.                                          |
+| [`iban.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/iban.ts)               | `newIban()`, a German IBAN with random digits and valid check digits, so each run of an example can use an IBAN nobody has seen.                                                                                                                                                |
+| [`x402/server.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/x402/server.ts) | `startPaidApi()`, a local x402 server for one paid host, with a stub facilitator that settles without a chain. The fetch it returns sends requests for that host to the local server. Examples 26 and 27 use it.                                                                |
+| [`x402/wallet.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/x402/wallet.ts) | `testWallet()`, an x402 client for Base Sepolia with a fake signer, so no real key or wallet is needed.                                                                                                                                                                         |
+| [`x402/show.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/x402/show.ts)     | `paymentLine()` prints one line per payment event: the stage, the amount, the payee, the host and the transaction.                                                                                                                                                              |
+| [`quard/`](https://github.com/oynozan/quard/tree/main/sandbox/lib/quard)                  | Re-exports the SDK's source, and the OpenAI Agents SDK integration as `quard/openai-agents`. `pnpm install` links it into the sandbox as the `quard` package.                                                                                                                   |
+
+The agent loop gives the model the same instructions in every example that uses it: it works for Acme Ltd, uses the tools without asking follow-up questions, doesn't retry a blocked call and answers in one or two short sentences. Examples 0, 24 and 27 don't use the loop.
+
+## Change an example
+
+Change anything you like. Nothing runs the examples automatically, and the SDK doesn't reject options it doesn't know, so a typo in an option goes unnoticed. The sandbox is a workspace package, `@quard/sandbox`, so CI type-checks it. After you change an example or the SDK, type-check it yourself:
+
+```sh
+pnpm --filter @quard/sandbox typecheck
+```
+
+## The local backend
+
+Some examples send their runs to a local Quard backend and use the dashboard. No Docker is needed. The [sandbox README](https://github.com/oynozan/quard/blob/main/sandbox/README.md) has the steps:
+
+1. Make a hash key with `openssl rand -hex 32` and add it to `sandbox/.env` as `QUARD_HASH_KEY`. Put the same key in `web/.env`.
+2. Start webhook and control, each in its own terminal:
+
+    ```sh
+    node --env-file=web/.env services/webhook/main.ts    # port 4100
+    node --env-file=web/.env services/control/main.ts    # port 4200
+    ```
+
+3. Start the worker in a third terminal. It finds each incident's root cause, and runs replay with the `OPENAI_API_KEY` from `sandbox/.env`. Without the worker, new incidents stay at **Finding the root cause**.
+
+    ```sh
+    node --env-file=web/.env --env-file=sandbox/.env services/worker/main.ts
+    ```
+
+4. Open the dashboard at `http://localhost:3100` and sign in. Go to [Settings](/guides/settings#agent-keys) and create an agent key. Add it to `sandbox/.env` as `QUARD_AGENT_KEY`.
+5. Run an example, such as `node sandbox/15-everything.ts`.
+
+No Postgres? Run `pnpm --filter @quard/db dev:db`, a local Postgres on port 5432, and set `DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres` in `web/.env`. A new database needs its tables first: run `pnpm db:migrate` with `DATABASE_URL` set.
+
+`lib/env.ts` sends events to `http://localhost:4100` and connects to control at `http://localhost:4200`. Set `QUARD_WEBHOOK_URL` and `QUARD_CONTROL_URL` in `sandbox/.env` to use other addresses. If webhook doesn't answer, it prints a warning and the example goes on.
+
+With `QUARD_AGENT_KEY` set, every example sends its runs to the dashboard, and example 5 waits for your answers at `http://localhost:3100/approvals` instead of asking in the terminal. Comment the line out to keep runs in the terminal only. To check that every part of the install works, run [example 0](/sdk/examples/check-deploy).
+
+## All examples
+
+| Example                                                                    | What it shows                                                                                                          | Needs the backend |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| [0. Check an install end to end](/sdk/examples/check-deploy)               | Checks the dashboard, the docs, webhook, control, the live link and one real run, locally or on a server               | Yes               |
+| [1. Your first guard](/sdk/examples/first-guard)                           | `guard()`, a limit of two calls per run, how the model reacts to a block, and `onBlock: "throw"`                       | No                |
+| [2. Where values come from](/sdk/examples/where-values-come-from)          | Labels and value tracing: an IBAN from your records is paid, one from a web page is not                                | No                |
+| [3. Hidden instructions](/sdk/examples/hidden-instructions)                | The source guard flags, strips or blocks a poisoned page, and blocks a whole domain                                    | No                |
+| [4. Where data can go](/sdk/examples/where-data-can-go)                    | The egress guard: an allow list, and destinations that first appeared in untrusted content                             | No                |
+| [5. Human approval](/sdk/examples/human-approval)                          | You approve payments once, always or not at all, and a rule asks only about new bank details                           | No                |
+| [6. Observe mode](/sdk/examples/observe-mode)                              | Rules that record what they would block, but never block                                                               | No                |
+| [7. Agents and permissions](/sdk/examples/agents-and-permissions)          | `quard.run()`, `quard.agent()` and the tools each agent may use                                                        | No                |
+| [8. What Quard records](/sdk/examples/what-quard-records)                  | The full timeline of a run                                                                                             | No                |
+| [9. Runs in the dashboard](/sdk/examples/runs-in-the-dashboard)            | Runs reach the dashboard with secrets removed and IBANs and emails masked; completed, failed and blocked runs          | Yes               |
+| [10. Approvals in the dashboard](/sdk/examples/approvals-in-the-dashboard) | Approvals answered in the dashboard: always approve, an amount rule that asks, and a timeout                           | Yes               |
+| [11. Daily limits](/sdk/examples/daily-limits)                             | Per-day limits that every process shares. Run it twice and the count goes on                                           | Yes               |
+| [12. The fleet check](/sdk/examples/fleet-check)                           | A new IBAN paid in five separate runs is quarantined, though a new install only observes for its first 7 days          | Yes               |
+| [13. When the backend is down](/sdk/examples/backend-down)                 | Approvals block after 30 seconds, daily limits count locally, and the other guards keep working                        | No                |
+| [14. The policy file](/sdk/examples/policy-file)                           | Rules in a JSON policy file win over code and change while the app runs                                                | No                |
+| [15. Everything in the dashboard](/sdk/examples/everything)                | All of it in one go: every guard type, several agents, an approval to click, and completed, failed and blocked runs    | Yes               |
+| [16. Your own rules](/sdk/examples/your-own-rules)                         | Custom check rules, a `neverSeen` rule that blocks, a per-run amount cap, and block beating ask                        | No                |
+| [17. Sensitive data going out](/sdk/examples/sensitive-data-going-out)     | Egress payload rules that mask, block or allow, strictness presets, `destinations` and `onFail: "ask"`                 | No                |
+| [18. Origins and trust](/sdk/examples/origins-and-trust)                   | Full origins, `from` versus trust, origin overrides, `originOf` and `allowDomains`                                     | No                |
+| [19. An AI detector](/sdk/examples/ai-detector)                            | An AI detector catches a reworded attack the built-in checks miss: observe, enforce and tuning                         | No                |
+| [20. Signature feeds](/sdk/examples/signature-feeds)                       | Known-bad patterns from a file or a URL: block, observe, and updates without a restart                                 | No                |
+| [21. Streaming and model calls](/sdk/examples/streaming-and-model-calls)   | Streamed answers and tool calls, tokens and cost, agent versions, and Chat Completions calls that aren't recorded      | No                |
+| [22. Agents in two processes](/sdk/examples/agents-in-two-processes)       | A billing agent in a second process gets the run and its labels in a baggage header, and the web IBAN is blocked there | Yes               |
+| [23. Shared memory](/sdk/examples/shared-memory)                           | `quard.memory()`: a web IBAN in a saved note is blocked in a later run, and so is a note edited behind its back        | No                |
+| [24. The OpenAI Agents SDK](/sdk/examples/openai-agents-sdk)               | The OpenAI Agents SDK with `quardRunner()` and `guardedTool()`; the web IBAN is blocked after a handoff                | No                |
+| [25. Run limits](/sdk/examples/run-limits)                                 | Run limits on turns between two agents and on model calls, first observed, then enforced                               | No                |
+| [26. A paid link in a poisoned page](/sdk/examples/paid-link-in-a-page)    | The x402 guard observes, then refuses before signing, a payment to a host first seen in a web page                     | No                |
+| [27. A paid API in a loop](/sdk/examples/paid-api-in-a-loop)               | A $0.01 API called in a loop stops at a run cap in USD, then at a cap on the number of payments; no model              | No                |
+
+Examples 5, 13, 14 and 23 also run without the backend and do a little more with it: 5 asks in the dashboard, 14 sends its rules to control, and 23 keeps its labels in the backend. Example 13 points at a backend that isn't there on purpose.

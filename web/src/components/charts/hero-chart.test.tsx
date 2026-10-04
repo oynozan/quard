@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeResizeObserver, observers, resizeAll } from "../../../test/charts-rest/dom";
+import { LiveStatusProvider } from "@/components/live/status";
 import { HeroChart } from "./hero-chart";
 
 // 144 ten-minute buckets ending at noon on 1 May: 100 each, a 900 peak at 20:20 and 120 now
@@ -8,8 +9,13 @@ const ENDS_AT = Date.UTC(2026, 4, 1, 12, 0);
 const VALUES = Array.from({ length: 144 }, (_, i) => (i === 50 ? 900 : i === 143 ? 120 : 100));
 const EMPTY = "No model calls in the last 24 hours";
 
-function hero() {
-    return render(<HeroChart greeting="Good morning, Ada" values={VALUES} endsAt={ENDS_AT} />);
+// The chart follows the live status the dashboard layout provides
+function hero(live = true) {
+    return render(
+        <LiveStatusProvider value={live ? "live" : "offline"}>
+            <HeroChart greeting="Good morning, Ada" values={VALUES} endsAt={ENDS_AT} />
+        </LiveStatusProvider>,
+    );
 }
 
 function chart() {
@@ -64,6 +70,12 @@ describe("HeroChart", () => {
         );
         expect(screen.getByText("Live")).toBeTruthy();
         expect(container.querySelector("rect.cursor-blink")).toBeTruthy();
+    });
+
+    it("drops the cursor and says Offline while the stream is down", () => {
+        const { container } = hero(false);
+        expect(screen.getByText("Offline")).toBeTruthy();
+        expect(container.querySelector("rect.cursor-blink")).toBeNull();
     });
 
     it("labels the y gridlines and the times along the bottom", () => {

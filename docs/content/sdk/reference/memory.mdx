@@ -1,0 +1,166 @@
+# Shared memory
+
+`quard.memory()` wraps a store that agents share, such as a notes table, a vector database or a cache. What goes in keeps its labels, and what comes back out gets them again, in any agent, process or later run. [Shared memory](/concepts/shared-memory) explains the idea. This page gives the API.
+
+```ts
+// quard.memory
+function memory<T extends object>(store: T, options: MemoryOptions): MemoryStore<T>;
+
+type MemoryOptions = {
+    name: string;
+};
+
+// The same shape as the store. Its reads and writes return promises.
+type MemoryStore<T> = { [K in keyof T]: K extends Method ? Wrapped<T[K]> : T[K] };
+
+type Method = "get" | "search" | "read" | "put" | "write";
+type Wrapped<F> = F extends (...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : F;
+```
+
+`MemoryOptions` and `MemoryStore` are exported as types from `quard`.
+
+## Options
+
+| Option | Type     | Default  | What it does                                                                           |
+| ------ | -------- | -------- | -------------------------------------------------------------------------------------- |
+| `name` | `string` | required | The store's name, 1 to 200 characters. Items read back get the origin `memory:<name>`. |
+
+Without a valid `name`, `quard.memory()` throws `quard.memory() needs options.name: the store's name, 1 to 200 characters`.
+
+## The wrapped store
+
+The wrapped store has the same properties as yours. Quard looks for five method names. Your store can have any of them:
+
+| Method   | Kind  | What Quard labels                                            |
+| -------- | ----- | ------------------------------------------------------------ |
+| `get`    | Read  | What it returns, as one item                                 |
+| `search` | Read  | What it returns: one item per entry of a list, else one item |
+| `read`   | Read  | What it returns: one item per entry of a list, else one item |
+| `put`    | Write | Its second argument, the value                               |
+| `write`  | Write | Its first argument                                           |
+
+- These five return promises, even when your method doesn't.
+- Every other method passes through untouched. Methods are called on your store itself, so private fields and built-ins such as `Map` still work.
+- Each read or write joins the current run. Outside a run, it starts a new one, as a guarded tool does.
+- What your method returns comes back as it is. Quard only labels it.
+
+## Writes
+
+For each `put` or `write`, Quard:
+
+1. Makes the item's print: a keyed hash of the whole value, as JSON with sorted keys. With a backend set, it waits for your project's [hash key](/sdk/reference/configure#the-hash-key) and uses it. Without one, it uses a key only this process knows.
+2. Takes the run's [context label](/concepts/labels#the-context-label). A run that has read nothing gives the label for unknown content: untrusted and internal.
+3. Finds each traced value in the item that appeared earlier in the run, with the label it had where it first appeared. A value the model made up is not included.
+4. Keeps these labels in this process, by print, for up to 10,000 items. Writing the same content again keeps the least trusted labels of both writes.
+5. With uploads on, sends a memory record to `webhook` and waits until it is stored, for up to 5 seconds.
+6. Calls your method.
+7. Records a `memory` event.
+
+The write goes ahead even when its labels couldn't be stored. Other processes then read the item as unlabeled.
+
+A memory record holds:
+
+| Field    | What it holds                                                                                                    |
+| -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `store`  | The store's name                                                                                                 |
+| `print`  | The item's print                                                                                                 |
+| `runId`  | The writing run                                                                                                  |
+| `agent`  | The writing agent                                                                                                |
+| `label`  | The run's context label: trust, sensitivity, origins, and whether anything was flagged                           |
+| `values` | Each traced value, as a keyed hash, with the origin, trust, sensitivity and flags it had where it first appeared |
+
+Raw values never leave the process, and the item itself is never stored by Quard.
+
+## Reads
+
+For each `get`, `search` or `read`, Quard calls your method first. Then, for each item in the result, leaving out `null` and `undefined`:
+
+1. Makes the item's print, as on write.
+2. Looks up labels for that print: the ones this process kept, and the records `control` has, through the control link. The lookup waits for up to 5 seconds. A lookup that fails counts as no record.
+3. Merges every match: the least trusted trust, the most sensitive sensitivity, all origins, and flagged if any was. For each value, the least trusted label keeps its origin.
+4. Labels the item and adds it to what the run has read.
+5. Records one `memory` event for the whole read.
+
+| The item      | Origin          | Trust and sensitivity                                                                                                                               | Values in it                                                         |
+| ------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Has labels    | `memory:<name>` | From the labels. A team's [origin override](/sdk/reference/configure#origins) for `memory:<name>` still wins. Flagged labels add the flag `flagged` | Each value with a stored label keeps it, so a web IBAN stays `web:…` |
+| Has no labels | `memory:<name>` | `untrusted` and `internal`. Overrides don't apply                                                                                                   | They take the item's label                                           |
+
+In a trusted item, a value no record vouches for was written by a model. It stays [model-generated](/concepts/value-tracing#model-generated-values), here and in any trusted tool output that holds it later.
+
+An item has no labels when its print matches nothing. That happens when it was changed outside the wrapper, even by one hidden character, when your read method returns it in another shape than it was written, or when it was written without the wrapper. [When an item has no labels](/concepts/shared-memory#when-an-item-has-no-labels) lists every case.
+
+## Backend
+
+| To                                     | Needs                                     |
+| -------------------------------------- | ----------------------------------------- |
+| Read labels back in the same process   | Nothing. The process keeps its own labels |
+| Store labels for other processes       | Uploads: `key` and `webhookUrl`           |
+| Read labels written by other processes | The control link: `key` and `controlUrl`  |
+
+Use agent keys from the same project everywhere. Each project hashes with its own key, so only then do prints and value hashes match. See [Uploads and the control link](/sdk/reference/configure#uploads-and-the-control-link) and [The hash key](/sdk/reference/configure#the-hash-key).
+
+## The memory event
+
+Each read or write that finishes records a `memory` event:
+
+| Field                  | What it holds                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `store`                | The store's name                                                                                    |
+| `op`                   | `"read"` or `"write"`                                                                               |
+| `items`                | How many items it touched. A write is one item                                                      |
+| `verified`             | On a read, how many items had labels. On a write, 1 when `webhook` stored the record, else 0        |
+| `trust`, `sensitivity` | On a read, the least trusted and most sensitive label among the items. On a write, the label stored |
+
+Agent pages show these calls in their own lane under [Recent calls](/guides/agents#recent-calls).
+
+## Example
+
+```ts
+import { guard, quard } from "quard";
+
+const items = new Map<string, string>();
+const notes = quard.memory(
+    {
+        get: (key: string) => items.get(key),
+        put: (key: string, text: string) => {
+            items.set(key, text);
+        },
+    },
+    { name: "notes" },
+);
+
+// The note tools need no guard: quard.memory() labels what goes in and out
+async function saveNote(input: { key: string; text: string }) {
+    await notes.put(input.key, input.text);
+    return `saved note ${input.key}`;
+}
+
+async function readNote(input: { key: string }) {
+    return (await notes.get(input.key)) ?? `There is no note named ${input.key}.`;
+}
+
+const payInvoice = guard(async (input: { iban: string; amount: number }) => pay(input), {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "iban", from: ["tool:getSupplier"] }],
+});
+```
+
+A researcher that read an invoice on a web page saves a note with its IBAN. In a later run, a billing agent reads the note and tries to pay. The IBAN still reads as coming from the web page, so the `from` rule blocks the payment.
+
+## Related
+
+- [Shared memory](/concepts/shared-memory): why labels go with stored content.
+- [23. Shared memory](/sdk/examples/shared-memory): this example, end to end.
+- [Messages between agents](/sdk/reference/messages): the same idea for messages.
+
+## Source
+
+- [`packages/sdk/memory/wrap.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/wrap.ts): `memory()`, `MemoryOptions` and `MemoryStore`
+- [`packages/sdk/memory/write.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/write.ts): `writeThrough()`, what a write stores
+- [`packages/sdk/memory/read.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/read.ts): `readThrough()`, how a read is labeled
+- [`packages/sdk/memory/merge.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/merge.ts): `mergeLabels()`
+- [`packages/sdk/memory/kept.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/kept.ts): the labels kept in this process
+- [`packages/sdk/memory/event.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/event.ts): `recordMemory()`, the `memory` event
+- [`packages/shared/labels/records.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/records.ts): the memory record schema

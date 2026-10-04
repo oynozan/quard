@@ -71,9 +71,10 @@ export type ApprovalRequest = {
 };
 
 export type IncidentCategory = "bad input" | "bad reasoning" | "bad handoff" | "broken tool" | "missing guard";
-// "running" only while the worker reruns the turning point
+// "queued" until a worker claims the replay, "running" while it reruns the turning point
 export type ReplayStatus =
     | "not started"
+    | "queued"
     | "running"
     | "confirmed"
     | "not confirmed"
@@ -94,6 +95,8 @@ export type Incident = {
     damageAgent: string | null;
     replay: ReplayStatus;
     openedAt: number;
+    // Someone has opened the incident's page
+    seen: boolean;
 };
 
 // Every guard that records decisions, the signature feed check included

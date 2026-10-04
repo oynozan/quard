@@ -1,0 +1,35 @@
+import type { MetaRecord } from "nextra";
+
+const meta: MetaRecord = {
+    index: "Run the examples",
+    "check-deploy": "0. Check an install end to end",
+    "first-guard": "1. Your first guard",
+    "where-values-come-from": "2. Where values come from",
+    "hidden-instructions": "3. Hidden instructions",
+    "where-data-can-go": "4. Where data can go",
+    "human-approval": "5. Human approval",
+    "observe-mode": "6. Observe mode",
+    "agents-and-permissions": "7. Agents and permissions",
+    "what-quard-records": "8. What Quard records",
+    "runs-in-the-dashboard": "9. Runs in the dashboard",
+    "approvals-in-the-dashboard": "10. Approvals in the dashboard",
+    "daily-limits": "11. Daily limits",
+    "fleet-check": "12. The fleet check",
+    "backend-down": "13. When the backend is down",
+    "policy-file": "14. The policy file",
+    everything: "15. Everything in the dashboard",
+    "your-own-rules": "16. Your own rules",
+    "sensitive-data-going-out": "17. Sensitive data going out",
+    "origins-and-trust": "18. Origins and trust",
+    "ai-detector": "19. An AI detector",
+    "signature-feeds": "20. Signature feeds",
+    "streaming-and-model-calls": "21. Streaming and model calls",
+    "agents-in-two-processes": "22. Agents in two processes",
+    "shared-memory": "23. Shared memory",
+    "openai-agents-sdk": "24. The OpenAI Agents SDK",
+    "run-limits": "25. Run limits",
+    "paid-link-in-a-page": "26. A paid link in a poisoned page",
+    "paid-api-in-a-loop": "27. A paid API in a loop",
+};
+
+export default meta;

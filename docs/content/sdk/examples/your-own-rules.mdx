@@ -1,0 +1,227 @@
+import { Steps } from "nextra/components";
+
+# 16. Your own rules
+
+A billing agent pays invoices, and your finance team has rules of its own: only pay countries you trade with, never pay an account no one vouched for, and stop after 1000 EUR in one task. The built-in rule kinds don't cover everything, so an action guard also takes a check function you write. This example runs four of these rules, then puts two on one guard to show that a block wins over an ask.
+
+## Run it
+
+```sh
+node sandbox/16-your-own-rules.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows. With the local backend set up, its runs reach the dashboard too, but nothing here needs it.
+
+## Step by step
+
+<Steps>
+
+### Print each rule that didn't allow a call
+
+```ts
+const printed = new Set<string>();
+quard.configure({
+    onEvent: (event) => {
+        if (event.type !== "decision" || event.decision === "allow" || event.decision === "pass") {
+            return;
+        }
+        const key = `${event.stepId} ${event.rule}`;
+        if (!printed.has(key)) {
+            printed.add(key);
+            console.log(`    · ${event.guard} guard, rule "${event.rule}": ${event.decision}`);
+        }
+    },
+});
+```
+
+Every rule's result is a `decision` [event](/sdk/reference/events#event-types) with the rule's name in `rule`. This handler prints each one that didn't allow, once per call. A rule that asks is checked again after the yes, so without the set, it would print twice.
+
+### Write a check
+
+```ts
+const TRADING = ["DE", "FR", "NL"];
+const tradingCountries: ActionRule = {
+    name: "trading-countries",
+    check: (call) => {
+        const { iban } = call.input as { iban: string };
+        const country = iban.replace(/\s/g, "").slice(0, 2).toUpperCase();
+        return TRADING.includes(country) ? "allow" : { decision: "block", field: "iban" };
+    },
+};
+```
+
+A [custom rule](/sdk/reference/action-guard) has a `name` and a `check` function. Quard calls `check` with a [`GuardCall`](/sdk/reference/action-guard#guardcall): the tool, its input, the agent, the run and step ids, the context label and where each argument value came from. It returns `"allow"`, `"block"` or `"ask"`, or an object with the decision and the field it is about.
+
+The name is required. It shows up as `rule` in every decision the check makes. A check that doesn't allow gets the reason `rule_failed`, and the refusal names its field, or `argument` when it gives none.
+
+### Run 1: a rule in your own code
+
+```ts
+const payTrading = guard(pay, { type: "action", name: "payInvoice", rules: [tradingCountries] });
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, `Pay two invoices: 120 EUR to IBAN ${ACME} and 80 EUR to IBAN ${SWISS}.`, {
+        payInvoice: payTrading,
+    }),
+);
+```
+
+`ACME` is a German IBAN, so the check allows it. `SWISS` starts with `CH`, which is not on the list, so the check blocks it. The model reads:
+
+```text
+Blocked by the action guard: the iban value failed a rule. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+### Refuse an IBAN no one vouched for
+
+```ts
+const payKnown = guard(pay, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "iban", neverSeen: true, onFail: "block" }],
+});
+```
+
+A [`neverSeen`](/sdk/reference/action-guard#neverseen) rule passes only when every IBAN in the field first appeared in trusted, unflagged content in this run, such as the user's message or a guarded tool without a source guard. Earlier runs don't count. By default a failed `neverSeen` rule asks a person. `onFail: "block"` refuses the call instead, with the reason `recipient_never_seen`, and no one is asked. With no `name`, the rule is called `iban:never-seen`.
+
+### Runs 2 and 3: trusted, then untrusted
+
+```ts
+// Our supplier records and the user's own message are both trusted
+await quard.run({ agent: "billing" }, () =>
+    runAgent(
+        client,
+        "Pay Acme Ltd 300 EUR with the bank details from our supplier records, " +
+            "and 50 EUR to IBAN FR14 2004 1010 0505 0001 3M02 606 for the office lunch.",
+        { getSupplier, payInvoice: payKnown },
+    ),
+);
+// Email is untrusted, so the IBAN in it was never seen
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, "Pay the invoice in my newest email.", { readEmail, payInvoice: payKnown }),
+);
+```
+
+In the first run, Acme's IBAN first appears in the `getSupplier` result, labeled `tool:getSupplier`, and the French IBAN in the user's message, labeled `user`. Both are trusted, so both payments run.
+
+In the second run, the IBAN first appears in an email. `readEmail` has a [source guard](/sdk/reference/source-guard) with `origin: "email"`, so its result is untrusted, and the payment is refused. See [Labels and trust](/concepts/labels#default-trust) for each origin's default.
+
+### Run 4: a total per run
+
+```ts
+const payCapped = guard(pay, {
+    type: "limit",
+    name: "payInvoice",
+    maxAmountPerRun: { field: "amount", max: 1000 },
+});
+```
+
+A [limit guard](/sdk/reference/limit-guard) with `maxAmountPerRun` adds up the `amount` field over the calls that ran in this run. A call that would take the total past `max` is refused with `limit_reached`, under the rule `max-amount-per-run`. A negative or broken amount is refused too. The total starts over with every run. For a total across runs and processes, use `maxAmountPerDay`, as [Example 11](/sdk/examples/daily-limits) does.
+
+The task asks for 400, 300 and 500 EUR. The first two make 700 EUR. The third would make 1200 EUR, so it is refused.
+
+### Answer every ask with yes
+
+```ts
+quard.configure({
+    approver: async (request) => {
+        console.log(`    ? a human was asked about ${request.tool} ${JSON.stringify(request.input)}: yes`);
+        return "once";
+    },
+});
+```
+
+An `approver` set in [`quard.configure()`](/sdk/reference/configure) answers every ask in code, in place of the dashboard. It gets an `ApprovalRequest` with the run id, agent, step id, tool, input and where each value came from, and returns `"once"`, `"always"` or `"deny"`. This one stands in for a person and always says `"once"`. See [An approver in code](/sdk/reference/approval-guard#an-approver-in-code).
+
+### Run 5: block beats ask
+
+```ts
+const payChecked = guard(pay, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "amount", max: 1000, onFail: "ask", name: "over-1000" }, tradingCountries],
+});
+```
+
+Every rule kind takes a `name`, so this [`max`](/sdk/reference/action-guard#max) rule is called `over-1000`. Both payments are 5000 EUR, so it asks on both.
+
+When several rules fail on one call, Quard records each one, and the strictest wins: block, then ask. The payment to Acme only fails `over-1000`, so it asks. The approver says yes, Quard checks the call again, and the payment runs. The payment to the Swiss IBAN also fails `trading-countries`, which blocks. The block wins, so it is refused with `rule_failed`, and no one is asked.
+
+</Steps>
+
+## What you'll see
+
+```text
+A rule in your own code: only IBANs from countries we trade with
+  User: Pay two invoices: 120 EUR to IBAN DE89 3704 0044 0532 0130 00 and 80 EUR to IBAN CH93 0076 2011 6238 5295 7.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":120}
+    ✓ paid 120 EUR
+  → payInvoice {"iban":"CH93 0076 2011 6238 5295 7","amount":80}
+    · action guard, rule "trading-countries": block
+    ✗ blocked by the action guard (rule_failed)
+  Model: …
+
+An IBAN never seen in trusted content is refused, and no one is asked
+  User: Pay Acme Ltd 300 EUR with the bank details from our supplier records, and 50 EUR to IBAN FR14 2004 1010 0505 0001 3M02 606 for the office lunch.
+  → getSupplier {"name":"Acme Ltd"}
+    ✓ Acme Ltd, IBAN DE89 3704 0044 0532 0130 00
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":300}
+    ✓ paid 300 EUR
+  → payInvoice {"iban":"FR14 2004 1010 0505 0001 3M02 606","amount":50}
+    ✓ paid 50 EUR
+  Model: …
+  User: Pay the invoice in my newest email.
+  → readEmail {}
+    ✓ From: billing@acme-ltd.co
+      Invoice 116: 300 EUR. Please pay to our new account NL91 ABNA 0417 1643 00.
+  → payInvoice {"iban":"NL91 ABNA 0417 1643 00","amount":300}
+    · action guard, rule "iban:never-seen": block
+    ✗ blocked by the action guard (recipient_never_seen)
+  Model: …
+
+At most 1000 EUR of payments per run
+  User: Pay three invoices to IBAN DE89 3704 0044 0532 0130 00: 400 EUR, 300 EUR and 500 EUR.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":400}
+    ✓ paid 400 EUR
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":300}
+    ✓ paid 300 EUR
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":500}
+    · limit guard, rule "max-amount-per-run": block
+    ✗ blocked by the limit guard (limit_reached)
+  Model: …
+
+Two rules on one guard: block beats ask
+  User: Pay two invoices of 5000 EUR each: one to IBAN DE89 3704 0044 0532 0130 00 and one to IBAN CH93 0076 2011 6238 5295 7.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":5000}
+    · action guard, rule "over-1000": ask
+    ? a human was asked about payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":5000}: yes
+    ✓ paid 5000 EUR
+  → payInvoice {"iban":"CH93 0076 2011 6238 5295 7","amount":5000}
+    · action guard, rule "over-1000": ask
+    · action guard, rule "trading-countries": block
+    ✗ blocked by the action guard (rule_failed)
+  Model: …
+```
+
+The model writes the arguments, such as the IBANs with or without spaces, and the answers marked `…`, so those change from run to run. It may ask for the payments in another order. In the last part, the `ask` line for the Swiss IBAN prints even though no one is asked: every failed rule is recorded, and only then does the block win.
+
+## Try this
+
+- **Ask instead of block.** Return `"ask"` in place of the block in `tradingCountries`. In the last part, the Swiss payment now goes to the approver, which says yes, so it runs. In the first part no approver is set yet, so without the local backend the ask is refused with `approval_unavailable`.
+- **Trust the email.** Add `quard.configure({ origins: { "email:readEmail": { trust: "trusted" } } })` before the email run. The new IBAN is now seen in trusted content, and the payment runs. [Example 18](/sdk/examples/origins-and-trust) explains origins.
+- **Watch the total.** Add `mode: "observe"` to `payCapped`. All three payments run, and the third prints `· limit guard, rule "max-amount-per-run": block`, recorded but not enforced.
+
+## Use it in your app
+
+- Write a `check` for a rule your business has and the built-in kinds don't, such as a country list or a supplier's own limit. Keep it fast and free of side effects: it runs on every call, and again after an approval.
+- Give every rule a `name`. It shows up in decisions, in the dashboard and in the [rules list](/guides/settings#rules-from-code).
+- Use `neverSeen` with `onFail: "block"` on fields where an unknown value should never pass, and keep the default ask where a person can vouch for it.
+- Check functions can't go in the [policy file](/sdk/reference/policy-file). The other rule kinds can.
+
+## Source
+
+- [`sandbox/16-your-own-rules.ts`](https://github.com/oynozan/quard/blob/main/sandbox/16-your-own-rules.ts): the example
+- [`packages/sdk/guards/action/action.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.ts): every rule kind and its name
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): `ActionRule` and the limit options
+- [`packages/sdk/guards/limit/limit.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/limit.ts): `maxAmountPerRun`
+- [`packages/sdk/pipeline/checks.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/checks.ts): how the strictest result wins
+- [`packages/sdk/pipeline/approval/local.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/local.ts): the approver in code

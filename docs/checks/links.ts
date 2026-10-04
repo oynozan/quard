@@ -3,9 +3,14 @@ import path from "node:path";
 
 export type Link = { href: string; image: boolean };
 
+// Removes fenced code blocks, which hold no real links or headings
+function stripFences(markdown: string) {
+    return markdown.replace(/^```[\s\S]*?^```/gm, "");
+}
+
 // Removes code blocks and inline code, so their text is never read as a link
 export function stripCode(markdown: string) {
-    return markdown.replace(/^```[\s\S]*?^```/gm, "").replace(/`[^`\n]*`/g, "");
+    return stripFences(markdown).replace(/`[^`\n]*`/g, "");
 }
 
 // Links and images written in Markdown syntax
@@ -25,11 +30,12 @@ export function slugify(text: string) {
         .replace(/ /g, "-");
 }
 
-// Every heading id on a page; repeated headings get -1, -2 and so on
+// Every heading id on a page; repeated headings get -1, -2 and so on.
+// Code in a heading is part of its id, so only fenced blocks are skipped.
 export function headingIds(markdown: string) {
     const ids = new Set<string>();
     const seen = new Map<string, number>();
-    for (const m of stripCode(markdown).matchAll(/^#{1,6} +(.+)$/gm)) {
+    for (const m of stripFences(markdown).matchAll(/^#{1,6} +(.+)$/gm)) {
         const base = slugify((m[1] as string).replace(/[*_`]/g, ""));
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);

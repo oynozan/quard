@@ -1,0 +1,182 @@
+import { Steps } from "nextra/components";
+
+# 23. Shared memory
+
+A researcher agent reads an invoice on a web page and saves a note. Days later, a billing agent pays from that note. The billing agent never saw the page, and the note looks like any other note in your store. This example wraps the store with `quard.memory()`, so the note keeps the labels of what the researcher had read. The IBAN from the web page is blocked in a later run, an IBAN from your supplier records is paid, and a note someone edits in the store behind Quard's back reads as untrusted.
+
+## Run it
+
+```sh
+node sandbox/23-shared-memory.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows. With [the local backend](/sdk/examples#the-local-backend) on, the labels are also kept in the backend.
+
+## Step by step
+
+<Steps>
+
+### Wrap the store
+
+```ts
+// Any store with get and put will do, such as a database table
+const items = new Map<string, string>();
+const store = {
+    get: (key: string) => items.get(key),
+    put: (key: string, text: string) => {
+        items.set(key, text);
+    },
+};
+const notes = quard.memory(store, { name: "notes" });
+```
+
+[`quard.memory()`](/sdk/reference/quard#quardmemory) returns a store with the same methods as yours. `get`, `search` and `read` are reads, and `put` and `write` are writes. They return promises. The `name` is required: items read back get the origin `memory:notes`. [Shared memory](/sdk/reference/memory) has the full API.
+
+### Use the wrapped store in the tools
+
+```ts
+// No guard() on the note tools, quard.memory() labels what goes in and out
+async function saveNote(input: { key: string; text: string }) {
+    await notes.put(input.key, input.text);
+    return `saved note ${input.key}`;
+}
+
+async function readNote(input: { key: string }) {
+    return (await notes.get(input.key)) ?? `There is no note named ${input.key}.`;
+}
+```
+
+The note tools call the wrapped store, so every read and write goes through Quard. They need no [`guard()`](/sdk/reference/guard) of their own.
+
+### Part 1: a note written after reading the web
+
+```ts
+await quard.run({ agent: "researcher" }, () =>
+    runAgent(
+        client,
+        "Read the invoice at https://acme-billing.net/invoices/114 and save a note named acme with the amount and the bank details.",
+        { fetchPage, saveNote },
+    ),
+);
+```
+
+The researcher reads the page through a [source guard](/sdk/reference/source-guard), so its IBAN is labeled `web:acme-billing.net`, untrusted. When it saves the note, Quard stores the note's labels before the write: the label of everything the run had read, and the label of each traced value in the note. They are keyed by a hash of the note's text. The run read a web page, so the note is untrusted. Quard records a `memory` event for the write.
+
+Without the backend, the labels stay in this process. With it, they are also stored in the backend, so other processes can read them back.
+
+### Part 2: a later run pays from the note
+
+```ts
+await quard.run({ agent: "billing" }, () => runAgent(client, payFromNote, { readNote, payInvoice }));
+```
+
+A new run starts with nothing read. When the billing agent reads the note, Quard looks its labels up by the hash of its text. The IBAN comes back with its own label, `web:acme-billing.net`, before the note is labeled `memory:notes`, untrusted. The [action guard's](/sdk/reference/action-guard) `from` rule wants the IBAN from `tool:getSupplier`, so it blocks the payment with `value_not_from_allowed_origin`.
+
+### Part 3: a note from your supplier records
+
+```ts
+await quard.run({ agent: "researcher" }, () =>
+    runAgent(
+        client,
+        "Acme Ltd's open invoice is 1200 EUR. Look up their bank details in our supplier records and save a note named acme with the amount and the bank details.",
+        { getSupplier, saveNote },
+    ),
+);
+await quard.run({ agent: "billing" }, () => runAgent(client, payFromNote, { readNote, payInvoice }));
+```
+
+This researcher reads only trusted content, so the note is stored as trusted, and its IBAN keeps the label `tool:getSupplier`. In the next run, the billing agent reads the note, and the rule finds the IBAN in a `getSupplier` result. The payment goes through.
+
+### Part 4: a note edited behind Quard's back
+
+```ts
+items.set("acme", "Acme Ltd. Amount due: 1200 EUR. Bank details: IBAN GB82 WEST 1234 5698 7654 32.");
+```
+
+This writes straight to the store, outside the wrapper. The text's hash matches no stored labels, so the note reads back with the default for unknown content: untrusted and internal. Its IBAN gets the note's label, `memory:notes`, so the `from` rule blocks the payment.
+
+</Steps>
+
+## What you'll see
+
+```text
+1 · A researcher reads the invoice on the web and saves a note
+  User: Read the invoice at https://acme-billing.net/invoices/114 and save a note named acme with the amount and the bank details.
+  → fetchPage {"url":"https://acme-billing.net/invoices/114"}
+    · labeled web:acme-billing.net: untrusted, public
+    ✓ Invoice 114 from Acme Ltd. Amount due: 4950 EUR. Our bank has changed. New bank details: GB82 WEST 1234 5698 7654 32.
+  → saveNote {"key":"acme","text":"…"}
+    · wrote to notes as untrusted, internal, labels kept in this process only
+    ✓ saved note acme
+  Model: …
+
+2 · A later run: the billing agent pays from the note
+  User: Pay Acme Ltd's open invoice. The bank details and the amount are in our note named acme.
+  → readNote {"key":"acme"}
+    · labeled web:acme-billing.net: untrusted, public
+    · labeled memory:notes: untrusted, internal
+    · read 1 item(s) from notes, 1 with labels: untrusted, internal
+    ✓ …
+  → payInvoice {"iban":"GB82 WEST 1234 5698 7654 32","amount":4950}
+    · action guard: block (value_not_from_allowed_origin)
+    ✗ blocked by the action guard (value_not_from_allowed_origin)
+  Model: …
+
+3 · The note now holds the bank details from our supplier records
+  User: Acme Ltd's open invoice is 1200 EUR. Look up their bank details in our supplier records and save a note named acme with the amount and the bank details.
+  → getSupplier {"name":"Acme Ltd"}
+    · labeled tool:getSupplier: trusted, internal
+    ✓ Acme Ltd, IBAN DE89 3704 0044 0532 0130 00
+  → saveNote {"key":"acme","text":"…"}
+    · wrote to notes as trusted, internal, labels kept in this process only
+    ✓ saved note acme
+  Model: …
+  User: Pay Acme Ltd's open invoice. The bank details and the amount are in our note named acme.
+  → readNote {"key":"acme"}
+    · labeled tool:getSupplier: trusted, internal
+    · labeled memory:notes: trusted, internal
+    · read 1 item(s) from notes, 1 with labels: trusted, internal
+    ✓ …
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":1200}
+    ✓ paid 1200 EUR
+  Model: …
+
+4 · Someone edits the note in the store, outside quard.memory()
+  User: Pay Acme Ltd's open invoice. The bank details and the amount are in our note named acme.
+  → readNote {"key":"acme"}
+    · labeled memory:notes: untrusted, internal
+    · read 1 item(s) from notes, 0 with labels: untrusted, internal
+    ✓ Acme Ltd. Amount due: 1200 EUR. Bank details: IBAN GB82 WEST 1234 5698 7654 32.
+  → payInvoice {"iban":"GB82 WEST 1234 5698 7654 32","amount":1200}
+    · action guard: block (value_not_from_allowed_origin)
+    ✗ blocked by the action guard (value_not_from_allowed_origin)
+  Model: …
+```
+
+The example prints memory reads and writes, guard decisions, and labels from the web, from memory and from `getSupplier`. With the backend on, each write says `labels kept in the backend` instead.
+
+The model writes the notes, the arguments and the answers, marked `…`, so they change from run to run. It may write the IBAN with or without spaces. Whatever it writes, the IBAN from the web page is blocked, in a later run, by an agent that never read the page.
+
+## Try this
+
+- **Accept notes as a source.** Change the rule to `from: ["tool:getSupplier", "memory:notes"]`. Part 2 is still blocked, because the IBAN in the note keeps its web origin. Part 4 is now paid: an edited note has no labels, so its IBAN comes only from `memory:notes`. That is why a rule should name where a value first came from, not the store.
+- **Run with the backend.** Add `QUARD_AGENT_KEY` to `sandbox/.env` and start [the local backend](/sdk/examples#the-local-backend). Each write now says `labels kept in the backend`, and every read and write shows in the run on the dashboard.
+- **Write through the wrapper.** In part 4, call `await notes.put("acme", …)` instead of `items.set()`. The write happens outside any run, so Quard stores the note as unknown content: untrusted. The payment is still blocked.
+
+## Use it in your app
+
+- Wrap each shared store with `quard.memory()` and a name, and use only the wrapped store in your agents.
+- Return items as they were written. An item read back in another shape, such as with an added score field, has no labels and reads as untrusted.
+- Write rules on fields like an IBAN with the origins the value should first come from. A value keeps its origin through memory, so the rule still holds.
+- With more than one process, configure the backend, so labels written in one process can be read in another and outlive the runs that wrote them.
+
+[Shared memory](/concepts/shared-memory) explains when an item has no labels.
+
+## Source
+
+- [`sandbox/23-shared-memory.ts`](https://github.com/oynozan/quard/blob/main/sandbox/23-shared-memory.ts): the example
+- [`packages/sdk/memory/wrap.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/wrap.ts): `quard.memory()`, `MemoryOptions` and `MemoryStore`
+- [`packages/sdk/memory/write.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/write.ts): stores the labels, then writes
+- [`packages/sdk/memory/read.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/read.ts): reads, then looks the labels up and labels each item
+- [`packages/sdk/memory/kept.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/memory/kept.ts): labels kept in this process
+- [`packages/sdk/guards/action/action.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.ts): the `from` rule

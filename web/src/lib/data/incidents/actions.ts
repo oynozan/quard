@@ -1,6 +1,6 @@
 "use server";
 
-import { requestReplay, type ReplayRequest } from "@quard/db";
+import { markIncidentSeen as recordSeen, requestReplay, type ReplayRequest } from "@quard/db";
 import { revalidatePath } from "next/cache";
 import { displayName } from "@/lib/auth/access";
 import { actionScope } from "../scope";
@@ -21,4 +21,14 @@ export async function replayIncident(id: string, options?: { raiseCap?: boolean 
         : "not_found";
     revalidatePath(`/incidents/${id}`);
     return result;
+}
+
+// Someone opened the incident's page, so the list stops outlining it
+export async function markIncidentSeen(id: string): Promise<void> {
+    const scope = await actionScope();
+    if (typeof id !== "string" || !INCIDENT_ID.test(id)) {
+        throw new Error("Not an incident id");
+    }
+    if (scope) await recordSeen(scope.db, scope.project.id, id);
+    revalidatePath("/incidents");
 }

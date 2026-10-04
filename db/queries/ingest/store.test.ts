@@ -14,6 +14,7 @@ import {
     toolCall,
     warning,
 } from "../../test/events.ts";
+import { listeningDb, settle } from "../../test/notify.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
 import { getRun } from "../runs.ts";
@@ -225,5 +226,18 @@ describe("ingestBatch", () => {
         await ingestBatch(test.db, one, [item(started())]);
 
         expect(await getRun(test.db, two, RUN)).toBeUndefined();
+    });
+
+    it("sends no notice inside the ingest transaction; the webhook sends it after", async () => {
+        const listening = await listeningDb(test.url);
+        try {
+            const projectId = await createProject(listening.db, "Acme");
+            await ingestBatch(listening.db, projectId, [item(started())]);
+            await settle();
+
+            expect(listening.heard).toEqual([]);
+        } finally {
+            await listening.stop();
+        }
     });
 });

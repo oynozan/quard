@@ -1,4 +1,5 @@
 // @vitest-environment node
+import type { IncidentRow } from "@quard/db";
 import { describe, expect, it } from "vitest";
 import { incidentRow, pendingRow, storedVerdict } from "../../../../../test/incidents/rows";
 import { at, M1, M2, RUN, storedRun, T1, T2 } from "../../../../../test/runs-fixture";
@@ -58,14 +59,15 @@ describe("incidentPath", () => {
 });
 
 describe("incidentDetailOf", () => {
-    it("holds the verdict, the path, the replay and why there is no note yet", () => {
+    it("holds the verdict, the path and the replay, and rests once the verdict is found", () => {
         const guard = { text: "No rule on payInvoice stopped this call", tool: "payInvoice", guard: null, rule: null };
         const verdict = storedVerdict({ missingGuard: { ...guard, observe: false } });
-        const detail = incidentDetailOf(incidentRow({ verdict }), run);
+        const detail = incidentDetailOf(incidentRow({ verdict }), run, true);
         expect(detail.incident.title).toBe("payInvoice with input from acme-billing.net");
         expect(detail.run).toBe(run.summary);
         expect(detail.findError).toBeNull();
-        expect(detail.working).toBe(true);
+        expect(detail.working).toBe(false);
+        expect(Object.keys(detail.findings!)).toEqual(["verdict", "path", "replay"]);
         expect(detail.findings?.verdict).toEqual({
             category: "bad input",
             missingGuard: { ...guard, observe: false },
@@ -74,35 +76,30 @@ describe("incidentDetailOf", () => {
         });
         expect(detail.findings?.path).toHaveLength(3);
         expect(detail.findings?.replay.status).toBe("not started");
-        expect(detail.findings).toMatchObject({ reviewer: null, reviewerStatus: "No explanation yet" });
-    });
-
-    it("keeps the AI reviewer's note", () => {
-        const reviewer = { model: "gpt-6.1-sol", costUsd: 0.002, writtenAt: at(8).toISOString(), paragraphs: ["Hi."] };
-        const detail = incidentDetailOf(incidentRow({ reviewState: "done", reviewer }), run);
-        expect(detail.findings).toMatchObject({
-            reviewer: { ...reviewer, writtenAt: at(8).getTime() },
-            reviewerStatus: "",
-        });
-        expect(detail.working).toBe(false);
-    });
-
-    it("says why there is no note", () => {
-        const failed = incidentDetailOf(incidentRow({ reviewState: "failed", reviewer: { error: "HTTP 500" } }), run);
-        expect(failed.findings?.reviewerStatus).toBe("The explanation failed: HTTP 500");
-        const skipped = incidentDetailOf(incidentRow({ reviewState: "skipped" }), run);
-        expect(skipped.findings?.reviewerStatus).toBe("Skipped: the worker has no provider key");
     });
 
     it("has no findings before the verdict, and works until the finder ends", () => {
-        const pending = incidentDetailOf(pendingRow(), run);
+        const pending = incidentDetailOf(pendingRow(), run, true);
         expect(pending).toMatchObject({ findings: null, findError: null, working: true });
-        const failed = incidentDetailOf(pendingRow({ findState: "failed", findError: "Never arrived" }), run);
+        const failed = incidentDetailOf(pendingRow({ findState: "failed", findError: "Never arrived" }), run, true);
         expect(failed).toMatchObject({ findings: null, findError: "Never arrived", working: false });
     });
 
-    it("works while the replay runs", () => {
-        const row = incidentRow({ reviewState: "skipped", replayState: "requested" });
-        expect(incidentDetailOf(row, run).working).toBe(true);
+    it("works while a replay is queued or running, and rests once it ends", () => {
+        const working = (replayState: IncidentRow["replayState"]) =>
+            incidentDetailOf(incidentRow({ replayState }), run, true).working;
+        expect(working("requested")).toBe(true);
+        expect(working("running")).toBe(true);
+        expect(working("done")).toBe(false);
+        expect(working("failed")).toBe(false);
+    });
+
+    it("says whether a worker is running, and keeps waiting for one that isn't", () => {
+        expect(incidentDetailOf(pendingRow(), run, true).workerRunning).toBe(true);
+        expect(incidentDetailOf(pendingRow(), run, false)).toMatchObject({ working: true, workerRunning: false });
+        const queued = incidentDetailOf(incidentRow({ replayState: "requested" }), run, false);
+        expect(queued).toMatchObject({ working: true, workerRunning: false });
+        expect(queued.incident.replay).toBe("queued");
+        expect(queued.findings?.replay.status).toBe("queued");
     });
 });

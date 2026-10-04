@@ -1,0 +1,288 @@
+import { Steps } from "nextra/components";
+
+# 20. Signature feeds
+
+Your security team keeps a list of things it already knows are bad: a phishing domain that copies your billing site, an IBAN reported in invoice scams, a fake invoice portal. When a new one is reported, every agent should refuse it at once, without a deploy. A signature feed is that list, as a JSON file or a URL. This example blocks a phishing email, then only records it, then adds a scam IBAN to the file while the app runs, and last loads the feed from a URL that changes.
+
+## Run it
+
+```sh
+node sandbox/20-signature-feeds.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows. The script writes its feed file to a temporary folder and starts a small feed server on `127.0.0.1`, and removes both at the end.
+
+## Step by step
+
+<Steps>
+
+### Write the signatures
+
+```ts
+const PHISHING_SITE = {
+    id: "ACME-PHISH-001",
+    title: "Fake Acme billing site",
+    category: "other",
+    where: ["content"],
+    any: ["acme-billing-update.com"],
+    action: "block",
+};
+const SCAM_IBAN = {
+    id: "ACME-IBAN-002",
+    title: "IBAN reported in invoice scams",
+    category: "other",
+    where: ["input", "content"],
+    any: ["NL91 ABNA 0417 1643 00"],
+    action: "block",
+};
+// Only checked on calls to fetchPage
+const FAKE_PORTAL = {
+    id: "ACME-SITE-003",
+    title: "Fake invoice portal",
+    category: "other",
+    where: ["input"],
+    tools: ["fetchPage"],
+    any: ["acme-invoice-portal.net"],
+    action: "block",
+};
+```
+
+Each signature has an `id`, a `title`, a `category`, where to look, the strings to look for and an `action`. `where: ["input"]` checks the arguments of every guarded call. `where: ["content"]` checks what tools with a source guard return. `tools` limits a signature to calls to those tools.
+
+Matching ignores case and spaces, so `NL91 ABNA 0417 1643 00` also matches `NL91ABNA0417164300`. The strings are plain text, not patterns. See [The signature feed](/sdk/reference/detector#the-signature-feed) for every field and the starter feed in the repo.
+
+### Write the feed file
+
+```ts
+function feedJson(version: string, signatures: object[]): string {
+    return JSON.stringify({ version, signatures }, null, 4);
+}
+
+const folder = mkdtempSync(join(tmpdir(), "quard-feed-"));
+const feedFile = join(folder, "signatures.json");
+writeFileSync(feedFile, feedJson("1", [PHISHING_SITE]));
+```
+
+A feed is an object with a `version` and a list of `signatures`. Version 1 holds only the phishing site.
+
+### Guard the tools
+
+```ts
+// Content is checked only for tools with a source guard
+const readEmail = guard(
+    async () =>
+        [
+            "From: billing@acme-billing-update.com",
+            "Subject: Your Acme account",
+            "Your billing account closes today. Confirm your card at https://acme-billing-update.com/verify.",
+        ].join("\n"),
+    { type: "source", origin: "email", name: "readEmail" },
+);
+
+// Arguments are checked for every guarded tool, whatever its guard
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "limit",
+    name: "payInvoice",
+    maxAmountPerRun: { field: "amount", max: 10000 },
+});
+```
+
+The feed needs no guard of its own. Every [`guard()`](/sdk/reference/guard) checks its call's arguments against the feed before its own rules. A tool with a [source guard](/sdk/reference/source-guard) also has its result checked, after the scan. The limit on `payInvoice` only makes it a guarded tool: it never blocks here.
+
+### Turn the feed on
+
+```ts
+quard.configure({
+    signatures: { file: feedFile, mode: "block" },
+    // Print each decision that isn't a plain allow, and its signature
+    onEvent: (event) => {
+        if (event.type === "decision" && event.decision !== "allow" && event.decision !== "pass") {
+            printEvent(event);
+            if (event.guard === "signature") {
+                console.log(`      signature ${event.rule}`);
+            }
+        }
+    },
+});
+```
+
+`signatures` in [`quard.configure()`](/sdk/reference/configure) takes a `file` or a `url`, never both. A feed file is read at once, and `configure()` throws if it is invalid. Every match is a `decision` [event](/sdk/reference/events#event-types) with `guard: "signature"`, the signature's `id` as its rule, and the reason `signature_matched`.
+
+What a match does depends on where it is and its `action`:
+
+| Where     | `action: "block"`                             | `action: "flag"`                                  |
+| --------- | --------------------------------------------- | ------------------------------------------------- |
+| `input`   | The call is refused with `signature_matched`  | The call asks a person first, as an approval does |
+| `content` | The result is withheld with `content_blocked` | The content is flagged `signature:` plus the id   |
+
+### Part 1: a known phishing site in an email
+
+```ts
+await quard.run({ agent: "inbox" }, () =>
+    runAgent(client, "Summarize my newest email in one sentence.", { readEmail }),
+);
+```
+
+The email names `acme-billing-update.com`, so `ACME-PHISH-001` matches the content. The tool ran, but its result is withheld: the model reads a [refusal](/sdk/reference/refusals) and never sees the link.
+
+```text
+Blocked by the signature guard: the content looked unsafe. The readEmail result was withheld. Do not retry it; tell the user what was blocked.
+```
+
+### Part 2: observe mode
+
+```ts
+// Naming signatures in configure() opens the feed again
+quard.configure({ signatures: { file: feedFile, mode: "observe" } });
+```
+
+With `mode: "observe"`, matches are recorded with `enforced: false` and change nothing. The model reads the email. Each `configure()` call that names `signatures` opens the feed again. Leaving `signatures` out keeps the feed as it is.
+
+### Parts 3 and 4: a new signature, no restart
+
+```ts
+quard.configure({ signatures: { file: feedFile, mode: "block" } });
+const pay = "Pay invoice 117 from Northwind Traders: 1200 EUR to IBAN NL91 ABNA 0417 1643 00.";
+
+await quard.run({ agent: "billing" }, () => runAgent(client, pay, { payInvoice }));
+
+// The IBAN is reported as a scam, and the feed file gets version 2
+writeFileSync(feedFile, feedJson("2", [PHISHING_SITE, SCAM_IBAN]));
+// Quard rereads the file at most once a second, so give it a moment
+await setTimeout(1100);
+
+await quard.run({ agent: "billing" }, () => runAgent(client, pay, { payInvoice }));
+```
+
+Version 1 doesn't know the IBAN, so the first payment runs. Then the script writes version 2 to the same file. Just before each guarded call, Quard rereads a changed feed file, at most once a second. The next payment matches `ACME-IBAN-002` in its arguments and is refused before it runs. The app never restarted.
+
+A new version that isn't valid is skipped: Quard records a `config_error` event and keeps the last good version.
+
+### Part 5: a feed from a URL
+
+```ts
+// A tiny feed server. It answers 304 when the feed hasn't changed.
+let feed = { version: "2", json: feedJson("2", [PHISHING_SITE, SCAM_IBAN]) };
+const server = createServer((request, response) => {
+    const etag = `"${feed.version}"`;
+    if (request.headers["if-none-match"] === etag) {
+        response.writeHead(304).end();
+        return;
+    }
+    console.log(`    · feed server sent version ${feed.version}`);
+    response.writeHead(200, { "content-type": "application/json", etag }).end(feed.json);
+});
+
+// Guarded calls wait for the first download
+quard.configure({ signatures: { url, refreshSeconds: 2 } });
+```
+
+With a `url`, Quard downloads the feed at once and then every `refreshSeconds`, 300 by default. It sends the last `ETag` it got, so an unchanged feed comes back as `304` and is not downloaded again. Guarded calls wait for the first download. If it fails and no version has loaded, every guarded call is refused with `signatures_unavailable`, so nothing runs unchecked. Until a download works, Quard also tries again before a guarded call, at most every 5 seconds.
+
+Version 2 doesn't list the fake portal, so `fetchPage` runs.
+
+### Part 6: the server gets version 3
+
+```ts
+feed = { version: "3", json: feedJson("3", [PHISHING_SITE, SCAM_IBAN, FAKE_PORTAL]) };
+// The next download is at most 2 seconds away
+await setTimeout(2500);
+```
+
+The server now has version 3, with a new `ETag`, so the next download fetches it. `ACME-SITE-003` matches the URL in `fetchPage`'s arguments, so the call is refused before the tool runs:
+
+```text
+Blocked by the signature guard: it matched the known attack signature ACME-SITE-003. The fetchPage call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+### Clean up
+
+```ts
+quard.configure({ signatures: undefined });
+server.closeAllConnections();
+server.close();
+rmSync(folder, { recursive: true });
+```
+
+Setting `signatures` to `undefined` closes the feed and stops the downloads.
+
+</Steps>
+
+## What you'll see
+
+```text
+1. An email links to a known phishing site: the model never reads it
+  User: Summarize my newest email in one sentence.
+  → readEmail {}
+    · signature guard: block (signature_matched)
+      signature ACME-PHISH-001
+    ✗ blocked by the signature guard (content_blocked)
+  Model: …
+
+2. mode: "observe": the same match is only recorded
+  User: Summarize my newest email in one sentence.
+  → readEmail {}
+    · signature guard would block (signature_matched), but only observes
+      signature ACME-PHISH-001
+    ✓ From: billing@acme-billing-update.com
+      Subject: Your Acme account
+      Your billing account closes today. Confirm your card at https://acme-billing-update.com/verify.
+  Model: …
+
+3. Version 1 of the feed file doesn't know this IBAN: the payment goes through
+  User: Pay invoice 117 from Northwind Traders: 1200 EUR to IBAN NL91 ABNA 0417 1643 00.
+  → payInvoice {"iban":"NL91 ABNA 0417 1643 00","amount":1200}
+    ✓ paid 1200 EUR
+  Model: …
+
+4. Version 2 lists the IBAN: the same payment is blocked, and the app never restarted
+  User: Pay invoice 117 from Northwind Traders: 1200 EUR to IBAN NL91 ABNA 0417 1643 00.
+  → payInvoice {"iban":"NL91 ABNA 0417 1643 00","amount":1200}
+    · signature guard: block (signature_matched)
+      signature ACME-IBAN-002
+    ✗ blocked by the signature guard (signature_matched)
+  Model: …
+
+5. Version 2 from a URL, downloaded again every 2 seconds: this site isn't listed yet
+  User: Summarize https://acme-invoice-portal.net/invoices in one sentence.
+    · feed server sent version 2
+  → fetchPage {"url":"https://acme-invoice-portal.net/invoices"}
+    ✓ <h1>Invoices</h1><p>Invoice 118: 860 EUR.</p>
+  Model: …
+    · feed server sent version 3
+
+6. Version 3 lists the site: fetchPage is blocked before it runs
+  User: Summarize https://acme-invoice-portal.net/invoices in one sentence.
+  → fetchPage {"url":"https://acme-invoice-portal.net/invoices"}
+    · signature guard: block (signature_matched)
+      signature ACME-SITE-003
+    ✗ blocked by the signature guard (signature_matched)
+  Model: …
+```
+
+`…` stands for the model's answers, which change from run to run. The model may write the IBAN without spaces: it still matches. The feed server's lines print when a download happens, so they can move by a line or two. The line for version 3 prints during the script's wait, before part 6.
+
+## Try this
+
+- **Flag instead of block.** Set `action: "flag"` on `PHISHING_SITE`. The model reads the email, and its content is flagged `signature:ACME-PHISH-001`, so action rules won't accept values from it.
+- **Ask about the IBAN.** Set `action: "flag"` on `SCAM_IBAN` and add an approver, as [Example 16](/sdk/examples/your-own-rules) does. Part 4's payment now asks first.
+- **Break the file.** Write invalid JSON as version 2. Quard keeps version 1 and records a `config_error` event, so part 4's payment goes through.
+- **Narrow a signature.** Add `tools: ["sendEmail"]` to `SCAM_IBAN`. Part 4's payment runs again, because the signature no longer checks `payInvoice`.
+
+## Use it in your app
+
+- Keep a feed file next to your code, or host one for every app to download. The [policy file](/sdk/reference/policy-file) can name the feed too, and its feed wins over the one set in code.
+- Start new signatures with `mode: "observe"` to see what they would catch, then switch to `"block"`.
+- Use `tools` for strings that are only a risk in one tool, such as a site in `fetchPage`.
+- The repo has a starter feed, [`signatures.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/signatures/signatures.json), with a JSON Schema for editors.
+
+## Source
+
+- [`sandbox/20-signature-feeds.ts`](https://github.com/oynozan/quard/blob/main/sandbox/20-signature-feeds.ts): the example
+- [`packages/sdk/signatures/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/signatures/schema.ts): the feed format
+- [`packages/sdk/signatures/matcher.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/signatures/matcher.ts): how signatures match
+- [`packages/sdk/signatures/check.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/signatures/check.ts): checks a call's arguments
+- [`packages/sdk/pipeline/content.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/content.ts): checks source content
+- [`packages/sdk/feeds/file-source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/feeds/file-source.ts): rereads a feed file
+- [`packages/sdk/feeds/url-source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/feeds/url-source.ts): downloads a feed from a URL
+- [`packages/sdk/policy/state.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/state.ts): opens the feed and picks its mode

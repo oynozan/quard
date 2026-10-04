@@ -135,3 +135,48 @@ article .nextra-steps h3:not([style^="visibility:"]) {
 .nextra-filetree svg {
     opacity: 0.6;
 }
+
+/* The skill install command at the top of every page, on the code well. One click copies it */
+.quard-skill-cmd {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    max-width: 100%;
+    margin: 4px 0 24px;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--recess);
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: left;
+    cursor: pointer;
+}
+
+.quard-skill-cmd:hover {
+    background: var(--hover);
+}
+
+.quard-skill-cmd code {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font: inherit;
+}
+
+.quard-skill-cmd-prompt {
+    color: var(--ink-faint);
+    user-select: none;
+}
+
+.quard-skill-cmd-state {
+    margin-inline-start: 6px;
+    color: var(--ink-faint);
+    font-family: var(--font-sans);
+    font-size: 12px;
+}
+
+.quard-skill-cmd[data-copied] .quard-skill-cmd-state {
+    color: var(--signal);
+}

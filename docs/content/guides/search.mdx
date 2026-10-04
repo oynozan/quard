@@ -1,29 +1,92 @@
 # Search
 
-Search finds the runs that read or sent a value: a domain, a bank account, an email address, a file path, an id, an agent or a tool. Use it to answer questions like "which runs touched this domain?" or "where else did this IBAN show up?"
+Search finds the runs that read or sent a value: a domain, a URL, an IBAN, an email address, a file path or an ID. It also finds the runs where an agent or a tool ran. Use it to answer questions like "which runs touched this domain?" or "where else did this IBAN show up?"
+
+## Run a search
 
 ![The search page](/images/guides/search.webp)
 
-1. **Search field.** Type or paste a value. Press `/` to jump here and Escape to clear it.
-2. **Search.** Runs the search.
+1. **Search field.** Type or paste one value or name. Press `/` anywhere on the page to jump here, and Escape to empty the field.
+2. **Search.** Runs the search. Enter does the same. While it runs, the button reads **Searching…** and the old results fade.
+3. **What you can search.** What each kind of value finds. It shows until you run a search, and after a search with an empty field.
 
-| You search for    | It matches                            |
-| ----------------- | ------------------------------------- |
-| A domain or URL   | The same host or the same main domain |
-| An IBAN or email  | The exact value, by its hash          |
-| A file path or id | The same value                        |
-| An agent or tool  | The runs where it appears             |
+| You search for     | It finds                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| A domain or URL    | Steps with the same value, the same host, or the same main domain                         |
+| An IBAN or email   | Steps with exactly that value, matched by its hash                                        |
+| A file path or ID  | Steps with that value, alone or inside a longer value                                     |
+| An agent or a tool | The runs where an agent by that name made a step, or where a tool by that name was called |
 
-Card numbers can't be searched. To search IBANs and emails, the dashboard needs the same `QUARD_HASH_KEY` your agents use.
+Search first checks whether what you typed is the name of an agent, in any case. If not, it checks tool names. Only then does it look for a value. If the text holds several values, Search uses one: an IBAN first, then an email, a URL, a domain, a file path and an ID. The [value tracing](/concepts/value-tracing#what-gets-traced) page says what counts as an ID.
+
+Card numbers can't be searched, because Quard stores no key for them. To search IBANs and emails, the dashboard needs the same `QUARD_HASH_KEY` as `webhook` and `control`.
+
+The search is part of the page address, such as `/search?q=acme-ltd.co`, so you can share it as a link, and Back and Forward step through your searches. Search reads the first 300 characters you type.
 
 ## Read the results
 
+The example below searches for the IBAN `DE89370400440532013000`, which the sandbox's supplier records hold.
+
 ![Search results](/images/guides/search-results.webp)
 
-1. **Summary.** How many steps matched, in how many runs, the kind of value and its masked form.
-2. **By hash.** Sensitive values are stored as keyed hashes, never in clear. Quard hashes what you typed the same way and matches on that.
-3. **A run.** Matches are grouped by run, with its status, the agent that started it and when. Click the run id to open the run.
-4. **A match.** The step, the agent, the field and the value, with how it matched: **exact**, **same host**, **same domain**, or **inside a value** when it was part of a longer one. Click the row to open that step.
-5. **Origin.** Where the matched content came from, when Quard saw it before the step.
+1. **Count.** How many steps matched, in how many runs. Each step counts once. A name search counts one match per run.
+2. **Kind.** What Search took your text to be: **IBAN**, **Email address**, **URL**, **Domain**, **File path**, **ID**, **Agent** or **Tool**. When the page shows the value in another form than you typed, such as the mask `DE89…3000`, that form follows.
+3. **by hash.** Shown for IBANs and emails. They are stored as keyed hashes, never in clear. Quard hashes what you typed with your project's key and matches on that.
+4. **A run.** Matches are grouped by run. The header shows the short run id, the run's status, the agent that started it, its start date and time, and how many of its steps matched. Click the run id to open the run.
+5. **A match.** One step that read or sent the value. Click anywhere on the row to open the run with that step in the drawer.
+6. **Label.** Where the value came from, as an origin chip such as `tool:getSupplier trusted`. Hover it to see the origin, trust and sensitivity.
 
-When there are many matches, Search shows the newest 50. The search is part of the page address, so you can share it as a link.
+The run with the newest match comes first, and inside a run the newest match comes first. Search shows the newest 50 matches. When there are more, **newest 50** appears after the count.
+
+### The match columns
+
+| Column | What it shows                                                                                                                                                                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Step   | The tool or model of the step. **Agent started** is the agent's first step in the run, for an agent search. **Step** is content whose step has not been stored yet                                                                                    |
+| Agent  | The agent that made the step                                                                                                                                                                                                                          |
+| Field  | Where the value was. An argument name, such as `iban` or `to`, for a tool call that sent it. `input` for a model call that read it, `output` for a tool that returned it, `content` when the step is not stored yet, and `agent` or `tool` for a name |
+| Value  | The value as it matched, masked for IBANs and emails. A domain search shows the domain or host that matched, not the whole URL. Under it, how it matched                                                                                              |
+| Label  | The [label](/concepts/labels) of the content the value came from. For a call, it is the earliest content in the run that held the value before the call. Empty when no content held it first, and for name searches                                   |
+| Time   | When the step happened, in UTC, with seconds. Hover it for the full date                                                                                                                                                                              |
+
+How a value matched:
+
+| Word               | Meaning                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| **exact**          | The same value                                                                        |
+| **inside a value** | The value sat inside a longer argument, such as an IBAN in a message to another agent |
+| **same host**      | For a URL search, another URL on the same host                                        |
+| **same domain**    | A host under the same main domain, such as `portal.acme-ltd.co` for `acme-ltd.co`     |
+| **by name**        | An agent or tool name search                                                          |
+
+A label of `user trusted` means the value came from the person's request to the agent. An untrusted origin, such as a web page, has a warm color. An IBAN in a payment whose label is a web page is worth a closer look.
+
+On a narrow screen the table turns into a list. Each run keeps its header, and each match shows its step, time, agent, field, how it matched, the value and its label.
+
+## What you can click
+
+Clickable rows, origin chips and hover dates work as on every page. See [Common controls](/guides/getting-started#common-controls).
+
+| Element                         | What it does                                                                |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| Search field                    | Takes the value or name. `/` jumps to it, and Escape empties it             |
+| **Search**                      | Runs the search and puts it in the page address                             |
+| **Run** and its short id        | Opens the [run](/guides/runs#read-a-run)                                    |
+| A match row                     | Opens the run with that step in the [drawer](/guides/runs#look-at-one-step) |
+| Origin chip                     | Shows its origin, trust and sensitivity on hover                            |
+| A time                          | Shows the full date on hover                                                |
+| A cut-off agent, field or value | Shows the full text on hover                                                |
+| **Clear search**                | Empties the search and shows what you can search again                      |
+| **Try again**                   | Runs the search again after an error                                        |
+| **Start a new search**          | Opens an empty search after an error                                        |
+
+## When nothing is listed
+
+The column titles stay in place, with a note under them:
+
+- **No matches.** No step holds the value, or the text holds nothing Search can look for, such as a plain word. **Clear search** empties the field.
+- **Card numbers can't be searched.** The text is a card number. **Clear search** empties the field.
+- **IBAN and email search needs `QUARD_HASH_KEY`.** The dashboard has no hash key, so it can't hash what you typed. Set the same `QUARD_HASH_KEY` as `webhook` and `control` on the dashboard's server.
+- **No runs yet.** Nothing has reached Quard yet. Before the first run, an empty field still shows **What you can search**.
+
+While a search loads, grey bars stand in for the results. If the search fails, the page says **Could not search runs.** **Try again** runs it again, since the search is kept in the address. **Start a new search** opens an empty search.

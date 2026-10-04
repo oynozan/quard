@@ -1,0 +1,157 @@
+import { Steps } from "nextra/components";
+
+# 2. Where values come from
+
+A billing agent pays supplier invoices. A fake invoice on a web page can list an attacker's bank details, and to the model they look like any other IBAN. This example lets the agent pay only an IBAN that came from your own supplier records. It runs the task twice: once with the IBAN from your records, which is paid, and once with an IBAN from a web page, which is refused.
+
+## Run it
+
+```sh
+node sandbox/02-where-values-come-from.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows.
+
+## Step by step
+
+<Steps>
+
+### Guard the tool that reads your records
+
+```ts
+// Our supplier records: trusted. Wrapping it in guard() is what lets
+// Quard see the result; the limit itself doesn't matter here.
+const getSupplier = guard(async (_input: { name: string }) => "Acme Ltd, IBAN DE89 3704 0044 0532 0130 00", {
+    type: "limit",
+    name: "getSupplier",
+    maxCallsPerRun: 5,
+});
+```
+
+Wrapping a tool in [`guard()`](/sdk/reference/guard) is what lets Quard label its result. A guarded tool without a source guard gets the [label](/concepts/labels) `tool:getSupplier` on its result: trusted and internal. Quard adds the result to the run's record of everything the model has read. The result of a tool without a guard would count as unknown, which is untrusted. The [limit](/sdk/reference/limit-guard) itself doesn't matter here.
+
+### Guard the web page as a source
+
+```ts
+// A web page: untrusted
+const fetchPage = guard(
+    async (_input: { url: string }) =>
+        "Invoice 114 from Acme Ltd. Amount due: 4950 EUR. New bank details: GB33 BUKB 2020 1555 5555 55.",
+    { type: "source", origin: "web", name: "fetchPage" },
+);
+```
+
+A [source guard](/sdk/reference/source-guard) with `origin: "web"` labels the result `web:` plus the host of the URL in the call's arguments, here `web:acme-billing.net`. Web content is untrusted and public. The source guard also scans the page for hidden instructions. [Example 3](/sdk/examples/hidden-instructions) shows that part.
+
+### Add a rule to the payment
+
+```ts
+// The risky tool: the IBAN must come from getSupplier
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "iban", from: ["tool:getSupplier"] }],
+});
+```
+
+An [action guard](/sdk/reference/action-guard) checks a call's arguments before the tool runs. This `from` rule uses [value tracing](/concepts/value-tracing): Quard looks up every place the `iban` value appeared earlier in the run. The rule passes only when the IBAN appeared in a `getSupplier` result. A field with no IBAN or other value Quard can trace fails the rule too. `from: ["tool"]` would accept any guarded tool without a source guard.
+
+### Print the labels
+
+```ts
+// Print each label that holds a value Quard can trace
+quard.configure({
+    onEvent: (event) => {
+        if (event.type === "content" && event.keys.length > 0) {
+            console.log(`    · labeled ${event.origin} (${event.trust}): ${event.keys.join(", ")}`);
+        }
+    },
+});
+```
+
+[`quard.configure()`](/sdk/reference/configure) sets `onEvent`, which gets every [event](/sdk/reference/events) as it happens. Each piece of content the run reads becomes a `content` event, with its origin, trust and sensitivity, and keys for the values Quard can trace in it: IBANs, email addresses, URLs, hosts, file paths and ids. A key is the kind of value and its normalized form, such as `iban:DE89370400440532013000`, with no spaces and in upper case. URLs and email addresses also get keys for their host and main domain. This handler prints only content that holds such values.
+
+### Run 1: bank details from your records
+
+```ts
+title("Bank details from our supplier records");
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, "Pay Acme Ltd's 120 EUR invoice. Take the bank details from our supplier records.", {
+        getSupplier,
+        payInvoice,
+    }),
+);
+```
+
+[`quard.run()`](/sdk/reference/quard) starts a run for the `billing` agent. The model calls `getSupplier`, and Quard labels the result `tool:getSupplier`, trusted, with the key `iban:DE89370400440532013000`. Then the model asks to pay that IBAN. With spaces or without, it normalizes to the same key, so the rule finds it in the supplier record and the payment runs.
+
+### Run 2: bank details from a web page
+
+```ts
+title("Bank details from a web page");
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, "Pay the invoice at https://acme-billing.net/invoices/114 with the bank details it lists.", {
+        fetchPage,
+        payInvoice,
+    }),
+);
+```
+
+A new run starts with an empty record. The user's message holds a URL, so its label is printed too: `user`, trusted. The model fetches the page, and Quard labels its IBAN `web:acme-billing.net`, untrusted. When the model asks to pay that IBAN, the rule finds it only in the web page, so the action guard blocks the call. The model reads:
+
+```text
+Blocked by the action guard: the iban value did not come from an allowed source. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+Had the model made up an IBAN that appeared nowhere in the run, the reason would be `value_model_generated` instead. See [Model-generated values](/concepts/value-tracing#model-generated-values).
+
+</Steps>
+
+## What you'll see
+
+```text
+Bank details from our supplier records
+  User: Pay Acme Ltd's 120 EUR invoice. Take the bank details from our supplier records.
+  → getSupplier {"name":"Acme Ltd"}
+    · labeled tool:getSupplier (trusted): iban:DE89370400440532013000
+    ✓ Acme Ltd, IBAN DE89 3704 0044 0532 0130 00
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":120}
+    ✓ paid 120 EUR
+  Model: …
+
+Bank details from a web page
+  User: Pay the invoice at https://acme-billing.net/invoices/114 with the bank details it lists.
+    · labeled user (trusted): url:https://acme-billing.net/invoices/114, host:acme-billing.net, domain:acme-billing.net
+  → fetchPage {"url":"https://acme-billing.net/invoices/114"}
+    · labeled web:acme-billing.net (untrusted): iban:GB33BUKB20201555555555
+    ✓ Invoice 114 from Acme Ltd. Amount due: 4950 EUR. New bank details: GB33 BUKB 2020 1555 5555 55.
+  → payInvoice {"iban":"GB33 BUKB 2020 1555 5555 55","amount":4950}
+    ✗ blocked by the action guard (value_not_from_allowed_origin)
+  Model: …
+```
+
+Each `· labeled` line appears the moment Quard labels the content: the user's message when the first model call goes out, a tool's result before the agent loop prints it. The agent's instructions and the first task hold no traceable values, so they print nothing.
+
+The model writes the arguments, such as the IBAN with or without spaces, and the answers marked `…`, so those parts change from run to run. Whenever it asks to pay the web page's IBAN, the action guard blocks it.
+
+## Try this
+
+- **Trust the user too.** Change the rule to `from: ["tool:getSupplier", "user"]` and put an IBAN in the task. A payment to an IBAN the user typed now goes through.
+- **Change the format.** Write the supplier's IBAN in lower case or without spaces. It still matches, because Quard compares normalized values.
+- **Ask instead of block.** Add `onFail: "ask"` to the rule, and `quard.configure({ approver: askInTerminal })` with `askInTerminal` from `lib/terminal.ts`. The web page's IBAN now waits for your answer in the terminal. Call `closeTerminal()` at the end so the process can exit. [Example 5](/sdk/examples/human-approval) explains the answers.
+
+## Use it in your app
+
+- Wrap the tools that read your own records in `guard()`, with any guard type but source. Their results become sources your rules can name.
+- Wrap the tools that bring outside content in with a source guard, so the values in it are labeled untrusted.
+- On fields where a wrong value costs money or data, such as an IBAN, a recipient or a URL, add a `from` rule that names the tools allowed to supply it.
+
+## Source
+
+- [`sandbox/02-where-values-come-from.ts`](https://github.com/oynozan/quard/blob/main/sandbox/02-where-values-come-from.ts): the example
+- [`packages/sdk/guards/action/action.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.ts): action rules, including `from`
+- [`packages/sdk/labels/value-labels.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/value-labels.ts): labels each value in a call's arguments
+- [`packages/sdk/labels/content-index.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/content-index.ts): the run's record of what was read
+- [`packages/sdk/pipeline/output.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/output.ts): labels each tool result
+- [`packages/shared/values/extract.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/values/extract.ts): finds the values Quard can trace
+- [`packages/shared/labels/mapping.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/mapping.ts): the default trust and sensitivity of each origin

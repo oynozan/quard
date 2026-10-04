@@ -1,0 +1,175 @@
+import { Steps } from "nextra/components";
+
+# 5. Human approval
+
+Some calls are too important to leave to rules alone. A payment of 9000 EUR should wait for a person to say yes. This example first asks you before every payment. Then it uses a lighter rule: pay bank details from your own records at once, and ask only about an IBAN the run has never seen in trusted content.
+
+## Run it
+
+```sh
+node sandbox/05-human-approval.ts
+```
+
+Run it from the repo root. It needs your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows. It stops at each payment that needs an answer: type `o` for once, `a` for always or `d` for deny, then press Enter. Any other answer denies.
+
+With [the local backend](/sdk/examples#the-local-backend) set up, it prints `Answer each payment at http://localhost:3100/approvals` and waits for your answers on that page instead.
+
+## Step by step
+
+<Steps>
+
+### Choose who answers
+
+```ts
+if (DASHBOARD) {
+    console.log("Answer each payment at http://localhost:3100/approvals");
+} else {
+    quard.configure({ approver: askInTerminal });
+}
+```
+
+An approver is a function that gets the request, with the run, the agent, the tool, the arguments and where each value came from, and returns `"once"`, `"always"` or `"deny"`. When [`quard.configure()`](/sdk/reference/configure) sets one, Quard asks it. Otherwise, with the backend connected, Quard asks in the dashboard. With neither, a call that needs an answer is blocked with the reason `approval_unavailable`.
+
+`askInTerminal` from `lib/terminal.ts` prints the question and reads your answer:
+
+```ts
+process.stdout.write(`    ? Approve ${request.tool} ${JSON.stringify(request.input)}? [o]nce, [a]lways, [d]eny: `);
+```
+
+### Ask before every payment
+
+```ts
+title("Every payment needs a yes");
+const payInvoice = guard(pay, { type: "approval", name: "payInvoice" });
+```
+
+[`guard()`](/sdk/reference/guard) wraps `pay` in an [approval guard](/sdk/reference/approval-guard). An approval guard has no rules and no mode. It asks before every call, unless an earlier always answer covers it.
+
+### Answer each payment
+
+```ts
+await quard.run({ agent: "billing" }, () =>
+    runAgent(
+        client,
+        "Pay Acme Ltd two invoices to IBAN DE89 3704 0044 0532 0130 00: 120 EUR for invoice 114 and 9000 EUR for invoice 115.",
+        { payInvoice },
+    ),
+);
+```
+
+Inside [`quard.run()`](/sdk/reference/quard), the model asks for two payments. Each call waits at the question until you answer:
+
+- **Once** runs this call.
+- **Always** runs it, and Quard remembers the agent, the tool and the exact arguments. A later identical call in this process runs without asking.
+- **Deny** refuses it. The model reads a [refusal](/sdk/reference/refusals): `Blocked by the approval guard: a human denied it. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.`
+
+After a yes, Quard checks that the arguments haven't changed and runs the block checks once more. Then the tool runs with exactly the arguments you approved. See [Approvals](/concepts/approvals).
+
+### Ask only about new bank details
+
+```ts
+// An action rule with neverSeen asks a human unless the IBAN first
+// appeared in trusted content, such as our supplier records
+// ...
+const payKnown = guard(pay, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "iban", neverSeen: true }],
+});
+const tools = { getSupplier, readEmail, payInvoice: payKnown };
+```
+
+An [action guard](/sdk/reference/action-guard) with a `neverSeen` rule traces the `iban` value through the run. It passes when the IBAN first appeared in trusted content that no source guard flagged. Otherwise it asks a person: `onFail` is `"ask"` by default for this rule. The question goes to the same approver.
+
+`getSupplier` returns the supplier's IBAN, `DE89 3704 0044 0532 0130 00`, from your records. `readEmail` returns an email with a new account, `NL91 ABNA 0417 1643 00`.
+
+### Pay from your records
+
+```ts
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, "Pay Acme Ltd 300 EUR with the bank details from our supplier records.", tools),
+);
+```
+
+The model looks up the supplier, and Quard labels the result `tool:getSupplier`, trusted. The IBAN first appeared there, so the rule passes and the payment runs without a question.
+
+### Pay from an email
+
+```ts
+// Email is untrusted, like the web
+const readEmail = guard(
+    async () =>
+        "From: billing@acme-ltd.co\nInvoice 116: 300 EUR. Please pay to our new account NL91 ABNA 0417 1643 00.",
+    { type: "source", origin: "email", name: "readEmail" },
+);
+// ...
+await quard.run({ agent: "billing" }, () => runAgent(client, "Pay the invoice in my newest email.", tools));
+```
+
+The model reads the email. Its [source guard](/sdk/reference/source-guard) labels it `email:readEmail`, untrusted. The call has no arguments, so the origin names the tool. The new IBAN first appeared in that email, so the rule asks you. Deny it, and the model reads the same refusal as before. Approve it, and the payment runs.
+
+### Let the process exit
+
+```ts
+closeTerminal();
+```
+
+The terminal helper keeps reading input until it is closed. Without this line, the process would wait for more answers.
+
+</Steps>
+
+## What you'll see
+
+Here you approve the first payment once, deny the second, and deny the payment from the email:
+
+```text
+Every payment needs a yes
+  User: Pay Acme Ltd two invoices to IBAN DE89 3704 0044 0532 0130 00: 120 EUR for invoice 114 and 9000 EUR for invoice 115.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":120}
+    ? Approve payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":120}? [o]nce, [a]lways, [d]eny: o
+    ✓ paid 120 EUR
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":9000}
+    ? Approve payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":9000}? [o]nce, [a]lways, [d]eny: d
+    ✗ blocked by the approval guard (approval_denied)
+  Model: …
+
+Ask only for an IBAN we have never seen
+  User: Pay Acme Ltd 300 EUR with the bank details from our supplier records.
+  → getSupplier {"name":"Acme Ltd"}
+    ✓ Acme Ltd, IBAN DE89 3704 0044 0532 0130 00
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":300}
+    ✓ paid 300 EUR
+  Model: …
+  User: Pay the invoice in my newest email.
+  → readEmail {}
+    ✓ From: billing@acme-ltd.co
+      Invoice 116: 300 EUR. Please pay to our new account NL91 ABNA 0417 1643 00.
+  → payInvoice {"iban":"NL91 ABNA 0417 1643 00","amount":300}
+    ? Approve payInvoice {"iban":"NL91 ABNA 0417 1643 00","amount":300}? [o]nce, [a]lways, [d]eny: d
+    ✗ blocked by the approval guard (approval_denied)
+  Model: …
+```
+
+The model writes the arguments and the answers marked `…`, so those change from run to run. With the backend connected, the `?` lines don't appear: each call waits until you answer in the dashboard.
+
+## Try this
+
+- **Pipe your answers in.** Run `printf 'o\nd\nd\n' | node sandbox/05-human-approval.ts`. The helper reads the lines in order and prints each answer after its question. When the input runs out, every open question gets an empty answer, which denies.
+- **Always approve.** Answer `a` to the email payment, then copy that last `quard.run()` so it runs twice. If the model sends exactly the same arguments the second time, the payment runs without asking.
+- **Block instead of ask.** Add `onFail: "block"` to the `neverSeen` rule. The email's IBAN is refused without a question, with the reason `recipient_never_seen`.
+
+## Use it in your app
+
+- Put an approval guard on calls a person must always see, such as large payments, deletes or deploys.
+- For everyday calls, use action rules that ask only when something is off: a new IBAN with `neverSeen`, an amount over a cap with `max` and `onFail: "ask"`, or a value from the wrong source with `from` and `onFail: "ask"`.
+- In production, connect the backend and leave `approver` unset. Requests then wait on the dashboard's [Approvals](/guides/approvals) page, where an always-approve answer lasts until someone revokes it. [Example 10](/sdk/examples/approvals-in-the-dashboard) shows that flow. Set `approver` to ask some other way, such as in a test.
+
+## Source
+
+- [`sandbox/05-human-approval.ts`](https://github.com/oynozan/quard/blob/main/sandbox/05-human-approval.ts): the example
+- [`sandbox/lib/terminal.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/terminal.ts): the terminal approver
+- [`packages/sdk/pipeline/approval/human.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/human.ts): chooses between the approver and the dashboard
+- [`packages/sdk/pipeline/approval/local.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/local.ts): asks the approver and remembers always
+- [`packages/sdk/guards/approval/approval.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/approval/approval.ts): the approval guard
+- [`packages/sdk/guards/action/action.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.ts): the `neverSeen` rule
+- [`packages/sdk/pipeline/guard.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard.ts): the checks after an approval

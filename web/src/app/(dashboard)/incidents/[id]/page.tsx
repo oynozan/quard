@@ -4,14 +4,15 @@ import { ArrowLeft } from "lucide-react";
 import { AutoRefresh } from "@/components/kit/auto-refresh";
 import { ErrorBox } from "@/components/kit/feedback/feedback";
 import { PageHeading, SectionHeading } from "@/components/kit/headings";
-import { RunStatusLabel } from "@/components/kit/labels";
+import { RunStatusLabel, StatusSquare } from "@/components/kit/labels";
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { IncidentPath } from "@/components/incidents/detail/incident-path";
+import { MarkSeen } from "@/components/incidents/detail/mark-seen";
 import { ReplayButton } from "@/components/incidents/detail/replay-button";
 import { ReplayResults } from "@/components/incidents/detail/replay-results";
-import { ReviewerNote } from "@/components/incidents/detail/reviewer-note";
 import { VerdictBlock } from "@/components/incidents/detail/verdict";
+import { WORKER_DOWN } from "@/components/incidents/lib/labels";
 import { getIncident } from "@/lib/data/incidents/query";
 import type { IncidentFindings } from "@/lib/data/incidents/types";
 import { requestTime } from "@/lib/data/scope";
@@ -29,12 +30,13 @@ export default async function IncidentPage({ params }: PageProps<"/incidents/[id
     const { id } = await params;
     const detail = await getIncident(id);
     if (!detail) notFound();
-    const { incident, run, findError, findings, working } = detail;
+    const { incident, run, findError, findings, working, workerRunning } = detail;
     const now = await requestTime();
 
     return (
         <div className={PAGE_LIST}>
             {working ? <AutoRefresh /> : null}
+            {incident.seen ? null : <MarkSeen id={incident.id} />}
             <Link
                 href="/incidents"
                 className="mb-[14px] inline-flex items-center gap-[6px] rounded-sm text-[13px] text-ink-link hover:text-ink-bright"
@@ -57,6 +59,7 @@ export default async function IncidentPage({ params }: PageProps<"/incidents/[id
                             status={incident.replay}
                             found={findings !== null}
                             findFailed={findError !== null}
+                            workerRunning={workerRunning}
                         />
                     </>
                 }
@@ -73,22 +76,27 @@ export default async function IncidentPage({ params }: PageProps<"/incidents/[id
             </p>
 
             {findings ? (
-                <Findings findings={findings} />
+                <Findings findings={findings} workerRunning={workerRunning} />
             ) : findError ? (
                 <ErrorBox help="The run's own page still shows every step.">
                     The root-cause finder stopped: {findError}
                 </ErrorBox>
-            ) : (
+            ) : workerRunning ? (
                 <p role="status" className="inline-flex items-center gap-2 text-[13px] text-ink">
                     <Spinner />
                     Finding the entry point, the turning point and the damage…
+                </p>
+            ) : (
+                <p role="status" className="inline-flex items-center gap-2 text-[13px] text-ink">
+                    <StatusSquare tone="warning" />
+                    {WORKER_DOWN}
                 </p>
             )}
         </div>
     );
 }
 
-function Findings({ findings }: { findings: IncidentFindings }) {
+function Findings({ findings, workerRunning }: { findings: IncidentFindings; workerRunning: boolean }) {
     return (
         <>
             <div className="reveal">
@@ -99,13 +107,10 @@ function Findings({ findings }: { findings: IncidentFindings }) {
                 className="reveal mt-[30px] grid grid-cols-[minmax(0,1fr)_400px] items-start gap-7 max-[1180px]:grid-cols-1 max-[760px]:mt-[25px] max-[760px]:gap-[25px]"
                 style={{ animationDelay: "80ms" }}
             >
-                <div className="grid min-w-0 gap-7 max-[1180px]:order-2 max-[760px]:gap-[25px]">
-                    <section aria-label="Replay">
-                        <SectionHeading title="Replay" />
-                        <ReplayResults replay={findings.replay} />
-                    </section>
-                    <ReviewerNote note={findings.reviewer} empty={findings.reviewerStatus} />
-                </div>
+                <section aria-label="Replay" className="min-w-0 max-[1180px]:order-2">
+                    <SectionHeading title="Replay" />
+                    <ReplayResults replay={findings.replay} workerRunning={workerRunning} />
+                </section>
                 <div className="min-w-0 max-[1180px]:order-1">
                     <VerdictBlock verdict={findings.verdict} />
                 </div>

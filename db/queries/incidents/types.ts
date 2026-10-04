@@ -70,23 +70,19 @@ export type StoredReplay = {
     error: string | null;
 };
 
-export type StoredReview =
-    { model: string; costUsd: number; writtenAt: string; paragraphs: string[] } | { error: string };
-
 export type FindState = "pending" | "done" | "failed";
-export type ReviewState = "pending" | "done" | "skipped" | "failed";
 export type ReplayState = "idle" | "requested" | "running" | "done" | "failed";
 
 export type IncidentRow = {
     id: string;
     runId: string;
     openedAt: Date;
+    // When someone first opened the incident's page
+    seenAt: Date | null;
     findState: FindState;
     findError: string | null;
-    reviewState: ReviewState;
     replayState: ReplayState;
     verdict: StoredVerdict | null;
-    reviewer: StoredReview | null;
     replay: StoredReplay | null;
     spentUsd: number;
     capUsd: number;
@@ -104,7 +100,7 @@ export type ClaimedJob = {
     projectId: string;
     id: string;
     runId: string;
-    job: "find" | "review" | "replay";
+    job: "find" | "replay";
     attempts: number;
     spentUsd: number;
     capUsd: number;

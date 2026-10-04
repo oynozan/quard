@@ -1,44 +1,52 @@
 import { newEventId, type ApprovalAnswer } from "@quard/shared";
 import { sql } from "kysely";
 import type { Db } from "../../connect/connect.ts";
+import { CHANNELS, notify } from "../../notify/channels.ts";
 import { REQUEST_FIELDS, type JsonFields } from "./fields.ts";
 import type { ApprovalRequestDetail, ApprovalRequestInput, RequestDecision } from "./types.ts";
 
 // Finds the open request for the same agent, tool and arguments, or opens one.
 // The partial unique index allows one open request per call. On a clash the
 // no-op update makes RETURNING give the open one, even under concurrent asks.
+// Only a new request tells the dashboard.
 export async function openApprovalRequest(
     db: Db,
     projectId: string,
     input: ApprovalRequestInput,
 ): Promise<{ id: string; created: boolean }> {
     const id = `apr_${newEventId()}`;
-    const row = await db
-        .insertInto("approval_requests")
-        .values({
-            project_id: projectId,
-            id,
-            run_id: input.runId,
-            step_id: input.stepId,
-            agent: input.agent,
-            tool: input.tool,
-            args_hash: input.argsHash,
-            args: JSON.stringify(input.args ?? null),
-            masked: JSON.stringify(input.masked ?? null),
-            labels: JSON.stringify(input.labels),
-            context: JSON.stringify(input.context),
-            reasons: JSON.stringify(input.reasons),
-            rules_hash: input.rulesHash ?? null,
-        })
-        .onConflict((conflict) =>
-            conflict
-                .columns(["project_id", "agent", "tool", "args_hash"])
-                .where("answer", "is", null)
-                .doUpdateSet((eb) => ({ opened_at: eb.ref("approval_requests.opened_at") })),
-        )
-        .returning("id")
-        .executeTakeFirstOrThrow();
-    return { id: row.id, created: row.id === id };
+    return db.transaction().execute(async (trx) => {
+        const row = await trx
+            .insertInto("approval_requests")
+            .values({
+                project_id: projectId,
+                id,
+                run_id: input.runId,
+                step_id: input.stepId,
+                agent: input.agent,
+                tool: input.tool,
+                args_hash: input.argsHash,
+                args: JSON.stringify(input.args ?? null),
+                masked: JSON.stringify(input.masked ?? null),
+                labels: JSON.stringify(input.labels),
+                context: JSON.stringify(input.context),
+                reasons: JSON.stringify(input.reasons),
+                rules_hash: input.rulesHash ?? null,
+            })
+            .onConflict((conflict) =>
+                conflict
+                    .columns(["project_id", "agent", "tool", "args_hash"])
+                    .where("answer", "is", null)
+                    .doUpdateSet((eb) => ({ opened_at: eb.ref("approval_requests.opened_at") })),
+            )
+            .returning("id")
+            .executeTakeFirstOrThrow();
+        const created = row.id === id;
+        if (created) {
+            await notify(trx, CHANNELS.live, JSON.stringify({ project: projectId, topic: "approvals" }));
+        }
+        return { id: row.id, created };
+    });
 }
 
 export async function getApprovalRequest(

@@ -1,9 +1,12 @@
 import { sql } from "kysely";
 import type { Db } from "../../connect/connect.ts";
+import { CHANNELS, notify } from "../../notify/channels.ts";
+import { approvalsNotice } from "../../notify/live.ts";
 import type { ApprovalWaiterInput } from "./types.ts";
 
 // A call waiting on a request. Asked again, for example after a reconnect or
 // when another call used an "approve once", it waits again and keeps `since`.
+// The dashboard hears of it once the waiter is stored.
 export async function addWaiter(db: Db, projectId: string, waiter: ApprovalWaiterInput): Promise<void> {
     await db
         .insertInto("approval_waiters")
@@ -26,6 +29,7 @@ export async function addWaiter(db: Db, projectId: string, waiter: ApprovalWaite
             })),
         )
         .execute();
+    await notify(db, CHANNELS.live, approvalsNotice(projectId));
 }
 
 // The request control last placed this call on, waiting or done
@@ -52,6 +56,7 @@ export async function beatWaiters(db: Db, projectId: string, askIds: string[]): 
 }
 
 // Calls that got their answer or stopped waiting. Returns how many changed.
+// The dashboard hears of it when any did.
 export async function finishWaiters(db: Db, projectId: string, askIds: string[]): Promise<number> {
     const result = await db
         .updateTable("approval_waiters")
@@ -60,5 +65,7 @@ export async function finishWaiters(db: Db, projectId: string, askIds: string[])
         .where(sql<boolean>`ask_id = any(${askIds})`)
         .where("done_at", "is", null)
         .executeTakeFirst();
-    return Number(result.numUpdatedRows);
+    const finished = Number(result.numUpdatedRows);
+    if (finished > 0) await notify(db, CHANNELS.live, approvalsNotice(projectId));
+    return finished;
 }

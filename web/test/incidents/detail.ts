@@ -14,11 +14,12 @@ function node(kind: PathNode["kind"], role: PathRole | null, title: string, labe
     return { kind, role, title, detail: "", agent: null, runId: INCIDENT.runId, stepId: null, label, at };
 }
 
-// The payment incident with a confirmed replay and the AI reviewer's note
+// The payment incident with a confirmed replay
 export const INCIDENT_DETAIL: IncidentDetail = {
     incident: INCIDENT,
     findError: null,
     working: false,
+    workerRunning: true,
     findings: {
         verdict: {
             category: "bad input",
@@ -42,13 +43,6 @@ export const INCIDENT_DETAIL: IncidentDetail = {
             node("call", "damage", "pay_invoice", NOTE, START + 55 * SECOND),
         ],
         replay: replayOf([[5, 0, 0.004]], [0.05], { status: "confirmed" }),
-        reviewer: {
-            model: "gpt-6.1-sol",
-            costUsd: 0.0123,
-            writtenAt: INCIDENT.openedAt + MINUTE,
-            paragraphs: ["The researcher copied an IBAN from a supplier page, and billing paid it."],
-        },
-        reviewerStatus: "",
     },
     run: {
         id: INCIDENT.runId,

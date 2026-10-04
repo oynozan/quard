@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { connect, type Db } from "../../connect/connect.ts";
 import { askId, HASH, requestInput, RULES, RUN, STEP } from "../../test/approvals.ts";
+import { listeningDb, settle } from "../../test/notify.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
 import { claimRequest } from "./claims.ts";
@@ -69,6 +70,22 @@ describe("openApprovalRequest", () => {
 
         const elsewhere = await openApprovalRequest(test.db, await createProject(test.db, "Other"), requestInput());
         expect(elsewhere.created).toBe(true);
+    });
+
+    it("tells the dashboard about a new request, not about a joined one", async () => {
+        const listening = await listeningDb(test.url);
+        try {
+            const projectId = await createProject(listening.db, "Acme");
+            await openApprovalRequest(listening.db, projectId, requestInput());
+            await openApprovalRequest(listening.db, projectId, requestInput({ runId: "9".repeat(32) }));
+            await settle();
+
+            expect(listening.heard).toEqual([
+                { channel: "quard_live", payload: JSON.stringify({ project: projectId, topic: "approvals" }) },
+            ]);
+        } finally {
+            await listening.stop();
+        }
     });
 
     it("opens a new request once the open one is decided", async () => {

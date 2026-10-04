@@ -1,0 +1,170 @@
+import { Steps } from "nextra/components";
+
+# 12. The fleet check
+
+A fake invoice with a new bank account lands in many of your company's inboxes at once. Each agent that reads one sees nothing odd: the email looks normal and the amount is small. Only the fleet as a whole sees the pattern: a bank account nobody used before, suddenly paid in many separate runs. The fleet check watches for that. Here five separate runs each pay the same new IBAN from an email, and the fifth one trips the check.
+
+## Run it
+
+```sh
+node sandbox/12-fleet-check.ts
+```
+
+Run it from the repo root. It needs [the local backend](/sdk/examples#the-local-backend), with `QUARD_AGENT_KEY` set in `sandbox/.env`, as the [sandbox README](https://github.com/oynozan/quard/blob/main/sandbox/README.md) shows. Without an agent key, it stops at once and says so.
+
+The IBAN is new each time you run the file, so each try starts clean. On a new install, the check only observes for its first 7 days: run 5 says "would block", and the payment still goes through.
+
+## Step by step
+
+<Steps>
+
+### A new IBAN in every inbox
+
+```ts
+import { newIban } from "./lib/iban.ts";
+// ...
+const IBAN = newIban();
+
+// Every inbox gets the same invoice, with a bank account nobody used before
+const readEmail = guard(
+    async () => `From: accounts@northwind-supply.com\nInvoice 2041: 480 EUR. Please pay to IBAN ${IBAN}.`,
+    { type: "source", origin: "email", name: "readEmail" },
+);
+```
+
+Quard treats text as an IBAN only when its length fits the country and its check digits are right, so `newIban()` from `lib/iban.ts` builds a valid German one, with random digits. `readEmail` has a [source guard](/sdk/reference/source-guard). It labels the email with the origin `email:readEmail`, untrusted and public. The scan finds nothing suspicious, so the guard passes it. On its own, this email looks fine.
+
+### Watch the IBANs paid
+
+```ts
+// Watches the IBANs paid in every run of the project
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "limit",
+    name: "payInvoice",
+    fleetCheck: ["iban"],
+});
+```
+
+`fleetCheck` lists the argument fields to watch. A [limit guard](/sdk/reference/limit-guard) with it, and no caps, does two things on each call:
+
+- **With the other checks,** it looks the IBAN up in the SDK's copy of the project's quarantine list. Control keeps every connected SDK's copy up to date.
+- **Just before the tool runs,** it reports the IBAN to control, with the run id, and waits up to 5 seconds for the answer. Control records the use and answers whether the IBAN is now in quarantine.
+
+The IBAN never leaves your process in clear. The SDK sends a mask and a hash made with your project's [hash key](/sdk/reference/configure#the-hash-key), which the SDK got from the backend. Email addresses and main domains in watched fields are watched the same way, though domains go as they are.
+
+### Five separate runs
+
+```ts
+console.log(`Five separate runs pay ${IBAN}, an IBAN the fleet has never seen.`);
+for (let run = 1; run <= 5; run++) {
+    title(`Run ${run} of 5`);
+    await quard.run({ agent: "billing" }, () =>
+        runAgent(client, "Pay the invoice in my newest email.", { readEmail, payInvoice }),
+    );
+}
+```
+
+Each run reads the email and pays 480 EUR to the IBAN. For each value, control counts the separate runs that used it in the last 24 hours. A value counts as new while it was first seen less than 7 days ago. When a fifth separate run uses a new value, control puts it in quarantine and tells every connected SDK of the project.
+
+The example's `onEvent` prints only guard decisions, and `printEvent` skips plain allows and passes. So runs 1 to 4 print only the agent's own lines. Run 5 trips the check.
+
+### Observe first, then block
+
+Whether a quarantined value blocks is decided in [`packages/sdk/guards/limit/fleet.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/fleet.ts):
+
+```ts
+export function isEnforced(mode: Mode, entry: QuarantineEntry, pastObserve: boolean): boolean {
+    return mode === "block" && !entry.observe && pastObserve;
+}
+```
+
+A new project has no history, so for its first 7 days the fleet check only observes. The 7 days start with the first call the project's fleet check sees.
+
+- **In the first 7 days,** control quarantines the IBAN in observe mode. The SDK records a `block` decision in observe mode, with the reason `value_quarantined`. It prints as "would block", and the payment runs.
+- **After that,** run 5 is refused. Every later call with that IBAN, in any run and any process of the project, is refused before it runs. Refused attempts still count as uses, so the dashboard can show how many were blocked.
+
+A refused call returns this refusal:
+
+```text
+Blocked by the limit guard: the iban value is new and many runs used it at once, so it is blocked everywhere. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+The guard's own `mode` counts too: a limit guard in observe mode never blocks a quarantined value. See [Block mode and observe mode](/concepts/guards#block-mode-and-observe-mode).
+
+### Release the IBAN
+
+```ts
+title("The IBAN is now in quarantine at http://localhost:3100/summary");
+console.log("  Mark it as known there to release it.");
+```
+
+Open **Summary** in the dashboard and find the IBAN under [Quarantine](/guides/summary#quarantine), masked. Check it first, for example by calling the supplier. Then click **Mark as known**. Control reloads the list and tells the SDKs, and the IBAN is never quarantined again. Every other guard still checks it. See [Release a value](/guides/summary#release-a-value).
+
+</Steps>
+
+## What you'll see
+
+On a new install, while the check only observes:
+
+```text
+Five separate runs pay …, an IBAN the fleet has never seen.
+
+Run 1 of 5
+  User: Pay the invoice in my newest email.
+  → readEmail {}
+    ✓ From: accounts@northwind-supply.com
+      Invoice 2041: 480 EUR. Please pay to IBAN ….
+  → payInvoice {"iban":"…","amount":480}
+    ✓ paid 480 EUR
+  Model: …
+
+…
+
+Run 5 of 5
+  User: Pay the invoice in my newest email.
+  → readEmail {}
+    ✓ From: accounts@northwind-supply.com
+      Invoice 2041: 480 EUR. Please pay to IBAN ….
+  → payInvoice {"iban":"…","amount":480}
+    · limit guard would block (value_quarantined), but only observes
+    ✓ paid 480 EUR
+  Model: …
+
+The IBAN is now in quarantine at http://localhost:3100/summary
+  Mark it as known there to release it.
+```
+
+`…` stands for the random IBAN, runs 2 to 4, and the model's answers, which change from run to run. Once the observe days are over, run 5 ends like this instead:
+
+```text
+  → payInvoice {"iban":"…","amount":480}
+    · limit guard: block (value_quarantined)
+    ✗ blocked by the limit guard (value_quarantined)
+  Model: …
+```
+
+On the dashboard's [Summary](/guides/summary#quarantine) page, the IBAN is listed under **Quarantine**: masked, with its field `iban`, the agent `billing`, when it was quarantined and how many attempts were blocked. While the check only observes, the section shows **Observe mode until** a date, and the IBAN reads **Would block**.
+
+## Try this
+
+- **One run, five payments.** Call `runAgent` five times inside a single `quard.run()`, instead of starting a run for each pass. The IBAN is paid five times, but in one run, so the check never trips: it counts separate runs.
+- **Four runs.** Change the loop to stop at 4. Nothing is printed for the fleet check, because no fifth run used the IBAN.
+- **Keep a known IBAN.** Mark the IBAN as known on the Summary page. Then set `IBAN` in the file to the IBAN the example printed, and run it again. The check never trips for that IBAN again.
+
+## Use it in your app
+
+- Add `fleetCheck` to tools that pay or write to someone, listing the fields that hold the IBAN, the email address or the domain. It can share a limit guard with per-run and per-day limits.
+- The fleet check needs the control link: `controlUrl` with `key`. Without it, the check does nothing.
+- If control goes down, the SDK keeps checking against its last copy of the quarantine list for up to 24 hours. It sends the uses it couldn't report once control is back.
+- Review the quarantine on the Summary page from time to time, and mark a value as known only after you've checked it.
+
+## Source
+
+- [`sandbox/12-fleet-check.ts`](https://github.com/oynozan/quard/blob/main/sandbox/12-fleet-check.ts): the example
+- [`sandbox/lib/iban.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/iban.ts): `newIban()`
+- [`packages/sdk/guards/limit/fleet.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/fleet.ts): the watched values and the check against the synced list
+- [`packages/sdk/pipeline/count/fleet.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/fleet.ts): reports each use to control
+- [`packages/sdk/transport/link/quarantine.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/quarantine.ts): the SDK's copy of the quarantine list
+- [`services/control/fleet/record.ts`](https://github.com/oynozan/quard/blob/main/services/control/fleet/record.ts): control's side of a report
+- [`db/queries/control/fleet/record.ts`](https://github.com/oynozan/quard/blob/main/db/queries/control/fleet/record.ts): counts the runs and quarantines a value
+- [`packages/shared/control/constants.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/control/constants.ts): the numbers: 7 days, 5 runs, 24 hours

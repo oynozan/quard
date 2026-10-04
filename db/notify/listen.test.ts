@@ -2,7 +2,7 @@ import pg from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { settle } from "../test/notify.ts";
 import { startTestDb, type TestDb } from "../test/pglite.ts";
-import { openListener, type Notice } from "./listen.ts";
+import { KEEPALIVE_MS, openListener, type Notice } from "./listen.ts";
 
 let test: TestDb;
 
@@ -41,6 +41,15 @@ describe("openListener", () => {
         await listener.close();
         await settle();
         expect(lost).not.toHaveBeenCalled();
+    });
+
+    it("probes an idle connection soon, so a silent drop is noticed", async () => {
+        const listener = await openListener(test.url, () => undefined, vi.fn());
+        const connection = (listener.client as unknown as { connection: Record<string, unknown> }).connection;
+
+        expect(connection._keepAlive).toBe(true);
+        expect(connection._keepAliveInitialDelayMillis).toBe(KEEPALIVE_MS);
+        await listener.close();
     });
 
     it("reports a lost connection once", async () => {

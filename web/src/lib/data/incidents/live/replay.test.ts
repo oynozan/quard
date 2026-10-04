@@ -15,8 +15,11 @@ const round = (harmful: [number, number], pValue: number, costUsd: number, secon
 });
 
 describe("replayStatus", () => {
-    it("says replaying only while the worker has it", () => {
-        expect(replayStatus({ replayState: "requested", replay: null })).toBe("running");
+    it("says queued until a worker claims the replay, and replaying only while it has it", () => {
+        expect(replayStatus({ replayState: "requested", replay: null })).toBe("queued");
+        // Continuing past the cap queues the replay again
+        const capped = storedReplay({ outcome: "cap reached" });
+        expect(replayStatus({ replayState: "requested", replay: capped })).toBe("queued");
         expect(replayStatus({ replayState: "running", replay: storedReplay() })).toBe("running");
     });
 

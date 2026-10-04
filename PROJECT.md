@@ -41,7 +41,7 @@ In v1:
 - Guards and records for the payments agents make over x402.
 - Labels, value matching, run limits and the fleet check.
 - Approvals on a dashboard page.
-- The root-cause finder, with replay and an AI-written explanation.
+- The root-cause finder, with replay.
 - Multi-agent runs: run context, labeled messages across processes and a generic shared-memory wrapper.
 - An integration for the OpenAI Agents SDK (JS).
 - Content labels: the Jev detector labels public content from a fixed list, an AI labels what fits none, and a review queue tunes them. Jev acts by default, and a team can switch it to observe.
@@ -78,7 +78,7 @@ Later:
 └── PROJECT.md
 ```
 
-All of these exist, plus `sandbox/` with runnable SDK examples. `services/worker` runs no jobs yet.
+All of these exist, plus `sandbox/` with runnable SDK examples. `services/worker` runs the root-cause finder and replay. If it isn't running, new incidents stay at "Finding the root cause".
 
 How the parts talk:
 
@@ -532,7 +532,7 @@ const paidFetch = wrapFetchWithPayment(quard.x402Fetch(fetch), client);
 
 ## Root-cause finder
 
-Decided by the spec, Q16 and Q17.
+Decided by the spec and Q16.
 
 - Labels show at once whether untrusted content shaped a harmful action. Value tracing finds where each value in that action first appeared.
 - The **verdict** names the entry point, the turning point, the damage and the missing guard. It is filed as bad input, bad reasoning, bad handoff, broken tool or missing guard.
@@ -545,8 +545,10 @@ Decided by the spec, Q16 and Q17.
 Decided on 2026-10-04.
 
 - Quard opens an incident for a run when a guard blocks a tool call, or would have blocked it in observe mode. A run has at most one incident. `webhook` opens it in the same transaction that stores the decision. (**Claude's pick**)
-- The verdict and the AI reviewer's note run on their own when an incident opens. Replay runs only when someone clicks the replay button on the incident page. (**Owner**)
-- When the blocked call's events have not arrived yet, the finder tries again every 5 s. After 5 minutes it stops and says the events never arrived.
+- The verdict is found on its own when an incident opens. Replay runs only when someone clicks the replay button on the incident page. (**Owner**)
+- No AI reviewer. An incident shows its path, its verdict and replay, with no AI-written explanation. (**Owner**)
+- On the incident list, an incident nobody has opened yet has a red outline, which goes away once its page is opened. (**Owner**)
+- While the run is still going and the blocked call's events have not arrived, the finder tries again every 5 s. After 5 minutes it stops and says the events never arrived. Once the run has ended, a block it can't trace to a tool call, such as a run limit on a model call or a payment checked outside a guarded tool, fails at once with that reason. (**Claude's pick**)
 
 ### Replay
 
@@ -558,7 +560,7 @@ Q16, **Claude's pick**. Replay tests the suspect content by rerunning the turnin
     - **not confirmed**: even if every remaining rerun went the right way, the test could not pass by 20 each
     - **could not reproduce**: 0 harmful runs in the first 10 with the content
 - A rerun counts as harmful when the model asks for the same damaging tool call: same tool, same key value after normalizing.
-- The cap is $5 per incident. It covers every model call the finder makes, replay and AI reviewer included. Replay stops before a round would pass the cap and reports the counts so far. The replay button then offers to continue with $5 more, and the rounds so far are kept. (**Owner**)
+- The cap is $5 per incident. It covers replay's model calls. Replay stops before a round would pass the cap and reports the counts so far. The replay button then offers to continue with $5 more, and the rounds so far are kept. (**Owner**)
 
 Replay rules:
 
@@ -590,15 +592,6 @@ What replay can't show:
 - that the removed content was the only cause
 - how a different model version would behave
 
-### AI reviewer
-
-Q17, **Claude's pick**. After an incident, an AI writes a short plain-words explanation of the verdict.
-
-- It uses the team's own provider key, the one their agents already use, set on the worker as `OPENAI_API_KEY`. Replay uses the same key. Without it, the note is skipped, and replay fails with a message that asks for the key.
-- The default model is `gpt-6.1-sol`, at about $0.10 to $0.20 per explanation.
-- It reads the verdict with IBANs and emails replaced by placeholders, such as `[IBAN 1]`.
-- It only explains. The verdict comes from labels, value tracing and replay.
-
 ## AI inside Quard
 
 Decided by the spec, Q25, Q26 and Q27, and by the owner's content-label decisions on 2026-10-03.
@@ -620,7 +613,7 @@ Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner*
 - TypeSafe quotes 70 to 500 ms per call ([InfoQ](https://www.infoq.com/news/2026/10/typesafe-ai-jev-released/)). Its own docs say most calls take about 100 ms. See [TypeSafe's models page](https://docs.typesafe.ai/models).
 - It can return a wrong but valid answer, and its docs warn that injected text can move its answer. Test it on the team's own injection examples.
 - Jev leans toward the options it reads first, so the risky labels come first in the list.
-- Jev can't write text, so the AI reviewer and the AI fallback use a different model.
+- Jev can't write text, so the AI fallback uses a different model.
 - Two more questions are planned, off by default because they need internal data: does a user message hold pasted outside content, such as a forwarded email, and does a tool call match the user's original task.
 
 ### Labels
@@ -652,14 +645,14 @@ Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner*
 **Owner**. The details are **Claude's pick**.
 
 - When Jev picks `none`, the `worker` asks an AI to label the stored chunk: one of the fixed labels if one fits, or else a new short label with a one-line reason.
-- It uses the team's own provider key and model, like the AI reviewer.
+- It uses the team's own provider key and model. The key is the one replay uses, set on the worker as `OPENAI_API_KEY`.
 - It runs after the call, so its label never changes a guard decision. It shows in the run view and the review queue. A new label that keeps coming up can join the fixed list.
 
 ### What AI models may see
 
 Q26, **Claude's pick**.
 
-- Internal run data goes only to the provider the agents already use, which also runs the AI reviewer. Secrets are removed, and emails and IBANs become placeholders.
+- Internal run data goes only to the provider the agents already use, for replay. Secrets are removed, and emails and IBANs become stand-ins.
 - Jev is run by another company. By default it gets only content labeled public, such as web pages, outside email and MCP results. Intranet hosts and a team's own MCP servers count as public too until the team marks them internal. Content from an origin marked internal is never sent to it. Names, street addresses and phone numbers are sent as written.
 - The AI fallback gets the same redacted public chunks that Jev got, through the team's own provider.
 - The pasted-content and task-match questions need internal data: the user's message, the task and the tool's arguments. They stay off until a team turns them on and adds the detector to its `egress` allowlist.
@@ -710,7 +703,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - The same normalized value always gives the same hash, so search and value tracing still match.
 - Ids are never masked. Run and step ids, agent versions, rules hashes and approval request ids keep their form, even when their digits pass a card check. Otherwise `webhook` would refuse the whole batch.
 - Secrets never become value keys. Values of fields named like secrets, such as `password` or `token`, and secrets inside text, such as `password=…` or a bearer token, are left out when Quard builds the keys for search and value tracing. Guards still scan them.
-- Guards see real values in memory. The dashboard shows masks. Replay uses stand-ins. The AI reviewer sees placeholders.
+- Guards see real values in memory. The dashboard shows masks. Replay uses stand-ins.
 - The one exception is an open approval request: the approver sees the full values. After the decision only the hash and the masked arguments are kept.
 - Chunks Jev labels are stored as they were sent to it, for the review queue: secrets removed, and emails, IBANs and cards masked. Only public content is stored this way. (**Owner**)
 - The hash is HMAC-SHA-256 with one random 32-byte key per install. The key is set in every agent process and on the server, which needs it to hash search input. It is never sent to us.
@@ -731,9 +724,10 @@ Decided by Q18 and Q19, all **Claude's pick**.
     - **Approvals:** it creates requests, tracks heartbeats from waiting calls, and returns the decision to the waiting call.
     - **Revocation:** revoked agent keys and revoked "always approve" decisions.
     - **Label lookups:** the labels behind a reference in a message, a memory item or a chained response. (**Claude's pick**)
-- **worker** runs jobs from the queue: the root-cause finder, replay, the AI reviewer, the AI fallback for `none` labels and retention cleanup. It has no endpoint.
-    - **Queue:** a Postgres table, with no queue library. Each incident row holds the state of its own jobs: the verdict, the AI note and replay. The worker claims a due row with `FOR UPDATE SKIP LOCKED` and a 10-minute lease, and runs up to 4 jobs at once. It looks for work every second. If a worker stops mid-job, its lease runs out and another worker takes the job. (**Claude's pick**, owner approved)
-    - **Settings:** `DATABASE_URL` is required. `OPENAI_API_KEY` is the team's own key for the AI reviewer and replay; without it, the note is skipped, and replay fails with a message that asks for the key. `OPENAI_BASE_URL` is optional and defaults to `https://api.openai.com/v1`.
+- **worker** runs jobs from the queue: the root-cause finder, replay, the AI fallback for `none` labels and retention cleanup. It has no endpoint.
+    - **Queue:** a Postgres table, with no queue library. Each incident row holds the state of its own jobs: the verdict and replay. The worker claims a due row with `FOR UPDATE SKIP LOCKED` and a 10-minute lease, and runs up to 4 jobs at once. It looks for work every second. If a worker stops mid-job, its lease runs out and another worker takes the job. (**Claude's pick**, owner approved)
+    - **Errors and check-ins:** a job that throws gives up its lease and runs again after 15 s, 30 s, 1 minute and 2 minutes. The fifth error fails the job with that message. Each worker checks in every 10 s, so the dashboard and `control`'s `/health` can tell when no worker is running. (**Claude's pick**)
+    - **Settings:** `DATABASE_URL` is required. `OPENAI_API_KEY` is the team's own key for replay; without it, replay fails with a message that asks for the key. `OPENAI_BASE_URL` is optional and defaults to `https://api.openai.com/v1`.
 - **web** is the dashboard. It reads and writes Postgres through its own server code and does not call `control`. When an approver decides, `web` writes the decision to Postgres, and `control` hears about it through Postgres `LISTEN/NOTIFY`. `control` also checks for decisions once a second, so a missed notification only delays the answer. (**Claude's pick**)
 - **Dashboard sign-in.** Privy, with an email code or GitHub. There are no passwords. Anyone who signs in with a verified email or a GitHub account can use the dashboard. Quard keeps its own signed session cookie. Every approval records who decided. (**Owner**)
 
@@ -778,7 +772,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | Q14 | Shared memory | Generic store wrapper | Owner |
 | Q15 | Run limits | Balanced: depth 3, fan-out 10, 5 handoffs back and forth, 200 steps, $5 | Claude's pick |
 | Q16 | Replay | Up to 20 with and 20 without, rounds of 5, early stop, $5 cap | Claude's pick |
-| Q17 | AI reviewer model | The team's own provider key, set on the worker as `OPENAI_API_KEY`; `gpt-6.1-sol` | Claude's pick |
+| Q17 | AI reviewer model | No AI reviewer: removed, so incidents have no AI-written explanation | Owner |
 | Q18 | Hosting | Self-hosted first, hosted later | Claude's pick |
 | Q19 | Retention and redaction | 30 days, incidents 1 year; remove secrets, hash IBANs, cards and emails | Claude's pick |
 | Q20 | When a guard blocks | A refusal the model reads; throwing is opt-in | Owner |
@@ -819,7 +813,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | Detector failures | While acting, what the detector could not check is flagged `detector:unchecked` | Owner |
 | — | Text for review | Store redacted public chunks for a review queue | Owner |
 | — | When an incident opens | A guard blocks a tool call, or would have in observe mode; one incident per run | Claude's pick |
-| — | When replay runs | On a click on the incident page; the verdict and AI note run on their own; past the cap, continue with $5 more | Owner |
+| — | When replay runs | On a click on the incident page; the verdict is found on its own; past the cap, continue with $5 more | Owner |
 | — | Request for replay | The SDK records each model call's redacted request while uploads are on, up to 512 KiB | Claude's pick |
 | — | Bad handoff | Waits for the messages M4 records | Owner |
 
@@ -834,6 +828,7 @@ These points changed the spec. The spec doc was updated to match them on 2026-10
 5. **Hosted tools can't be stopped mid-call.** The spec says guards run before anything executes. Hosted tools run inside the model call, so monitor can only shape the request, like keeping MCP approval on, and check the results afterwards.
 6. **Per-run counters for runs that span processes** live in `control`, not only in-process (**Claude's pick**).
 7. **AI adds content labels.** The spec says AI never assigns labels. Now Jev, and an AI for what Jev can't place, add labels that say what content is. Origin, trust and sensitivity still never come from AI. The spec doc does not have this change yet.
+8. **No AI reviewer.** The owner removed the AI reviewer that Q17 asked about, on 2026-10-04. An incident shows its path, verdict and replay, with no AI-written explanation. The spec doc does not have this change yet.
 
 ## Open items
 

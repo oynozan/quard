@@ -1,46 +1,158 @@
 # Approvals
 
-Some tool calls wait for a person before they run. A guard asks when a tool is high-stakes, or when something about a call needs a second look, such as a recipient that first appeared in an outside email. The call waits until someone answers, with no time limit.
+Some tool calls wait for a person before they run. A guard asks when a tool is high-stakes, or when something about a call needs a second look, such as an amount over a cap. The call waits until someone answers, with no time limit. To learn what each answer means and how long it lasts, see [Approvals](/concepts/approvals).
+
+Open **Approvals** in the sidebar. The page has three parts, from top to bottom:
+
+- **Waiting for an answer.** Requests that still need an answer.
+- **Always approve.** Standing grants.
+- **Decided.** Past answers.
+
+The number beside each title is a count. **Waiting for an answer** counts every open request, the same number the sidebar shows. The page updates by itself when a request opens or someone answers one, here or in another tab. For controls that work the same on every page, see [Common controls](/guides/getting-started#common-controls).
 
 ## Answer a request
 
-Open **Approvals** in the sidebar. Requests whose process is still running come first, with the longest wait on top.
+Each request is a card. Requests whose process is still running come first, with the longest wait on top. Requests whose process stopped come after them.
 
 ![An approval request](/images/guides/approval-request.webp)
 
-1. **Call and status.** The tool that wants to run and how long it has waited. **alive 11 s ago** means the waiting process is still running. Under it are the agent, the run, when it asked and the request id, then the reason the guard asked.
-2. **Arguments.** The exact values the tool will run with. These are the real values, not masked, so you can check them. Under a value, an untrusted origin chip shows where it came from, and **model-generated** warns that it appeared nowhere earlier in the run.
-3. **Checks.** The guard decisions on this call, with the ones that asked first. **2 more passed** opens the checks that passed.
-4. **Identical calls.** Other waiting calls with the same agent, tool and arguments. Your answer covers them too.
-5. **Influence path.** How the content reached this call, from the entry point to the call itself. Each step shows its kind and time, and where untrusted content came in, its origin.
-6. **Answers.**
-    - **Approve once** runs this call one time, with exactly these arguments.
-    - **Always approve** lets later calls run without asking when they come from the same agent, use the same tool and have exactly the same arguments. It holds in any run until someone revokes it.
-    - **Deny** returns a refusal to the agent. The tool does not run.
+1. **Call and status.** The tool that wants to run. The amber square and **Waiting 3 min · alive 12 s ago** say how long the call has waited and when its process last checked in. See [Alive or stopped](#alive-or-stopped).
+2. **Who and why.** The agent, the run, the time it asked (in UTC) and the request id. The run id is a link that opens the run. Under this line is the reason the guard asked, such as `payInvoice asks a human first` or `Amount over cap`. When more than one rule asked, their reasons are joined with a dot.
+3. **Arguments.** The exact values the tool will run with. These are the real values, not masked, so you can check them. Under a value, two things can appear:
+    - an origin chip, such as `web:supplier-portal.example untrusted`, for each untrusted place the value came from;
+    - **model-generated**, with a warning sign, when the value appeared nowhere earlier in the run. See [Model-generated values](/concepts/value-tracing#model-generated-values).
+4. **Checks.** The guard decisions on this call, one per row: the rule, its reason when it differs from the one above, and the result. The checks that held the call come first. The ones that let it through fold into a button such as **1 more passed**. Click it to see them, and **Hide passed checks** to fold them again.
+5. **Influence path.** How content reached this call, read from top to bottom: where it came in, the agent's model call that asked for the tool, then the call itself. Each step shows its kind (`origin`, `agent` or `call`), its name and the time it happened. When the run holds no record of where the content came in, for example when its model calls are not traced, the path shows only the call, as here. See [The influence path](#the-influence-path).
+6. **Approve once.** Runs this call one time, with exactly these arguments.
+7. **Always approve.** Runs this call, and lets later calls run without asking when they come from the same agent, use the same tool and have exactly the same arguments. It holds in any run until someone revokes it. Hover the button to see this as a hint.
+8. **Deny.** Asks you to confirm, then returns a refusal to the agent. The tool does not run. See [Deny a call](#deny-a-call).
+
+When other calls with the same agent, tool and arguments wait on the same request, the card says **Also covers 2 identical calls**, with a link to each one's run. Your answer covers them too.
+
+If the run has not reached the dashboard yet, the influence path reads **The run has not arrived yet.** and the checks are left out. They appear when the run's events arrive.
+
+### After you answer
+
+- The card leaves the list at once, and the answer appears at the top of **Decided**, marked **Just now**. **Always approve** also adds the grant to **Always approve**.
+- While the answer is saved, its button reads **Approving…**, **Saving grant…** or **Denying…**, and the other buttons are turned off.
+- A short message confirms the answer, such as **Approved payInvoice once**.
+- The keyboard focus moves to the next card, or to the section title when no card is left.
+- If someone answered first, the message says **Someone already answered** and the page reloads its lists. If the answer could not be saved, the message says so and the card comes back, still open.
 
 Good to know:
 
 - An approval is tied to the exact arguments. If any argument changes, Quard asks again.
-- After you answer, only a hash of the arguments is kept, not the values.
+- After you answer, only a hash of the arguments and their masked values are kept, not the real values.
 - Quard runs its block checks again right after an approval. An approval never overrides a block that came up while the call waited, such as a daily cap.
-- If the waiting process stops, for example after a crash, the request shows **Stopped** and stays open. An **Approve once** given then is used by the next identical call.
+
+### Alive or stopped
+
+A waiting call sends a heartbeat every 15 seconds. It counts as alive while its last heartbeat is at most 45 seconds old.
+
+| Status                             | Square | What it means                                                                                                          |
+| ---------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
+| **Waiting 3 min · alive 12 s ago** | Amber  | The process is still waiting for your answer. The first time is how long it has waited, the second its last heartbeat. |
+| **Stopped 10:42 UTC · open 2 h**   | Hollow | The waiting process stopped at that time, for example after a crash or a timeout. The request has been open 2 hours.   |
+
+A stopped request stays open. An **Approve once** given then is used by the next identical call. Hover **Approve once** on a stopped request to see this as a hint.
+
+### The influence path
+
+The squares and the dotted lines between them carry the trust of the content at each step:
+
+- **Warm square.** The step carries untrusted content.
+- **Grey square.** The step carries trusted content.
+- **Last square.** This call. It is amber while the call waits, and hollow once its process stopped.
+- **Dotted line.** Joins two steps. It is warm when the step below it carries untrusted content, and grey otherwise.
+
+An origin chip shows on the step where untrusted content came in, and on the call. Hover a chip to see its origin, trust and sensitivity.
+
+### Check results
+
+| Result                 | Square | What it means                                                                                            |
+| ---------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| Asks a human           | Amber  | The rule sent the call here                                                                              |
+| Allowed                | Grey   | The rule let the call through                                                                            |
+| Blocked                | Red    | The rule stopped the call                                                                                |
+| Would ask, would block | Amber  | A rule in [observe mode](/concepts/guards#block-mode-and-observe-mode) would have done this, but did not |
+
+### Many requests
+
+The page lists the first 100 open requests, and always every request a live call waits on. When more are open, a button such as **Show 100 more** under the cards lists up to 100 more. The page address keeps how many are listed, so a reload or a shared link shows the same list.
+
+A link from another page opens the page at one request, and its card gets a lighter background. These links are a waiting request's row on the overview, and **Review in Approvals**, **Open approval** and **Answer in Approvals** on a run's page.
 
 ## Deny a call
 
+**Deny** never denies on the first click. It turns the buttons into a confirmation.
+
 ![Confirming a denial](/images/guides/approval-deny.webp)
 
-1. **Warning.** A denial cannot be undone. The agent gets a refusal, which it reads as the tool's result.
+1. **Warning.** Names the tool and the agent, and says the denial cannot be undone. The agent gets a refusal, which it reads as the tool's result.
 2. **Deny call.** Confirms the denial.
-3. **Cancel.** Goes back without answering.
+3. **Cancel.** Goes back to the three answers without answering.
 
 ## Standing grants
 
-Below the requests, **Always approve** lists every standing grant.
+Under the requests, **Always approve** lists every standing grant, newest first. Its count is the number of active grants.
 
 ![Always-approve grants](/images/guides/approval-grants.webp)
 
-1. **Active and revoked.** Switch between grants in force and grants that were revoked.
-2. **A grant.** The tool and agent, the approved arguments and their hash, who approved it and when, and how often it has been used.
-3. **Revoke.** Ends the grant after you confirm. The next identical call asks again.
+1. **Active and revoked.** Switch between grants in force and grants that were revoked. Each option shows how many it has.
+2. **A grant.** One row per grant:
+    - **Grant.** The tool, with the agent under it.
+    - **Arguments.** The approved arguments, masked, such as `iban=DE89…3000  amount=4200`. Hover to see the whole line.
+    - **Argument hash.** The first 12 characters of the hash the grant matches. Hover to see all of it.
+    - **Approved by.** Who answered, and the date (UTC).
+    - **Used.** How many later calls ran because of this grant, and how long ago the last one was, or **Never**.
+3. **Revoke.** Turns into **Revoke** and **Keep**. **Revoke** ends the grant, and the next identical call asks again. **Keep** leaves it in force. A revoked grant moves to **Revoked**, where its last column says how long ago it was revoked and by whom.
 
-**Decided**, at the bottom of the page, lists past answers. Filter it to see only approved or only denied requests.
+## Past answers
+
+**Decided**, at the bottom of the page, lists the 50 most recent answers, newest first.
+
+![Past answers](/images/guides/approval-decisions.webp)
+
+1. **All, approved and denied.** Show every answer, only approvals (once and always) or only denials. Each option shows how many it has.
+2. **An answer.** One row per answer. Click it to open the run.
+    - **Request.** The tool, with the agent under it.
+    - **Run.** The first 8 characters of the run id.
+    - **Answer.** **Approved once** or **Always approved**, with a green square, or **Denied**, with a hollow one.
+    - **Decided by.** Who answered.
+    - **Argument hash.** The first 12 characters of the hash of the arguments. Hover to see all of it.
+    - **Decided.** How long ago, with the time in UTC.
+
+## What you can click
+
+| Area                  | Element                                    | What it does                                                      |
+| --------------------- | ------------------------------------------ | ----------------------------------------------------------------- |
+| Request card          | Run id after the agent                     | Opens the run                                                     |
+| Request card          | **1 more passed** / **Hide passed checks** | Shows or hides the checks that let the call through               |
+| Request card          | Run ids after **Also covers**              | Opens the run of each identical waiting call                      |
+| Request card          | Origin chip                                | Shows its origin, trust and sensitivity on hover                  |
+| Request card          | **Approve once**                           | Runs this call once                                               |
+| Request card          | **Always approve**                         | Runs this call and saves a standing grant. Hover for a hint       |
+| Request card          | **Deny**                                   | Opens the confirmation                                            |
+| Deny confirmation     | **Deny call**                              | Denies the call. The agent gets a refusal                         |
+| Deny confirmation     | **Cancel**                                 | Goes back without answering                                       |
+| Waiting for an answer | **Show 100 more**                          | Lists up to 100 more open requests. Shows only when more are open |
+| Always approve        | **Active** / **Revoked**                   | Shows grants in force or revoked grants                           |
+| Always approve        | **Revoke**                                 | Opens **Revoke** and **Keep** on that row                         |
+| Always approve        | **Revoke** (second time)                   | Ends the grant                                                    |
+| Always approve        | **Keep**                                   | Leaves the grant in force                                         |
+| Always approve        | **Show active grants**                     | Switches back to active grants, when none were revoked            |
+| Decided               | **All** / **Approved** / **Denied**        | Filters the answers                                               |
+| Decided               | A row                                      | Opens the run                                                     |
+| Decided               | **Show all**                               | Clears the filter, when it leaves no rows                         |
+
+Truncated text, such as an argument line, a hash or a name, shows in full when you hover it.
+
+## With no data yet
+
+Before any guard asks, every section stays in place:
+
+- **Waiting for an answer** reads **Nothing waits for an answer** and _Calls a guard sends to a human pause here._
+- **Always approve** shows its column titles and **No standing grants**. With **Revoked** chosen and nothing revoked, it reads **Nothing revoked**.
+- **Decided** shows its column titles and **No decisions yet**. A filter with no matches reads **No approved requests** or **No denied requests**.
+
+While the page loads, grey blocks stand in for the cards and rows. If it cannot load, it says **Approvals could not be loaded.** Open requests keep waiting and no answer is lost. Click **Try again** to load it again.

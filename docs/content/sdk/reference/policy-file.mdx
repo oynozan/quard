@@ -1,0 +1,151 @@
+# Policy file
+
+A policy file is one JSON file of guard rules and settings that your team can edit while agents run. A tool listed in it uses the file's guard options in place of its options in code, from the next call on. No restart or redeploy is needed.
+
+```ts
+quard.configure({ policyFile: "./quard.policy.json" });
+```
+
+`configure()` reads the file at once, and throws if it is missing or invalid, so a broken file shows up at startup. A relative path is read from the process's working directory.
+
+## Fields
+
+| Field        | Type                                  | Default      | What it does                                                                                                                                                                                                                                                                                              |
+| ------------ | ------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`    | string or number                      | required     | Any version name. Decision events from guarded calls carry it as `policy`, so you can tell which version decided.                                                                                                                                                                                         |
+| `strictness` | `"lenient" \| "balanced" \| "strict"` | `"balanced"` | Sets defaults for source and egress guards. See [Strictness presets](#strictness-presets).                                                                                                                                                                                                                |
+| `origins`    | object                                | none         | Trust and sensitivity for exact origins, such as `"mcp:crm.acme.internal": { "trust": "trusted" }`. These win over the `origins` set in code, origin by origin.                                                                                                                                           |
+| `guards`     | object                                | none         | Tool names, each with a list of guard options. See [Guard options](#guard-options).                                                                                                                                                                                                                       |
+| `signatures` | object                                | none         | The signature feed: `file` or `url`, `refreshSeconds` and `mode`. It wins over the feed set in code. See [Detector and signatures](/sdk/reference/detector#the-signature-feed).                                                                                                                           |
+| `detector`   | object                                | none         | The detector's rules: `mode` (`"observe"` or `"enforce"`), `flagAt` and `stripAt`, from 0 to 1. These win over `detectorRules` in code. See [Detector rules](/sdk/reference/detector#detector-rules).                                                                                                     |
+| `runLimits`  | object                                | none         | The [run limits](/sdk/reference/run-limits): `mode` (`"block"` or `"observe"`), `depth`, `fanOut`, `loops` and `steps` as whole numbers of 0 or more, and `costUsd` as a number of 0 or more. Each field set here wins over the same field in [`runLimits`](/sdk/reference/configure#run-limits) in code. |
+| `$schema`    | string                                | none         | The path of the JSON Schema, for your editor. Quard ignores it.                                                                                                                                                                                                                                           |
+
+Any other field is an error. So is an unknown option inside a guard.
+
+The detector itself is set in code, with `quard.configure({ detector })`. A relative `signatures.file` is read from the policy file's folder.
+
+## Strictness presets
+
+| Preset     | Suspect content from a source | Secrets sent out | Card numbers sent out | IBANs sent out |
+| ---------- | ----------------------------- | ---------------- | --------------------- | -------------- |
+| `lenient`  | `flag`                        | `mask`           | `mask`                | `allow`        |
+| `balanced` | `flag`                        | `block`          | `mask`                | `allow`        |
+| `strict`   | `block`                       | `block`          | `block`               | `mask`         |
+
+- The first column is the default `onSuspect` of [source guards](/sdk/reference/source-guard). The others are the default `payload` actions of [egress guards](/sdk/reference/egress-guard#sensitive-data).
+- A guard's own options win over the preset: `onSuspect` on a source guard, and each kind set in `payload` on an egress guard.
+- Without a policy file, `balanced` applies. Its values match the guards' own defaults.
+
+## Guard options
+
+`guards` maps a tool's name, the `name` given to `guard()` in code, to a list of guard options:
+
+- A tool listed here uses the file's list in place of its options in code.
+- An empty list removes every guard from the tool. The permission check and the signature feed still apply, and calls are still recorded.
+- A tool not listed keeps its options in code.
+- The file can't guard a tool that has no `guard()` in code.
+- An [x402 guard](/sdk/reference/x402#in-the-policy-file) is listed under its `name`, which is `x402` by default. The first entry with `type: "x402"` replaces its options in code. A list with no such entry, an empty one included, leaves the options in code in force. The file can't add an x402 guard that has no `quard.x402()` in code.
+
+The options are the ones from code, minus the ones that are functions:
+
+| Type       | Options in the file                                                                                                                                                                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`   | `origin` (required), `blockDomains`, `allowDomains`, `onSuspect`, `mode`, `onBlock`. Not `originOf` or `carrierOf`. A receive guard with `origin: "agent"` set here uses the carrier `quard.resume()` came in with.                                                                                                             |
+| `action`   | `rules`, with at least one rule: `{ "field", "from" }`, `{ "field", "max" }` or `{ "field", "neverSeen": true }`, each with an optional `onFail` and `name`. `mode`, `onBlock`. Custom rules with `check` can't be written here.                                                                                                |
+| `approval` | `timeout`, in seconds and above 0. `onBlock`.                                                                                                                                                                                                                                                                                   |
+| `egress`   | `allow`, `onFail`, `payload` with `secrets`, `cards` and `ibans`, `mode`, `onBlock`. Not `destinations`.                                                                                                                                                                                                                        |
+| `limit`    | `maxCallsPerRun` and `maxCallsPerDay`, as whole numbers of 0 or more. `maxAmountPerRun` and `maxAmountPerDay`, as `{ "field", "max" }` with `max` 0 or more. `fleetCheck`, with at least one field. `delegateTo`, a field name. `mode`, `onBlock`.                                                                              |
+| `x402`     | `maxPerPayment`, `maxPerRun`, `maxPerDay` and `approveAbove`, as USD numbers of 0 or more. `maxPaymentsPerRun`, as a whole number of 0 or more. `allowHosts`, `blockHosts`, `untrusted` (`"block"` or `"allow"`), `assetCaps` with atomic units as text of 1 to 78 digits, `fleetCheck` (`true` or `false`), `mode`, `onBlock`. |
+
+Every type also takes `type`, which is required, and `name`, which changes nothing here: the key under `guards` names the tool. The pages for each [guard type](/sdk/reference/guard#guard-types) explain what each option does.
+
+Per-day limits, the x402 guard's `maxPerDay` included, and the fleet check need the [control link](/sdk/reference/configure#uploads-and-the-control-link). Without it, per-day limits count in the process only, and the fleet check does nothing.
+
+## How changes apply
+
+- Before each guarded call and each x402 payment, Quard rereads the file when at least a second has passed since the last check. A change applies from that call or payment on.
+- A valid new version replaces the old one as a whole.
+- An invalid version is ignored. The last good version stays in force, and a `config_error` [event](/sdk/reference/events#event-types) with `source: "policy"` says what is wrong. Each broken version is reported once. A file that can't be read is reported at each check.
+- `guards`, `strictness`, `origins`, `detector`, `runLimits`, `version` and `signatures.mode` apply live. The feed's `file`, `url` and `refreshSeconds` are read only when `configure()` opens the policy file.
+- With the control link on, the SDK sends the new list of active rules, with its hash, to `control`. The dashboard shows it under [Rules from code](/guides/settings#rules-from-code).
+
+## JSON Schema
+
+The repo has a JSON Schema for the file: [`quard.policy.schema.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/policy/quard.policy.schema.json). Copy it next to your policy file and point `$schema` at it, as the example below does. Editors such as VS Code then check fields as you type.
+
+The schema is generated from the same rules the SDK checks the file against. After a change to those rules in code, run `pnpm --filter quard schemas` to update it.
+
+## Example
+
+The repo's [`quard.policy.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/policy/quard.policy.json):
+
+```json
+{
+    "$schema": "./quard.policy.schema.json",
+    "version": "2026-10-03.1",
+    "strictness": "balanced",
+    "origins": {
+        "mcp:crm.acme.internal": { "trust": "trusted", "sensitivity": "internal" }
+    },
+    "signatures": { "file": "../signatures/signatures.json", "mode": "block" },
+    "detector": { "mode": "observe", "flagAt": 0.5, "stripAt": 0.9 },
+    "guards": {
+        "fetchPage": [
+            { "type": "source", "origin": "web", "blockDomains": ["*.evil-pages.net"] },
+            { "type": "limit", "maxCallsPerRun": 20 }
+        ],
+        "sendEmail": [
+            { "type": "egress", "allow": ["*.acme.com"], "payload": { "secrets": "block", "cards": "mask" } },
+            { "type": "limit", "maxCallsPerRun": 5 }
+        ],
+        "payInvoice": [
+            {
+                "type": "action",
+                "rules": [
+                    { "field": "iban", "from": ["tool:getSupplierRecords"] },
+                    { "field": "amount", "max": 10000, "onFail": "ask" }
+                ]
+            },
+            {
+                "type": "limit",
+                "maxAmountPerRun": { "field": "amount", "max": 50000 },
+                "maxAmountPerDay": { "field": "amount", "max": 200000 },
+                "fleetCheck": ["iban"]
+            }
+        ],
+        "deleteRecords": [{ "type": "approval", "timeout": 600 }]
+    }
+}
+```
+
+To try a rule on live traffic first, add `"mode": "observe"` to its guard, then remove it once the "would block" decisions look right.
+
+The example file doesn't set run limits. To turn them on for every run, add:
+
+```json
+"runLimits": { "mode": "block", "depth": 2, "costUsd": 2 }
+```
+
+Fields you leave out keep the value from code, or else the default.
+
+## Related
+
+- [The policy file](/sdk/examples/policy-file): a policy file edited while an agent runs.
+- [Block mode and observe mode](/concepts/guards#block-mode-and-observe-mode): rolling out a rule.
+- [Configuration](/sdk/reference/configure): `policyFile` and the other options.
+- [x402 payments](/sdk/reference/x402#in-the-policy-file): the x402 guard in the policy file.
+- [Run limits](/concepts/run-limits#changing-the-limits): run limits in code and in the policy file.
+
+## Source
+
+- [`packages/sdk/policy/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schema.ts): `policySchema` and `guardOptionsJson`, what the file may hold
+- [`packages/sdk/policy/state.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/state.ts): `openSources()`, `refreshSources()`, `policyOptions()` and `policyRunLimits()`
+- [`packages/sdk/core/config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/config.ts): `runLimits()`, which puts defaults, code and the file together
+- [`packages/sdk/policy/presets.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/presets.ts): `PRESETS`, the strictness presets
+- [`packages/sdk/feeds/file-source.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/feeds/file-source.ts): `fileSource()`, how the file is reread
+- [`packages/sdk/policy/rules.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/rules.ts): `rulesSnapshot()`, the active rules and their hash
+- [`packages/sdk/examples/policy/README.md`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/policy/README.md): the policy file's README
+- [`packages/sdk/examples/policy/quard.policy.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/policy/quard.policy.json): the example file
+- [`packages/sdk/examples/policy/quard.policy.schema.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/examples/policy/quard.policy.schema.json): the JSON Schema
+- [`packages/sdk/policy/schemas.test.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schemas.test.ts): the test that writes the schema files

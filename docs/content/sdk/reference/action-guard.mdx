@@ -1,0 +1,173 @@
+# Action guard
+
+An action guard wraps a tool that changes something: a payment, an email, a delete, a deploy. Before each call, it checks the arguments against your rules. A rule can require that a value came from a named origin, cap an amount, send a never-seen value to a person, or run your own check.
+
+```ts
+type ActionOptions = {
+    type: "action";
+    name?: string;
+    mode?: "block" | "observe";
+    onBlock?: "return" | "throw";
+    rules: ActionRule[];
+};
+
+type ActionRule = FromRule | MaxRule | NeverSeenRule | CustomRule;
+
+type FromRule = { field: string; from: string[]; onFail?: "block" | "ask"; name?: string };
+type MaxRule = { field: string; max: number; onFail?: "block" | "ask"; name?: string };
+type NeverSeenRule = { field: string; neverSeen: true; onFail?: "block" | "ask"; name?: string };
+type CustomRule = {
+    name: string;
+    check: (call: GuardCall) => Decision | { decision: Decision; field?: string };
+};
+
+type Decision = "allow" | "block" | "ask";
+```
+
+## Options
+
+| Option                    | Type           | Default  | What it does                                                                                                            |
+| ------------------------- | -------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `rules`                   | `ActionRule[]` | required | The rules. Every rule checks every call.                                                                                |
+| `name`, `mode`, `onBlock` |                |          | See [Options every guard has](/sdk/reference/guard#options-every-guard-has). `mode` applies to every rule of the guard. |
+
+## Rules
+
+Every rule except a custom one names a `field`: a path into the call's input, such as `iban`, `invoice.amount` or `items[0].to`. A rule on a field also covers the values nested inside it.
+
+| Rule                         | Fails when                                                                                                 | Default `onFail` | Reason                                                                                      | Default rule name    |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- | -------------------- |
+| `{ field, from }`            | A value in the field didn't appear in content from an allowed origin, or the field holds no traced value   | `"block"`        | `value_model_generated` when a value appeared nowhere, else `value_not_from_allowed_origin` | `<field>:from`       |
+| `{ field, max }`             | The field's value is above `max`, or isn't a number                                                        | `"block"`        | `amount_over_cap`                                                                           | `<field>:max`        |
+| `{ field, neverSeen: true }` | A value in the field didn't first appear in trusted, unflagged content, or the field holds no traced value | `"ask"`          | `recipient_never_seen`                                                                      | `<field>:never-seen` |
+| `{ name, check }`            | `check` returns `"block"` or `"ask"`                                                                       | none             | `rule_failed`                                                                               | its `name`           |
+
+- `onFail: "ask"` sends the call to a person instead of blocking it. See [Asks from other guards](/sdk/reference/approval-guard#asks-from-other-guards).
+- `name` sets the rule's name in decision events and in the rules the dashboard shows.
+- `from`, `max` and `neverSeen` rules can also be written in a [policy file](/sdk/reference/policy-file#guard-options). Custom rules can't.
+
+### from
+
+`from` lists the origins a value may come from. An entry matches that origin and every origin that starts with it and a `:`. So `"tool"` matches the result of any tool without a source guard, `"tool:getSupplier"` matches only the tool named `getSupplier`, and `"web"` matches any web page.
+
+- Quard [traces](/concepts/value-tracing) the values in the field: IBANs, email addresses, URLs, host names, file paths and values that look like ids. An id has at least 8 characters, no spaces and a digit, so words, dates and most amounts aren't traced.
+- Every traced value must have appeared, as itself, in unflagged content from an allowed origin. Content is flagged by a source guard's scan, a `flag` signature or the detector. A match on the host or the main domain only doesn't count. A bare host name in the field matches the same host.
+- A field with no traced value fails, and so does a missing field.
+- A value from a [message from another agent](/sdk/reference/source-guard#messages-from-other-agents) or from [shared memory](/sdk/reference/memory) keeps the origin it had where it was first read, when a label record vouches for it. So an IBAN another agent read on a web page still fails `from: ["tool:getSupplier"]`.
+
+### max
+
+`max` reads the field's value as a number: a number as it is, a string through `Number()`. The rule fails when the value is above `max`, or when it isn't a number at all. A call without the field passes this rule.
+
+### neverSeen
+
+`neverSeen: true` looks at where each traced value in the field first appeared in the run. It passes only when that first appearance was trusted, unflagged content. A value first seen in untrusted or flagged content fails, and so does a value that appeared nowhere, which the model wrote itself. A field with no traced value fails too.
+
+By default the call goes to a person: an unknown recipient or IBAN gets a second look instead of a hard stop.
+
+A value that a trusted message or memory item holds, but that no label record vouched for, was written by a model. It stays model-generated for the rest of the run, even when trusted tool output repeats it later. So a `neverSeen` rule still fails on it. See [Values the sender made up](/concepts/multi-agent#values-the-sender-made-up).
+
+### Custom rules
+
+A custom rule runs your own `check` function. It gets the [GuardCall](#guardcall) and returns a decision, or a decision with the field it is about.
+
+```ts
+const deploy = guard(rawDeploy, {
+    type: "action",
+    name: "deploy",
+    rules: [
+        {
+            name: "production-needs-a-person",
+            check: (call) =>
+                (call.input as { env?: string }).env === "production" ? { decision: "ask", field: "env" } : "allow",
+        },
+    ],
+});
+```
+
+- `check` must return at once. It can't return a promise.
+- `"block"` and `"ask"` carry the reason `rule_failed`. The refusal names the `field` you return, or "argument" when you return none.
+- An error thrown in `check` rejects the guarded call with that error, and the tool doesn't run.
+
+## GuardCall
+
+```ts
+type GuardCall = {
+    tool: string;
+    input: unknown;
+    agent: string;
+    runId: string;
+    stepId: string;
+    context: ContextLabel;
+    values: ArgumentLabel[];
+    run: RunState;
+    depth: number;
+};
+```
+
+| Field                      | What it holds                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `tool`                     | The tool's name                                                                                                                       |
+| `input`                    | The checked input: the one argument, or the list of arguments                                                                         |
+| `agent`, `runId`, `stepId` | The agent that made the call, its run, and this call's step                                                                           |
+| `context`                  | The [context label](/concepts/labels#the-context-label): `trust`, `sensitivity`, `origins` (every origin the run read) and `flagged`  |
+| `values`                   | One entry per argument value, by `path`. Each lists the traced values in it, with `type`, `value`, `modelGenerated` and `occurrences` |
+| `run`                      | Quard's own state for the run                                                                                                         |
+| `depth`                    | The agent's delegation depth: 0 for the agent that started the run, one more for each `quard.agent()` or `quard.resume()` below it    |
+
+An occurrence is one place the value appeared earlier in the run, oldest first. It has the content's `contentId`, `origin`, `trust`, `sensitivity`, `flags` and `stepId`, its `order` in the run, and `match`: `exact`, `host` or `domain`. A value with no occurrences is model-generated.
+
+## What it decides
+
+Each rule gives allow, ask or block. Together with the tool's other guards, the strictest enforced result wins. Every rule's result is recorded as a `decision` event with `guard: "action"` and the rule's name, allows included.
+
+## Reason codes
+
+| Reason                          | When                                                  | Refusal text, after "Blocked by the action guard:"         |
+| ------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------- |
+| `value_not_from_allowed_origin` | A `from` rule failed                                  | the iban value did not come from an allowed source         |
+| `value_model_generated`         | A `from` rule failed on a value that appeared nowhere | the iban value did not appear in any content this run read |
+| `amount_over_cap`               | A `max` rule failed                                   | the amount value is over the allowed limit                 |
+| `recipient_never_seen`          | A `neverSeen` rule failed with `onFail: "block"`      | the to value has not been seen in trusted content          |
+| `rule_failed`                   | A custom rule returned `"block"`                      | the env value failed a rule                                |
+
+The field names in the text come from the rule. A rule that asks doesn't refuse by itself: the [approval step](/sdk/reference/approval-guard#after-the-answer) answers, and its refusal comes from the approval guard. See [Refusals and errors](/sdk/reference/refusals) for the full text.
+
+## Labels
+
+An action guard doesn't label anything. Without a source guard on the same tool, the result is labeled `tool:<name>`: trusted and internal by default. A `from` rule such as `["tool:getSupplier"]` matches values from that result.
+
+## Example
+
+```ts
+import { guard } from "quard";
+
+// Supplier records: trusted. The guard records the calls and labels the result tool:getSupplier.
+const getSupplier = guard(rawGetSupplier, { type: "limit", name: "getSupplier" });
+
+const payInvoice = guard(rawPayInvoice, {
+    type: "action",
+    name: "payInvoice",
+    rules: [
+        { field: "iban", from: ["tool:getSupplier"] },
+        { field: "amount", max: 10000, onFail: "ask" },
+    ],
+});
+```
+
+An IBAN the model copied from a web page fails the `from` rule. An amount above 10,000 waits for a person.
+
+## Related
+
+- [Where values come from](/sdk/examples/where-values-come-from): a `from` rule against an IBAN on a web page.
+- [Human approval](/sdk/examples/human-approval): a `neverSeen` rule that asks.
+- [Value tracing](/concepts/value-tracing): how values are matched.
+
+## Source
+
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): `ActionOptions` and `ActionRule`
+- [`packages/sdk/guards/action/action.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/action/action.ts): `checkAction()`, `matchesOrigin()` and `ruleName()`
+- [`packages/sdk/guards/call.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/call.ts): `GuardCall`
+- [`packages/sdk/labels/value-labels.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/labels/value-labels.ts): `labelArguments()`, `valuesAt()` and `exactOccurrences()`
+- [`packages/shared/values/flatten.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/values/flatten.ts): `valueAtPath()`, the field paths
+- [`packages/shared/refusals/templates.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/refusals/templates.ts): the refusal text

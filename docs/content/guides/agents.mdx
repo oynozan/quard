@@ -1,25 +1,115 @@
 # Agents
 
-The Agents page shows how your agents delegate work to each other. Each agent has its own page with its recent calls, versions, incidents and permissions.
+The Agents page shows every agent that reported in the last 30 days and how they pass work to each other. Each agent also has its own page with its numbers for the last 24 hours, its recent calls, versions, incidents and links to other agents.
 
-Before your agents report any runs, the graph and lists stay in place with a short message, such as **No agents yet**.
+Charts, tables, hover readouts and empty notes work the same here as on every page. See [Common controls](/guides/getting-started#common-controls).
 
 ## Agent graph
 
-![The agent graph](/images/guides/agents.webp)
+![The agent list](/images/guides/agents.webp)
 
-1. **Agent graph.** Agents as squares and their delegations as arrows, over the last 30 days. A square is green while the agent is running and grey when it is idle. The line under each name is the model it last used. An arrow's color shows how much of what it carried was untrusted: grey under 10%, copper from 10% to 59%, and a dashed light line at 60% or more. Thicker arrows carry more delegations. The numbers above the graph count the links, the delegations and the untrusted share. Hover an agent to see its runs in the last 24 hours and its state, or an arrow to read its numbers, and click an agent to open its page.
-2. **Table.** Lists every link with its sender, receiver, delegation count, untrusted count and share, and when it was last seen.
-3. **Agents.** Every agent with its state and its runs in the last 24 hours, running agents first. Click one to open its page.
+1. **Readouts.** Over the last 30 days: **Links** counts the pairs of agents that passed work, one per direction. **Messages** counts everything those links carried: delegations, handoffs and messages. **Untrusted** is the share of those that carried untrusted content.
+2. **Table.** Shows the links as a table instead of the graph. **Chart** switches back.
+3. **An agent.** A square with the agent's name and, under it, the model of its newest model call. Click it to open the agent page.
+4. **Key.** What the square colors and arrow colors mean.
+5. **Agents.** Every agent with its state and how many runs it took part in over the last 24 hours. Running agents come first, then the busiest. The number in the header counts the agents. Click a row to open the agent page.
+
+### Read the agent graph
+
+Each arrow is a link from one agent to another. A link joins three kinds of traffic between the same two agents:
+
+| Kind       | What it is                                                                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delegation | One agent started another to do part of its work, in the same process or in another one through `quard.resume()`. Counted once per step that did it. |
+| Handoff    | The [OpenAI Agents SDK](/integrations/openai-agents) switched to another agent, through a handoff or an agent run as a tool.                         |
+| Message    | Any other message that a receive guard took in. See [Multi-agent](/concepts/multi-agent).                                                            |
+
+- **Square color.** Green means running: the agent sent an event in the last two minutes, in a run that has not ended. Grey means idle.
+- **Hollow square.** A link end that is not an agent with events in the window, such as `unknown` for a message whose sender Quard could not verify. It has no page, so you can't click it.
+- **No model line.** The agent made no model call in the last 30 days.
+- **Position.** Agents that start work sit on the left, and the agents they delegate or send messages to sit further right. A handoff never moves an agent further right. On narrow screens the graph runs from top to bottom instead.
+- **Arrow color.** The share of the link's traffic that was untrusted: grey under 10%, copper from 10% to 59%, and dashed light peach at 60% or more.
+- **Arrow width.** Busier links are thicker. The line gets wider at 100, 1,000 and 5,000 items over the 30 days.
+- **Untrusted.** A delegation counts as untrusted when the helper's first model call in it had read untrusted content. A message or handoff counts when it carried untrusted content, or when Quard could not verify where it came from. See [Labels and trust](/concepts/labels).
+
+Hover an agent to see its runs in the last 24 hours and its state. Its links turn green and the agents it has no link with fade. Hover an arrow to see how many items it carried and its untrusted share. That arrow turns green and the other agents fade.
+
+The table lists one row per link, busiest first. **Mostly** names the kind of traffic the link carried most. **Messages** counts all of it, **Untrusted** counts the untrusted part and **Share** gives it as a percentage. **Last seen** is the newest item, in UTC.
 
 ## Agent page
 
 ![An agent page](/images/guides/agent.webp)
 
-1. **Agent.** Its name, state, the model it last used and when it was last seen. Below are its calls that asked a person, its blocked calls, the share of its model calls made after reading untrusted content and its estimated cost, all for the last 24 hours. The cost shows a dash when a model it used has no known price.
-2. **View runs.** Opens the run list for this agent.
-3. **Recent calls.** Up to the agent's last 60 calls, as many as fit the width, with one lane for each kind of call it made, such as model calls, tool calls, guard decisions, approvals, messages and memory. Colors and marks work like the [run timeline](/guides/runs#read-a-run). The numbers above count the calls with untrusted content, the asked calls and the blocked calls. **Table** lists every call with its guard result and run.
-4. **Versions.** The agent's newest 100 versions, each with its model, a hash of its instructions and when it was live. Hover a version to see its tools and what changed since the version before. An incident ties to the version that caused it.
-5. **Incidents.** The incidents where this agent was the entry point or the turning point, with its version and role in each. If it only did the damage, one line says in how many incidents.
-6. **Permissions.** Over the last 30 days: the agents it delegates to and the agents it works for, with how many delegations and how much of them was untrusted. Handoffs show here too when there are any. A delegated agent can only use what its parent granted.
-7. **Model calls per hour.** The agent's model calls over the last 24 hours.
+1. **Agent.** **Agents** above the name goes back to the list. Next to the name is the agent's state. Under it are the model of its newest model call in the last 30 days and how long ago it last sent an event.
+2. **View runs.** Opens the run list, showing only this agent's runs.
+3. **Last 24 hours.** **Asked** counts the calls a guard paused to ask a person. **Blocked** counts the calls a guard blocked. Rules in observe mode don't count here. An amber or red icon appears when either is above zero. **Calls after untrusted** is the share of the agent's model calls made after it had read untrusted content in that run. It shows a dash when the agent made no model calls. **Est. cost** is the estimated cost of its model calls. It shows a dash when a model it used has no known price.
+4. **Recent calls.** The agent's newest model and tool calls, one column each. See [Recent calls](#recent-calls).
+5. **Versions.** The agent's newest 100 versions, newest first. **Current** marks the one in use. **Instructions** is the start of a hash of the instructions, or **None** when the version had none. **Live** runs from when Quard first saw the version to when the next one appeared, or **to now**. Hover a version to see its tools and what changed since the version before: **First version**, **Added** and **Removed** tools, or **Same tools**.
+6. **Incidents.** The incidents where this agent was the entry point or the turning point. **Role** says which, and adds **Damage** when the agent also made the harmful call. **Version** shows a dash: incidents are not tied to versions yet. The number counts the rows, and **View all** opens the [incident list](/guides/incidents). Click a row to open the incident.
+7. **Permissions.** Over the last 30 days. **Delegates to** lists the agents this one handed work to, and **Works for** the agents that handed work to it. **None** under **Delegates to** means it handed no work to another agent, and **None · starts its own runs** under **Works for** means no agent delegated to it. **Handoffs** appears when there are any, with **out** for handoffs it made and **in** for ones it received. Each line shows the count and the untrusted share of that whole link, in a warm color at 60% or more. A delegated agent can only use the tools its parent granted. Click a name to open that agent.
+8. **Model calls per hour.** The agent's model calls in each of the last 24 hours, in UTC. **Total** adds them up.
+
+The numbers under **Last 24 hours** cover a day. The numbers in **Recent calls** cover only the calls loaded there, so they can differ.
+
+### Recent calls
+
+![Recent calls](/images/guides/agent-calls.webp)
+
+1. **Readouts.** For every loaded call: **Untrusted context** counts the calls made after the agent had read untrusted content. **Asked** and **Blocked** count the calls a guard paused or blocked. **Blocked** also counts calls that ended blocked.
+2. **Lanes.** One row for model calls and one for tool calls.
+3. **Calls.** One column per call, oldest on the left. The times under it are the first and last call shown, in UTC. The header tag, such as **LAST 60**, says how many calls were loaded. The field shows as many of them as fit the width.
+4. **Key.** What the cell colors and marks mean.
+
+A cell's color is the call's [context label](/concepts/labels#the-context-label): grey for trusted public, blue for trusted internal, light peach for untrusted public and copper for untrusted internal. Untrusted cells also have a hole in the middle. A mark under a column shows the strictest guard result on that call: red for **Blocked**, amber for **Asked**, and an outline in the same colors for **Would block** and **Would ask**, from rules in [observe mode](/concepts/guards#block-mode-and-observe-mode). The key lists only the marks that appear.
+
+Hover a column to see the call's name, kind, time, context and run. Click it to open its run. With the field focused, the arrow keys move between calls, starting at the newest, and Enter opens the call's run.
+
+**Table** lists every loaded call, newest first, with its time, kind, name, context and origin, guard result, how long it took and the start of its run id. **Guard** shows a dash when no guard checked the call.
+
+## What you can click
+
+### On the agent list
+
+| Element               | What it does                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| An agent in the graph | Opens its agent page. Hover or focus it to see its runs and state and light up its links.           |
+| An arrow              | Hover it to see how many items it carried and its untrusted share.                                  |
+| The graph             | Focus it with Tab, then use the arrow keys to step through the links, busiest first. Escape clears. |
+| **Table** / **Chart** | Switches between the graph and the table of links.                                                  |
+| A row in **Agents**   | Opens that agent's page.                                                                            |
+
+### On an agent page
+
+| Area                 | Element               | What it does                                                                         |
+| -------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| Header               | **Agents**            | Goes back to the agent list.                                                         |
+| Header               | **View runs**         | Opens the run list filtered to this agent.                                           |
+| Recent calls         | A column              | Hover to read the call. Click, or press Enter while it is selected, to open its run. |
+| Recent calls         | **Table** / **Chart** | Switches between the cells and the table of calls.                                   |
+| Versions             | A version             | Hover to see its tools and what changed.                                             |
+| Versions             | An instructions hash  | Hover to see the longer hash.                                                        |
+| Incidents            | **View all**          | Opens the incident list.                                                             |
+| Incidents            | A row                 | Opens the incident.                                                                  |
+| Permissions          | An agent name         | Opens that agent's page.                                                             |
+| Model calls per hour | The chart             | Hover, or use the arrow keys, to read one hour.                                      |
+| Model calls per hour | **Table** / **Chart** | Switches between the chart and a table of hours.                                     |
+
+## With no data yet
+
+Before any agent reports, the graph reads **No agents reported in the last 30 days**, its readouts show dashes, and the agent list reads **No agents yet**. The links table reads **No messages between agents yet** until agents pass work to each other. Agents that work alone show as squares with no arrows.
+
+An agent page only exists once the agent has sent an event. Its empty parts read:
+
+- **Recent calls:** "billing has made no calls yet", with the agent's name.
+- **Versions:** **No versions yet**.
+- **Incidents:** **No incidents yet**. When the agent only made the harmful call, it says so instead, such as **Damage only, in 2 incidents**.
+- **Permissions:** **None** under **Delegates to**, and **None · starts its own runs** under **Works for**.
+- **Model calls per hour:** **No model calls in the last 24 hours**.
+
+An agent that has not reported in the last 30 days still has a page. It shows as idle, with no model and no links.
+
+## When a page can't load
+
+If the list can't load, it reads **Could not load the agent graph.** If an agent page can't load, it reads **Could not load this agent.** Both have a **Try again** button.
+
+An address with an unknown agent name shows **Agent not found** with a **Back to agents** button. Names are case sensitive.

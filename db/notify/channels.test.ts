@@ -18,7 +18,12 @@ afterAll(async () => {
 
 describe("notify", () => {
     it("names one channel per kind of change", () => {
-        expect(CHANNELS).toEqual({ approvals: "quard_approvals", fleet: "quard_fleet", keys: "quard_keys" });
+        expect(CHANNELS).toEqual({
+            approvals: "quard_approvals",
+            fleet: "quard_fleet",
+            keys: "quard_keys",
+            live: "quard_live",
+        });
     });
 
     it("sends a notification, and inside a transaction only on commit", async () => {

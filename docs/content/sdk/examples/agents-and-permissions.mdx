@@ -1,0 +1,128 @@
+import { Steps } from "nextra/components";
+
+# 7. Agents and permissions
+
+A support team runs a main support agent and a smaller FAQ bot. The FAQ bot may look up orders, but it should never refund one, however nicely a customer asks. This example gives each agent a list of the tools it may use. It also shows that an agent can only hand a helper fewer tools than it has, never more.
+
+## Run it
+
+```sh
+node sandbox/07-agents-and-permissions.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows.
+
+## Step by step
+
+<Steps>
+
+### Two guarded tools
+
+```ts
+const lookupOrder = guard(async (input: { orderId: string }) => `order ${input.orderId}: 2 mugs, shipped`, {
+    type: "limit",
+    name: "lookupOrder",
+    maxCallsPerRun: 20,
+});
+
+const refundOrder = guard(async (input: { orderId: string }) => `refunded order ${input.orderId}`, {
+    type: "limit",
+    name: "refundOrder",
+    maxCallsPerRun: 3,
+});
+
+// The model is offered both tools every time; Quard enforces the lists
+const tools = { lookupOrder, refundOrder };
+```
+
+Both tools are wrapped in [`guard()`](/sdk/reference/guard) with a [limit guard](/sdk/reference/limit-guard), so Quard can check who calls them. Every agent in this example is offered both tools. The model can ask for either one, and Quard decides whether the agent may use it.
+
+### The support agent may use every tool
+
+```ts
+await quard.run({ agent: "support" }, async () => {
+    title("The support agent may use every tool");
+    await runAgent(client, "Refund order 1001.", tools);
+    // ...
+});
+```
+
+[`quard.run()`](/sdk/reference/quard) starts a run for the agent `support`. Without a `tools` list, an agent may use every guarded tool, so the refund runs.
+
+### Its FAQ bot may only look up orders
+
+```ts
+title("Its FAQ bot may only look up orders");
+await quard.agent("faq-bot", () => runAgent(client, "Refund order 1002.", tools), { tools: ["lookupOrder"] });
+```
+
+[`quard.agent()`](/sdk/reference/quard) starts a sub-agent inside the current run. It throws when no run is active. The FAQ bot's calls are recorded under its own name, in the same run as the support agent, linked to the step the support agent was on. They also share the run's labels and limits.
+
+The FAQ bot may only use `lookupOrder`. When the model asks for `refundOrder`, the wrapped client checks the request against that list before the agent loop gets it, records a block and marks the call. When the loop runs the tool, the guard refuses it at once. The model reads this [refusal](/sdk/reference/refusals):
+
+```text
+Blocked by the permission guard: this agent is not allowed to use this tool. The refundOrder call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+Permission isn't one of the [six guard types](/concepts/guards#the-six-kinds). It is the second of the steps every guarded call goes through, and its refusals call it the permission guard.
+
+### A helper can't get more than its parent
+
+```ts
+title("A sub-agent can't get a tool its parent doesn't have");
+await quard.run({ agent: "intern", tools: ["lookupOrder"] }, async () => {
+    // Asks for refundOrder, but the intern can't pass it on
+    await quard.agent("helper", () => runAgent(client, "Refund order 1003.", tools), {
+        tools: ["lookupOrder", "refundOrder"],
+    });
+});
+```
+
+The intern's run may only use `lookupOrder`. Its helper asks for both tools, but a sub-agent only gets the tools on both lists: its own and its parent's. So the helper may only look up orders too, and its refund is refused with the same permission refusal. Leave out `tools` on a sub-agent, and it gets its parent's list.
+
+</Steps>
+
+## What you'll see
+
+```text
+The support agent may use every tool
+  User: Refund order 1001.
+  → refundOrder {"orderId":"1001"}
+    ✓ refunded order 1001
+  Model: …
+
+Its FAQ bot may only look up orders
+  User: Refund order 1002.
+  → refundOrder {"orderId":"1002"}
+    ✗ blocked by the permission guard (permission_denied)
+  Model: …
+
+A sub-agent can't get a tool its parent doesn't have
+  User: Refund order 1003.
+  → refundOrder {"orderId":"1003"}
+    ✗ blocked by the permission guard (permission_denied)
+  Model: …
+```
+
+The model may look up an order before it refunds it. Every agent here may do that, so you may also see lines like `→ lookupOrder {"orderId":"1001"}` and `✓ order 1001: 2 mugs, shipped`. The answers marked `…` are the model's own words and change from run to run. Whenever the FAQ bot or the helper asks for a refund, it is refused.
+
+## Try this
+
+- **Trust the FAQ bot.** Add `"refundOrder"` to its list. Its refund now runs, because the support agent may use every tool.
+- **Leave the list out.** Remove `tools` from the helper. It gets the intern's list, so the refund is still refused.
+- **Hit the limit.** Ask the support agent to refund four orders. `refundOrder` allows three calls per run, so the limit guard blocks the fourth with `limit_reached`. The limit counts per run, not per agent.
+
+## Use it in your app
+
+- Start each task with `quard.run()`, name the agent, and pass `tools` to list what it may use.
+- When an agent hands work to a helper, run the helper inside `quard.agent()` with the smallest list it needs. A helper can never get a tool its parent doesn't have.
+- Wrap every tool in `guard()`. A tool without a guard can only be recorded, never stopped, and Quard warns about it.
+- `quard.agent()` works inside one process. To hand work to an agent in another process, carry the run with [`quard.inject()`](/sdk/reference/quard#quardinject) and [`quard.resume()`](/sdk/reference/quard#quardresume), as [example 22](/sdk/examples/agents-in-two-processes) does. See [Multi-agent](/concepts/multi-agent).
+- Each `quard.agent()` inside another one is one level deeper. A tool that hands work to another agent can take the limit guard option [`delegateTo`](/sdk/reference/limit-guard#delegation). Then [run limits](/concepts/run-limits) check how deep delegation goes, how many helpers one agent uses and how often two agents go back and forth. [Example 25](/sdk/examples/run-limits) shows them.
+
+## Source
+
+- [`sandbox/07-agents-and-permissions.ts`](https://github.com/oynozan/quard/blob/main/sandbox/07-agents-and-permissions.ts): the example
+- [`packages/sdk/context/scope.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/scope.ts): `quard.run()`, `quard.agent()` and how a tool list narrows
+- [`packages/sdk/monitor/check.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/check.ts): checks the tool calls a model asks for
+- [`packages/sdk/pipeline/guard.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/guard.ts): the permission step of every guarded call

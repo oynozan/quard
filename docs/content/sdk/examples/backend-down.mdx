@@ -1,0 +1,170 @@
+import { Steps } from "nextra/components";
+
+# 13. When the backend is down
+
+Quard's backend can go down, or the network between your app and it can fail. Your agents keep running, and guards run inside your app, so most checks keep working. This example points the SDK at a port where nothing listens and shows three cases: a payment that needs a person, a daily limit, and a plain rule.
+
+## Run it
+
+```sh
+node sandbox/13-backend-down.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows. It ignores the backend settings, so it runs the same whether [the local backend](/sdk/examples#the-local-backend) is up or not. The first part pauses for about 30 seconds.
+
+## Step by step
+
+<Steps>
+
+### Point Quard at nothing
+
+```ts
+// Any agent key will do, since nothing is there to check it.
+// This replaces the backend settings lib/env.ts may have made.
+quard.configure({
+    key: "qk_live_" + "demo".repeat(6),
+    webhookUrl: "http://localhost:4999",
+    controlUrl: "http://localhost:4999",
+});
+```
+
+The SDK starts its uploader and its link to control as usual, at port 4999, where nothing listens. New backend settings in a later [`quard.configure()`](/sdk/reference/configure) call replace the uploader and the link that `lib/env.ts` may have started.
+
+The link tries to connect, fails and tries again, waiting 1 second, then 2, doubling up to 15. The uploader can't get your project's [hash key](/sdk/reference/configure#the-hash-key) from webhook either, so it keeps the events and tries again too, waiting up to 60 seconds between tries. Neither prints anything here: they only warn when the backend answers and refuses what they send. See [Uploads and the control link](/sdk/internals/transport).
+
+### A payment that needs a yes
+
+```ts
+title("A payment that needs a yes, with no one to ask");
+console.log("  Quard keeps trying to reach control for 30 s before it gives up, so this pauses.");
+const askFirst = guard(pay, { type: "approval", name: "payInvoice" });
+await quard.run({ agent: "billing" }, () =>
+    runAgent(client, "Pay Acme Ltd 120 EUR for invoice 114 to IBAN DE89 3704 0044 0532 0130 00.", {
+        payInvoice: askFirst,
+    }),
+);
+```
+
+The [approval guard](/sdk/reference/approval-guard) asks. No approver is set in code, so the ask goes to control. The link is down, so the SDK waits for it to come back, for up to 30 seconds. Then it gives up and blocks the call with the reason `backend_unavailable`. The model reads:
+
+```text
+Blocked by the approval guard: it needs the Quard backend, which could not be reached. The payInvoice call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+The same 30 seconds apply when the link is up but control doesn't take the ask in time. Once control has taken it, the call waits for a person with no time limit, as in [example 10](/sdk/examples/approvals-in-the-dashboard). An ask from an action or egress rule goes the same way. See [If Quard's backend can't be reached](/concepts/approvals#if-quards-backend-cant-be-reached).
+
+### Two texts a day, counted here
+
+```ts
+title("Two texts a day, counted in this process");
+const sendSms = guard(sms, { type: "limit", name: "sendSms", maxCallsPerDay: 2 });
+await quard.run({ agent: "assistant" }, () =>
+    runAgent(client, "Text +1 555 0100 two separate messages: 'Hi' and 'Your order shipped'.", { sendSms }),
+);
+// A new run, but the same day, so the count carries over
+await quard.run({ agent: "assistant" }, () => runAgent(client, "Text +1 555 0100 'Thanks!'", { sendSms }));
+```
+
+Per-day limits normally count in control, as in [example 11](/sdk/examples/daily-limits). With the link down, the [limit guard](/sdk/reference/limit-guard) counts in the process and blocks once its own count reaches the cap. Nothing waits. When the link is up but control doesn't answer a count within 5 seconds, the SDK counts in the process too.
+
+The first run sends both texts. The second run is new, but it's the same day, so "Thanks!" would be the third text of the day. It is refused with `daily_limit_reached`.
+
+The SDK keeps the counts it made on its own. When the link is back, it sends them to control without a cap, because those calls already ran. In this example, the link never comes back.
+
+### A rule that needs no backend
+
+```ts
+title("A rule that needs no backend: at most 500 EUR per payment");
+const capped = guard(pay, { type: "action", name: "payInvoice", rules: [{ field: "amount", max: 500 }] });
+```
+
+Rules, labels, value tracing, per-run limits and scans run in your process and need nothing from the backend. The 120 EUR payment runs. The 9000 EUR payment is blocked by the [action guard](/sdk/reference/action-guard) with `amount_over_cap`, at once.
+
+### Where the records go
+
+Events wait in a buffer in [`packages/sdk/core/recorder.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/recorder.ts):
+
+```ts
+// Matches the backend-down buffer size in PROJECT.md
+const MAX_BUFFERED = 10_000;
+// ...
+// A full buffer drops the oldest allow decision first, then the oldest event
+function makeRoom(): void {
+    const quiet = buffer.findIndex(isQuiet);
+    forget(buffer.splice(Math.max(quiet, 0), 1));
+    dropped += 1;
+}
+```
+
+Every event, guard decisions included, waits here until webhook takes it. It couldn't leave sooner anyway: the SDK redacts with your project's hash key, which only the backend can give. The next batch tells webhook how many were dropped. Events sent more than 30 seconds after they happened, or after a failed try, are marked as sent late. Here the backend never comes back, so the events are lost when the process exits.
+
+Model calls carry their request body for [replay](/guides/incidents#replay). The buffer holds up to 32 Mi characters of those bodies. Past that, the oldest model calls in the buffer lose their bodies but stay in the buffer, and their replay is limited. `forget()` takes a dropped event's body off that count.
+
+</Steps>
+
+## What you'll see
+
+```text
+A payment that needs a yes, with no one to ask
+  Quard keeps trying to reach control for 30 s before it gives up, so this pauses.
+  User: Pay Acme Ltd 120 EUR for invoice 114 to IBAN DE89 3704 0044 0532 0130 00.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":120}
+    ✗ blocked by the approval guard (backend_unavailable)
+  Model: …
+
+Two texts a day, counted in this process
+  User: Text +1 555 0100 two separate messages: 'Hi' and 'Your order shipped'.
+  → sendSms {"to":"+1 555 0100","text":"Hi"}
+    ✓ sent "Hi" to +1 555 0100
+  → sendSms {"to":"+1 555 0100","text":"Your order shipped"}
+    ✓ sent "Your order shipped" to +1 555 0100
+  Model: …
+  User: Text +1 555 0100 'Thanks!'
+  → sendSms {"to":"+1 555 0100","text":"Thanks!"}
+    ✗ blocked by the limit guard (daily_limit_reached)
+  Model: …
+
+A rule that needs no backend: at most 500 EUR per payment
+  User: Pay Acme Ltd two invoices to IBAN DE89 3704 0044 0532 0130 00: 120 EUR for invoice 114 and 9000 EUR for invoice 115.
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":120}
+    ✓ paid 120 EUR
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":9000}
+    ✗ blocked by the action guard (amount_over_cap)
+  Model: …
+```
+
+The 30-second pause comes between the first `payInvoice` line and its `✗` line. `…` stands for the model's answers, which change from run to run. The model may also write the phone number or the IBAN differently.
+
+## Try this
+
+- **Time out sooner.** Add `timeout: 5` to the approval guard. The call is refused after 5 seconds with `approval_timed_out` instead, because the guard's own timeout comes first.
+- **Ask in the terminal.** Add `approver: askInTerminal` from `lib/terminal.ts` to the `configure()` call, and call `closeTerminal()` at the end of the file, as [example 5](/sdk/examples/human-approval) does. An approver in code needs no backend, so you're asked right away.
+- **Run it twice.** Run the file again. "Hi" and "Your order shipped" go out again, and only "Thanks!" is refused: each new process counts from zero, because control never got the count.
+
+## Use it in your app
+
+Nothing to configure: this is how the SDK behaves whenever webhook or control can't be reached.
+
+| Part                                                | While the backend can't be reached                                  |
+| --------------------------------------------------- | ------------------------------------------------------------------- |
+| Approvals and any ask                               | Blocked after up to 30 seconds, with `backend_unavailable`          |
+| Per-day limits                                      | Counted in the process, blocked at the cap, sent to control later   |
+| Rules, labels, value tracing, per-run limits, scans | Run as usual                                                        |
+| Fleet check                                         | Checked against the last synced quarantine list, up to 24 hours old |
+| Events                                              | Kept, up to 10,000, and sent late                                   |
+
+- Decide what your app does with a `backend_unavailable` refusal, for example put the task back in a queue for later.
+- During an outage, each process counts per-day limits on its own. Several processes together can go past a daily cap until control is back.
+
+See [When Quard's backend is down](/concepts/guards#when-quards-backend-is-down) for the full list.
+
+## Source
+
+- [`sandbox/13-backend-down.ts`](https://github.com/oynozan/quard/blob/main/sandbox/13-backend-down.ts): the example
+- [`packages/sdk/transport/link/approvals.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/approvals.ts): an ask waits up to 30 seconds for control
+- [`packages/sdk/transport/link/control.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/control.ts): the wait times for control
+- [`packages/sdk/transport/link/link.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/link.ts): reconnects to control
+- [`packages/sdk/pipeline/count/days.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/days.ts): counts in the process when control can't
+- [`packages/sdk/transport/link/queue.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/queue.ts): sends missed counts and fleet reports later
+- [`packages/sdk/transport/uploader.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/uploader.ts): retries uploads and marks late events
+- [`packages/sdk/core/recorder.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/recorder.ts): the event buffer

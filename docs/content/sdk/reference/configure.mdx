@@ -1,0 +1,191 @@
+# Configuration
+
+`quard.configure()` changes the SDK's settings. Call it at startup. You can call it again at any time: each call changes only the options it names.
+
+```ts
+// quard.configure
+function configure(options: Partial<QuardConfig>): void;
+
+type QuardConfig = {
+    origins: OriginOverrides;
+    onEvent?: (event: RunEvent) => void;
+    approver?: (request: ApprovalRequest) => Promise<ApprovalAnswer>;
+    key?: string;
+    webhookUrl?: string;
+    controlUrl?: string;
+    policyFile?: string;
+    signatures?: SignaturesConfig;
+    detector?: Detector;
+    detectorRules?: Partial<DetectorRules>;
+    runLimits?: Partial<RunLimits>;
+};
+
+type RunLimits = {
+    mode: "block" | "observe";
+    depth: number;
+    fanOut: number;
+    loops: number;
+    steps: number;
+    costUsd: number;
+};
+
+type OriginOverrides = Record<string, { trust?: "trusted" | "untrusted"; sensitivity?: "internal" | "public" }>;
+```
+
+## Options
+
+| Option          | Type                                                    | Default                                                                       | What it does                                                                                                                                                  |
+| --------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `origins`       | `OriginOverrides`                                       | `{}`                                                                          | Trust and sensitivity for exact origins, such as `"mcp:crm.acme.internal"`. See [Origins](#origins).                                                          |
+| `onEvent`       | `(event: RunEvent) => void`                             | none                                                                          | Called with every event Quard records. See [Events](/sdk/reference/events#get-events-in-code).                                                                |
+| `approver`      | `(request: ApprovalRequest) => Promise<ApprovalAnswer>` | none                                                                          | Answers approvals in code, in place of the dashboard. See [Approval guard](/sdk/reference/approval-guard#an-approver-in-code).                                |
+| `key`           | `string`                                                | none                                                                          | The agent key. Create one in the dashboard under [Settings](/guides/settings#agent-keys). The SDK also gets your project's [hash key](#the-hash-key) with it. |
+| `webhookUrl`    | `string`                                                | none                                                                          | The address of the backend's `webhook` service. Events go to `<webhookUrl>/v1/events`.                                                                        |
+| `controlUrl`    | `string`                                                | none                                                                          | The address of the backend's `control` service, as an `http`, `https`, `ws` or `wss` URL.                                                                     |
+| `policyFile`    | `string`                                                | none                                                                          | The path of a JSON [policy file](/sdk/reference/policy-file). A relative path is read from the process's working directory.                                   |
+| `signatures`    | `SignaturesConfig`                                      | none                                                                          | A [signature feed](/sdk/reference/detector#the-signature-feed) of known attacks, from a file or a URL.                                                        |
+| `detector`      | `Detector`                                              | none                                                                          | An AI [detector](/sdk/reference/detector#the-detector) that labels public content from source tools, such as `jevDetector()`.                                 |
+| `detectorRules` | `Partial<DetectorRules>`                                | `{ mode: "enforce", flagAt: 0.5, stripAt: 0.9 }`                              | When the detector may act. See [Detector rules](/sdk/reference/detector#detector-rules).                                                                      |
+| `runLimits`     | `Partial<RunLimits>`                                    | `{ mode: "observe", depth: 3, fanOut: 10, loops: 5, steps: 200, costUsd: 5 }` | Limits on depth, fan-out, loops, model calls and cost for every run. See [Run limits](#run-limits).                                                           |
+
+## Uploads and the control link
+
+Guards work without any backend. Two connections to the backend turn on when their settings are complete:
+
+| Connection   | Turns on when these are set | What it does                                                                                                                                                                                                             |
+| ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Uploads      | `key`, `webhookUrl`         | Sends every recorded event, redacted, to `webhook` in batches. See [What is uploaded](/sdk/reference/events#what-is-uploaded). Also stores the label records of messages and memory writes, at `<webhookUrl>/v1/labels`. |
+| Control link | `key`, `controlUrl`         | Keeps one WebSocket open to `control` for dashboard approvals, shared per-day counts, the fleet check, the list of active rules, the counters of runs that span processes, and label record lookups.                     |
+
+- An empty string counts as not set. So `key: process.env.QUARD_AGENT_KEY` with the variable unset leaves uploads off, without an error.
+- Once any of the three is set, `key` must be set, with `webhookUrl`, `controlUrl` or both. Otherwise `configure()` throws. The check looks at the settings as they would be after the call, so set them together in one call.
+- A call that leaves a connection's settings as they were keeps it running. A call that changes one of them restarts it with the new settings.
+- To stop one connection, set its URL to `undefined` while the other URL stays set. To stop both, set all three to `undefined`.
+- The control link's address is `controlUrl` with `http` turned into `ws` and `https` into `wss`, and `/v1/connect` added to the path. It reconnects by itself after a drop.
+- Uploads go out about once a second, in batches of up to 500 events. While `webhook` can't be reached, the SDK retries with a wait that doubles up to 60 seconds.
+- The SDK sends the events left in its buffer when Node emits `beforeExit`, which happens when the process runs out of work. Node doesn't emit it on `process.exit()`.
+- Neither connection keeps your process alive on its own. The control link does while a call waits for an approval.
+- [Messages between agents](/sdk/reference/messages) in separate processes, and [shared memory](/sdk/reference/memory) read in another process, need both connections: the sender stores label records through `webhook`, and the receiver looks them up through `control`.
+
+[Uploads and the control link](/sdk/internals/transport) explains the code. For what still works while the backend is down, see [Guards](/concepts/guards#when-quards-backend-is-down).
+
+## The hash key
+
+Before IBANs and email addresses leave your process, the SDK hashes them with your project's hash key. The prints of messages and memory items, and the argument hash of an ask, use the same key. You don't set it. The SDK gets it from the backend with the agent key:
+
+- `control` sends it in its `ready` message when the control link connects.
+- `webhook` gives it at `<webhookUrl>/v1/hash-key`.
+
+The SDK takes whichever answer comes first. Both give the same key, and it stays in the process's memory.
+
+- Until the SDK has the key, events wait in the buffer, and no label record is sent. No raw value leaves the process.
+- When it can't get the key, because the backend is down or refuses the agent key, it keeps trying and waits longer each time. Events wait in the buffer, as they do when `webhook` is down. See [What is uploaded](/sdk/reference/events#what-is-uploaded).
+- When `webhook` refuses the agent key, the SDK warns once: `Quard: webhook refused to hand out the hash key (401). Check the agent key and the webhook URL.`
+- `quard.inject()`, `quard.resume()`, and reads and writes of a [wrapped store](/sdk/reference/memory) wait up to 5 seconds for the key before they hash anything for the backend. Without it they go on, but store and look up no labels. `quard.inject()` then records a `label_record_not_stored` warning.
+- An ask to the dashboard goes out once the control link is ready, which brings the key. It waits no longer than an ask always does when control is down.
+- Without uploads and the control link, the SDK never gets a key and nothing leaves the process. Prints and value hashes then use a key only this process knows.
+
+The backend keeps one secret key for the whole install, `QUARD_HASH_KEY`, and it never leaves the server. Each project's key is made from it and the project's id, so projects never share hashes. Agents in separate processes need agent keys from the same project, so their prints and value hashes match.
+
+## Origins
+
+An origin override sets the trust, the sensitivity or both for one exact [origin](/concepts/labels#the-three-parts-of-a-label).
+
+```ts
+quard.configure({
+    origins: {
+        // Our own MCP server only serves our CRM data
+        "mcp:crm.acme.internal": { trust: "trusted", sensitivity: "internal" },
+        // A public app: what users type is untrusted
+        user: { trust: "untrusted" },
+    },
+});
+```
+
+- Matching is exact: `"mcp:crm.acme.internal"` changes only that origin, not `"mcp:other"` or `"mcp"`.
+- A part you leave out keeps the default for the origin's kind. See [Default trust](/concepts/labels#default-trust).
+- Calls merge by origin. A later call adds the origins it names and replaces the whole entry of an origin named before. To undo an override, set its entry to `{}`.
+- The [policy file's](/sdk/reference/policy-file) `origins` win over the ones set in code, origin by origin.
+- An override applies to content read after it is set. Content already labeled keeps its label.
+- Each `run_started` event records the overrides in force when the run started. The dashboard lists them under [Origin overrides](/guides/settings#origin-overrides).
+
+## Run limits
+
+`runLimits` sets the five limits that apply to every run: how deep delegation goes, how many helpers one agent uses, how many turns two agents take, how many model calls a run makes and what it costs.
+
+| Field     | Type                    | Default     | What it caps                                                                       |
+| --------- | ----------------------- | ----------- | ---------------------------------------------------------------------------------- |
+| `mode`    | `"block" \| "observe"`  | `"observe"` | `"observe"` records "would block" and stops nothing. `"block"` enforces the limits |
+| `depth`   | whole number, 0 or more | `3`         | Delegation levels below the agent that started the run                             |
+| `fanOut`  | whole number, 0 or more | `10`        | Different agents one agent delegates to                                            |
+| `loops`   | whole number, 0 or more | `5`         | Turns back and forth between the same two agents                                   |
+| `steps`   | whole number, 0 or more | `200`       | Model calls across all agents                                                      |
+| `costUsd` | number, 0 or more       | `5`         | Estimated cost in US dollars, from token usage and the price table                 |
+
+```ts
+quard.configure({ runLimits: { mode: "block", steps: 100, costUsd: 2 } });
+```
+
+- A field you leave out, or set to `undefined`, keeps its default.
+- The [policy file's](/sdk/reference/policy-file#fields) `runLimits` win over the ones set in code, field by field. The order is defaults, then code, then the policy file.
+- A new value applies from the next check on.
+- Depth, fan-out and loops are checked only on tools with a [limit guard](/sdk/reference/limit-guard#delegation) that sets `delegateTo`. Steps and cost are checked by the [wrapped client](/sdk/reference/quard#quardwrap) before each model call.
+
+[Run limits](/sdk/reference/run-limits) gives the API details, and the [Run limits](/concepts/run-limits) concept page explains them without code.
+
+## How calls combine
+
+- Each call changes only the options it names. The others keep their values.
+- An option named with the value `undefined` is cleared.
+- `origins` merge by origin, as described above.
+- `runLimits` and `detectorRules` replace the earlier value as a whole. A field left out of the new value keeps its default, not the value from the earlier call.
+- A call that names `policyFile` or `signatures` opens both again: the policy file is read again, and a feed from a URL downloads again.
+- `configure()` doesn't check the names of options. A misspelled option is ignored at run time, so let TypeScript check your call.
+
+## What throws
+
+`configure()` checks its input before it changes anything. When it throws, every setting stays as it was.
+
+| Error message starts with                                                      | Cause                                                                                                         |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `Uploads and the control link need key together with webhookUrl or controlUrl` | Some connection settings are set, but not a complete set                                                      |
+| `controlUrl must be an http, https, ws or wss URL`                             | `controlUrl` isn't a URL, or uses another scheme                                                              |
+| `Invalid Quard configuration:`                                                 | A `TypeError`: `policyFile`, `signatures`, `detector`, `detectorRules` or `runLimits` has the wrong shape     |
+| `Quard could not load the policy file:`                                        | The policy file is missing, isn't JSON, or doesn't match the [schema](/sdk/reference/policy-file#fields)      |
+| `Quard could not load the signature feed:`                                     | A feed `file` is missing, isn't JSON, or doesn't match the [feed format](/sdk/reference/detector#feed-format) |
+
+`origins`, `onEvent` and `approver` aren't checked. A feed from a URL never makes `configure()` throw: it downloads in the background, and a failed download records a `config_error` [event](/sdk/reference/events#event-types).
+
+## Example
+
+```ts
+import { quard } from "quard";
+
+quard.configure({
+    key: process.env.QUARD_AGENT_KEY,
+    webhookUrl: process.env.QUARD_WEBHOOK_URL,
+    controlUrl: process.env.QUARD_CONTROL_URL,
+    policyFile: "./quard.policy.json",
+    origins: { "mcp:crm.acme.internal": { trust: "trusted" } },
+});
+```
+
+## Related
+
+- [Runs in the dashboard](/sdk/examples/runs-in-the-dashboard): uploads in a runnable example.
+- [When the backend is down](/sdk/examples/backend-down): what guards do without the backend.
+- [Run limits](/sdk/examples/run-limits): `runLimits` in a runnable example.
+- [Settings](/guides/settings): agent keys and the rules the dashboard shows.
+
+## Source
+
+- [`packages/sdk/core/config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/config.ts): `QuardConfig`, `RunLimits`, `DEFAULT_RUN_LIMITS`, `configure()`, `getConfig()` and `runLimits()`
+- [`packages/sdk/transport/configure.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/configure.ts): `configureQuard()`, which starts uploads and the control link
+- [`packages/sdk/policy/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schema.ts): `configureExtras`, the checks on `policyFile`, `signatures`, `detector`, `detectorRules` and `runLimits`
+- [`packages/sdk/policy/state.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/state.ts): `openSources()`, which loads the policy file and the feed
+- [`packages/sdk/transport/link/url.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/link/url.ts): `controlSocketUrl()`
+- [`packages/sdk/transport/uploader.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/uploader.ts): `createUploader()`
+- [`packages/sdk/transport/label-sender.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/label-sender.ts): `createLabelSender()`, which stores label records
+- [`packages/shared/redact/hash.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/hash.ts): `projectHashKey()`, which makes a project's hash key from the install's
+- [`packages/shared/redact/project-key.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/project-key.ts): `HASH_KEY_PATH` and `hashKeyReply`, the hash key request to `webhook`
+- [`packages/shared/labels/mapping.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/labels/mapping.ts): `labelFor()`, which applies origin overrides

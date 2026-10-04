@@ -9,6 +9,9 @@ export type Listener = {
     close(): Promise<void>;
 };
 
+// Idle time before the first keepalive probe
+export const KEEPALIVE_MS = 10_000;
+
 const NAMES = new Set<string>(Object.values(CHANNELS));
 const LISTEN_ALL = Object.values(CHANNELS)
     .map((channel) => `LISTEN ${channel};`)
@@ -22,8 +25,13 @@ export async function openListener(
     heard: (notice: Notice) => void,
     lost: (error: Error) => void,
 ): Promise<Listener> {
-    // Keepalive notices a dropped connection that sits idle between notifications
-    const client = new pg.Client({ connectionString: url, keepAlive: true });
+    // Keepalive notices a dropped connection that sits idle between
+    // notifications, within seconds instead of the OS default of hours
+    const client = new pg.Client({
+        connectionString: url,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: KEEPALIVE_MS,
+    });
     let open = false;
     const drop = (error: Error) => {
         if (open) {

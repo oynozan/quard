@@ -1,0 +1,189 @@
+# Run limits
+
+Run limits cap a whole run, across all of its agents: how deep delegation goes, how many helpers one agent starts, how often two agents hand work back and forth, how many model calls the run makes and what it costs. [Run limits](/concepts/run-limits) explains why they exist. This page gives the API.
+
+```ts
+type RunLimits = {
+    mode: "block" | "observe";
+    depth: number;
+    fanOut: number;
+    loops: number;
+    steps: number;
+    costUsd: number;
+};
+
+quard.configure({ runLimits?: Partial<RunLimits> });
+```
+
+## Fields
+
+| Field     | Type                     | Default     | What it caps                                                           | Rule          | Checked on                              |
+| --------- | ------------------------ | ----------- | ---------------------------------------------------------------------- | ------------- | --------------------------------------- |
+| `mode`    | `"block" \| "observe"`   | `"observe"` | Whether the limits stop anything. See [Modes](#modes).                 |               |                                         |
+| `depth`   | `number`, whole, 0 or up | `3`         | Delegation levels below the agent that started the run                 | `max-depth`   | A tool with [`delegateTo`](#delegateto) |
+| `fanOut`  | `number`, whole, 0 or up | `10`        | Different agents one agent delegates to                                | `max-fan-out` | A tool with `delegateTo`                |
+| `loops`   | `number`, whole, 0 or up | `5`         | Turns back and forth between the same two agents                       | `max-loops`   | A tool with `delegateTo`                |
+| `steps`   | `number`, whole, 0 or up | `200`       | Model calls across all agents of the run                               | `max-steps`   | The [wrapped client](#steps-and-cost)   |
+| `costUsd` | `number`, 0 or up        | `5`         | Estimated cost in US dollars, from token usage and Quard's price table | `max-cost`    | The wrapped client                      |
+
+Every run counts against the defaults, with nothing to switch on. They start in observe mode, so they only record until you set `mode: "block"`.
+
+## Setting the limits
+
+In code, pass `runLimits` to `quard.configure()`. Fields you leave out keep their defaults:
+
+```ts
+quard.configure({ runLimits: { mode: "block", steps: 100, costUsd: 2 } });
+```
+
+- A later `configure()` call with `runLimits` replaces the earlier `runLimits` as a whole. Fields it leaves out go back to their defaults, not to what the earlier call set.
+- A field set to `undefined` keeps its default.
+- An unknown field, a negative number, or a count that is not a whole number makes `configure()` throw a `TypeError` that starts with "Invalid Quard configuration".
+
+In the [policy file](/sdk/reference/policy-file), use the `runLimits` field, with the same fields and the same rules:
+
+```json
+{
+    "version": "2026-10-04.1",
+    "runLimits": { "mode": "block", "depth": 2 }
+}
+```
+
+The limits in force are built field by field: the defaults, then the code, then the policy file. So a field in the policy file wins over the same field in code, and fields it leaves out keep what the code set.
+
+The SDK rereads the policy file before guarded calls, at most once a second. A model call doesn't reread it. So a change to `steps` or `costUsd` reaches model calls once a guarded call has reread the file.
+
+## Modes
+
+| Mode        | What happens when a run passes a limit                                                                                     |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `"observe"` | Quard records a `decision` event with `decision: "block"` and `enforced: false`. The call goes ahead. This is the default. |
+| `"block"`   | Quard records the same event with `enforced: true` and stops the call. The reason is `limit_reached`.                      |
+
+All five limits share one mode. The `mode` of the guard on a delegate tool doesn't change it: depth, fan-out and loops follow the run limits' mode, while the guard's own options, such as `maxCallsPerRun`, follow the guard's mode.
+
+## Steps and cost
+
+The client from [`quard.wrap()`](/sdk/reference/quard#quardwrap) checks `steps` and `costUsd` before it sends each model call.
+
+- A call is over `steps` when it would be model call number `steps + 1` of the run. With `steps: 3`, the fourth call is over. `steps: 0` makes every call over.
+- A call is over `costUsd` when the run's estimated cost so far has reached the cap. So `costUsd: 0` makes every call over, the first one too.
+- The cost of a response is added once its token usage arrives. A model that is not in the price table adds no cost, and only `steps` caps it.
+- With the [OpenAI Agents SDK](/sdk/reference/openai-agents), `quardRunner()` uses the wrapped client, so the same checks apply.
+
+### A blocked model call
+
+When the mode is `"block"`, a model call over a limit never leaves your process:
+
+- Quard records a `decision` event per limit passed, with `guard: "limit"`, `rule: "max-steps"` or `"max-cost"`, the model name as `tool`, and `reason: "limit_reached"`. It records no `model_call` event.
+- The client gets an HTTP 403 answer that it doesn't retry (`x-should-retry: false`). For a call to `gpt-4.1`, its body is:
+
+```json
+{
+    "error": {
+        "message": "Blocked by the limit guard: a limit for this run was reached. The gpt-4.1 call did NOT run. Do not retry it; tell the user what was blocked.",
+        "type": "quard_blocked",
+        "code": "limit_reached",
+        "param": null
+    }
+}
+```
+
+- The OpenAI client throws its error for a 403, an `OpenAI.APIError` with `status` 403 and `code` `"limit_reached"`. Catch it where you call the model.
+- If the error leaves `quard.run()`, the `run_finished` event has `status: "blocked"`, the same as a guard with `onBlock: "throw"`.
+
+## delegateTo
+
+Depth, fan-out and loops are checked on the tool that sends messages or delegates work. Give it a [limit guard](/sdk/reference/limit-guard) with `delegateTo`: the argument that names the receiving agent.
+
+```ts
+type LimitOptions = {
+    type: "limit";
+    // ...the other limit guard options
+    delegateTo?: string;
+};
+```
+
+```ts
+const delegate = guard(rawDelegate, { type: "limit", name: "delegate", delegateTo: "to" });
+
+await delegate({ to: "billing", brief });
+```
+
+- `delegateTo` is a field path into the call's input, such as `"to"`. It can also be set in the policy file's `guards`.
+- The receiving agent is the value at that path when it is a non-empty string. Otherwise only `depth` is checked.
+- Each call records a `decision` event for each limit it checks, with `allow` or `block`, under the rule names above.
+- A blocked call gets a [refusal](/sdk/reference/refusals) from the limit guard with the reason `limit_reached`, and the tool doesn't run.
+
+### How each limit counts
+
+| Limit   | A call is over the limit when                                                                                                          |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Depth   | The sending agent's depth plus one is above `depth`. The agent that started the run is at depth 0. `depth: 0` blocks every delegation. |
+| Fan-out | The receiving agent would be more than `fanOut` different agents the sending agent delegated to. A repeat receiver adds nothing.       |
+| Loops   | The pair of agents would pass `loops` turns. The first handoff between two agents is turn 1, and each change of direction adds one.    |
+
+- Each `quard.agent()` goes one level deeper. So does each [`quard.resume()`](/sdk/reference/messages#quardresume) of a message with a label record. A message whose record can't be found puts the receiver past any depth limit, so it can't delegate once the limits block.
+- The helper and the turn are counted just before the tool runs, after every check and any approval. A call refused before that point counts nothing.
+- Fan-out and loop counts live in the process. When a run spans processes, each process counts the helpers and turns it sees.
+- With the OpenAI Agents SDK, the SDK's own handoffs are not delegate calls. They don't count toward fan-out or loops. An agent run as a tool runs one level deeper, so it counts toward depth when it delegates.
+
+## Runs across processes
+
+Once [`quard.inject()` or `quard.resume()`](/sdk/reference/messages) carries a run to another process, and the control link is on, the run's steps and cost are counted in `control`. So are the per-run counts of limit guards, `maxCallsPerRun` and `maxAmountPerRun`. `control` starts from what the process counted so far.
+
+- In block mode, `control` refuses a step that would pass `steps`, so every process shares one cap.
+- When `control` doesn't answer in time, the process counts on its own and sends its counts once `control` is back.
+
+[Run limits](/concepts/run-limits#runs-across-processes) explains this in more depth.
+
+## In the active rules
+
+The list of active rules that the SDK sends to `control` holds the five run limit rules under the tool name `*`, with the run limits' mode. The run limits are also part of the rules hash that `decision` events carry, so a change to them shows as a new hash.
+
+## Example
+
+```ts
+import OpenAI from "openai";
+import { guard, quard } from "quard";
+
+quard.configure({ runLimits: { mode: "block", loops: 3, steps: 50 } });
+
+const client = quard.wrap(new OpenAI());
+
+const sendMessage = guard(
+    async (input: { to: string; text: string }) => {
+        await queue.send(input.to, input.text);
+        return `delivered to ${input.to}`;
+    },
+    { type: "limit", name: "sendMessage", delegateTo: "to" },
+);
+
+try {
+    await quard.run({ agent: "team" }, () => runTeam(client, { sendMessage }));
+} catch (error) {
+    if (error instanceof OpenAI.APIError && error.code === "limit_reached") {
+        console.log("The run passed a run limit:", error.message);
+    }
+}
+```
+
+A fourth turn between the same two agents is refused, and the model reads why. The 51st model call of the run is refused before it is sent, and the client throws.
+
+## Related
+
+- [Run limits](/concepts/run-limits): what the limits are for, and observe mode first.
+- [25. Run limits](/sdk/examples/run-limits): loops and steps on a real conversation.
+- [Messages between agents](/sdk/reference/messages): how depth travels with a message.
+- [Summary](/guides/summary#run-limits) and [Runs](/guides/runs#run-limits): run limits in the dashboard.
+
+## Source
+
+- [`packages/sdk/core/config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/config.ts): `RunLimits`, `DEFAULT_RUN_LIMITS` and `runLimits()`, the limits in force
+- [`packages/sdk/policy/schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/schema.ts): `runLimitSettings`, the checks on the fields
+- [`packages/sdk/guards/limit/model-limits.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/model-limits.ts): `checkModelCall()`, steps and cost
+- [`packages/sdk/guards/limit/delegation.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/delegation.ts): `checkDelegation()` and `countDelegation()`, depth, fan-out and loops
+- [`packages/sdk/guards/limit/limit.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/limit.ts): `checkLimit()`, which runs the delegation checks
+- [`packages/sdk/monitor/fetch.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/fetch.ts): the check before each model call, and the 403 answer
+- [`packages/sdk/pipeline/count/steps.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/steps.ts): steps and cost of a run that spans processes
+- [`packages/sdk/policy/rules.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/rules.ts): the run limit rules in the active rules

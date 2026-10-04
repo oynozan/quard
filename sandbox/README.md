@@ -36,40 +36,58 @@ pnpm --filter @quard/sandbox typecheck
 
 ## See runs in the dashboard
 
-1. Add a hash key to `sandbox/.env`. Make one with `openssl rand -hex 32`:
+The examples play the part of your app. Three backend services work with the dashboard you already run at http://localhost:3100: webhook stores the runs, control answers approvals and limits, and the worker finds the root cause of each incident. Each runs in its own terminal.
+
+1. Make a hash key with `openssl rand -hex 32` and add it to `web/.env`, next to `DATABASE_URL`. Restart the dashboard so it reads the key; search needs it.
 
     ```sh
     QUARD_HASH_KEY=<64 hex characters>
     ```
 
-    Put the same key in `web/.env`.
-
-2. Start webhook and control, each in its own terminal:
+2. Start webhook (port 4100) in one terminal, from the repo root:
 
     ```sh
-    node --env-file=web/.env services/webhook/main.ts    # port 4100
-    node --env-file=web/.env services/control/main.ts    # port 4200
+    node --env-file=web/.env services/webhook/main.ts
     ```
 
-3. Open the dashboard at http://localhost:3100, sign in, then go to Settings and create an agent key. Add it to `sandbox/.env`:
+3. Start control (port 4200) in another:
+
+    ```sh
+    node --env-file=web/.env services/control/main.ts
+    ```
+
+    On a new database, run the migrations once first: `node --env-file=web/.env db/main.ts`.
+
+4. Start the worker in a third terminal:
+
+    ```sh
+    node --env-file=web/.env --env-file=sandbox/.env services/worker/main.ts
+    ```
+
+    It finds each incident's root cause, and runs replay with the `OPENAI_API_KEY` from `sandbox/.env`. Without the worker, new incidents stay at "Finding the root cause".
+
+5. In the dashboard, sign in, go to Settings and create an agent key.
+
+6. Add the agent key and the same hash key to `sandbox/.env`, as a real app would:
 
     ```sh
     QUARD_AGENT_KEY=qk_live_...
+    QUARD_HASH_KEY=<the same 64 hex characters as in web/.env>
     ```
 
-4. In another terminal:
+7. Run the smallest example. It configures Quard and watches one model call, which then shows on the Runs page:
 
     ```sh
-    node sandbox/15-everything.ts
+    node sandbox/minimal.ts
     ```
 
-No Postgres? Run `pnpm --filter @quard/db dev:db` and set `DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres` in `web/.env`.
+    To fill the dashboard, run `node sandbox/15-everything.ts`.
 
 With `QUARD_AGENT_KEY` set, every example sends its runs to the dashboard, and `05-human-approval.ts` waits for your answer at http://localhost:3100/approvals instead of asking in the terminal. Comment the line out to keep runs in the terminal only.
 
 ## Check an install
 
-`00-check-deploy.ts` checks every part of an install in a few seconds: the dashboard, the docs, webhook, control, the live link and one real run. It exits with 1 when a check fails.
+`00-check-deploy.ts` checks an install in a few seconds: the dashboard, the docs, webhook, control, the live link, the worker and one real run. It exits with 1 when a check fails. The worker answers no requests, so control reports when it last checked in.
 
 ```sh
 node sandbox/00-check-deploy.ts
@@ -96,6 +114,7 @@ node --env-file=sandbox/.env.deploy sandbox/00-check-deploy.ts
 
 | File                           | What it shows                                                     |
 | ------------------------------ | ----------------------------------------------------------------- |
+| `minimal.ts`                   | The smallest setup: configure Quard and watch one model call      |
 | `01-first-guard.ts`            | `guard()`, a limit, how the model reacts, `onBlock: "throw"`      |
 | `02-where-values-come-from.ts` | Labels; an IBAN from our records is paid, one from the web is not |
 | `03-hidden-instructions.ts`    | The source guard: flag, strip or block a poisoned page            |
@@ -107,14 +126,16 @@ node --env-file=sandbox/.env.deploy sandbox/00-check-deploy.ts
 
 These need the local backend (see "See runs in the dashboard"):
 
-| File                               | What it shows                                                                                                      |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `09-runs-in-the-dashboard.ts`      | Runs reach the dashboard with secrets removed and IBANs and emails masked; completed, failed and blocked runs      |
-| `10-approvals-in-the-dashboard.ts` | Approvals answered in the dashboard: always approve, an amount rule that asks, a timeout                           |
-| `11-daily-limits.ts`               | Per-day limits shared by every process; run it twice and the count goes on                                         |
-| `12-fleet-check.ts`                | A new IBAN paid in 5 separate runs is quarantined (only observed for the first 7 days)                             |
-| `15-everything.ts`                 | All of it in one go: every guard type, several agents, an approval to click, completed, failed and blocked runs    |
-| `22-agents-in-two-processes.ts`    | A billing agent in a second process gets the run and its labels in a baggage header; the web IBAN is blocked there |
+| File                                     | What it shows                                                                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `09-runs-in-the-dashboard.ts`            | Runs reach the dashboard with secrets removed and IBANs and emails masked; completed, failed and blocked runs                         |
+| `10-approvals-in-the-dashboard.ts`       | Approvals answered in the dashboard: always approve, an amount rule that asks, a timeout                                              |
+| `11-daily-limits.ts`                     | Per-day limits shared by every process; run it twice and the count goes on                                                            |
+| `12-fleet-check.ts`                      | A new IBAN paid in 5 separate runs is quarantined (only observed for the first 7 days)                                                |
+| `15-everything.ts`                       | All of it in one go: every guard type, several agents, an approval to click, completed, failed and blocked runs                       |
+| `22-agents-in-two-processes.ts`          | A billing agent in a second process gets the run and its labels in a baggage header; the web IBAN is blocked there                    |
+| `sim/29-poisoned-handoff-protected.ts`   | Three agents fix a build; a web page poisons a handoff, and the Engineer's shell is blocked because the context is untrusted          |
+| `sim/28-poisoned-handoff-unprotected.ts` | The same three agents, watched but the shell guard only observes: the breach runs, the canary leaks, and the run opens as an incident |
 
 These run with or without it:
 
@@ -131,8 +152,17 @@ These run with or without it:
 | `23-shared-memory.ts`             | `quard.memory()`: a web IBAN in a saved note is blocked in a later run, and so is a note edited behind its back |
 | `24-openai-agents-sdk.ts`         | The OpenAI Agents SDK with `quardRunner()` and `guardedTool()`; the web IBAN is blocked after a handoff         |
 | `25-run-limits.ts`                | Run limits on turns between two agents and on model calls, first observed, then enforced                        |
-| `26-paid-link-in-a-page.ts` | The x402 guard refuses to pay a host found in a web page, before signing; the model reads the refusal |
-| `27-paid-api-in-a-loop.ts` | A paid API called in a loop stops at the run cap, with each payment and settlement printed; no API key needed |
+| `26-paid-link-in-a-page.ts`       | The x402 guard refuses to pay a host found in a web page, before signing; the model reads the refusal           |
+| `27-paid-api-in-a-loop.ts`        | A paid API called in a loop stops at the run cap, with each payment and settlement printed; no API key needed   |
+
+## The attack simulation (`sandbox/sim`)
+
+A filmable before/after: three agents (Researcher, Lead, Engineer) fix a failing build, and a web page the Researcher reads hides an instruction to upload the project's `.env`. `sim/task.png` (source `sim/task.html`, rendered at 1080×720 with headless Chrome) shows what the team is meant to do.
+
+- `sim/28-poisoned-handoff-unprotected.ts` — Quard watches but the shell guard only observes: the Engineer runs the planted command, the canary `.env` leaks to a local collector, and the run opens as an incident.
+- `sim/29-poisoned-handoff-protected.ts` — the same handoff, guarded: the web label travels across both handoffs, so the Engineer's shell is blocked and nothing leaks.
+
+Everything is real: a real model, three real processes, two real local servers, and a real shell confined by `sandbox-exec` to a throwaway folder (canary values only) and localhost. Both need the local backend.
 
 ## How it fits together
 

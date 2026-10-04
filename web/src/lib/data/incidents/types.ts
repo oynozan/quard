@@ -42,18 +42,11 @@ export type Replay = {
     harmfulCall: string;
     // What the "without" reruns leave out.
     removedContent: string;
-    // Every model call the finder made so far, AI reviewer included.
+    // What the replay's model calls cost so far
     costUsd: number;
     capUsd: number;
     // Why replay is limited or failed, in plain words
     reason: string | null;
-};
-
-export type ReviewerNote = {
-    model: string;
-    costUsd: number;
-    writtenAt: number;
-    paragraphs: string[];
 };
 
 // What the root-cause finder found, and what came after the verdict
@@ -62,9 +55,6 @@ export type IncidentFindings = {
     // From the entry point to the damage, in time order.
     path: PathNode[];
     replay: Replay;
-    reviewer: ReviewerNote | null;
-    // Why there is no note, shown when reviewer is null
-    reviewerStatus: string;
 };
 
 export type IncidentDetail = {
@@ -74,6 +64,8 @@ export type IncidentDetail = {
     findError: string | null;
     // Null until the verdict is found
     findings: IncidentFindings | null;
-    // The worker is finding the verdict, writing the note or replaying, so the page reloads
+    // The verdict or a replay is still to come, so the page reloads
     working: boolean;
+    // A worker checked in within the last 30 s
+    workerRunning: boolean;
 };

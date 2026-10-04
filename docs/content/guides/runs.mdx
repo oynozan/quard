@@ -1,18 +1,36 @@
 # Runs
 
-A run is one task from start to finish, across every agent that worked on it. The Runs page lists them, and each run has its own page with a timeline of every step.
+A [run](/glossary) is one task from start to finish, across every agent that worked on it. The Runs page lists them. Each run has its own page with a timeline of every step, and each step opens in a drawer with its details.
+
+Both pages update on their own when new events reach Quard, while their tab is in view. A run page only updates when its own run changes. Your filters and an open step stay as they are.
+
+Status squares, origin chips, clickable rows, the **Table** button and the drawer work the same on every page. See [Common controls](/guides/getting-started#common-controls).
 
 ## Find a run
 
 ![The run list](/images/guides/runs-list.webp)
 
-1. **Search.** Find runs by run id, agent, tool or status. Press `/` to jump to the field.
-2. **Agent.** Show the runs of one agent.
-3. **Status.** Show only the runs with one status.
-4. **Decision colors.** The key for the **Guard decisions** column, where each run's decisions form a strip of cells: grey for calls a guard allowed, amber for calls that asked a person and red for calls it blocked.
-5. **A run.** The agent that started it, the short run id, how many agents and steps it has, its status, cost, duration and start time. Click the row to open the run.
+1. **Count.** How many runs the table shows. With a filter on, it counts the runs that match.
+2. **Search.** Finds runs by run id, agent, tool or status. Press `/` to jump to the field.
+3. **Agent.** Shows the runs of one agent. It lists the agents of the newest 200 runs.
+4. **Status.** Shows only the runs with one status.
+5. **Decision colors.** The key for the **Guard decisions** column: grey for calls a guard allowed, amber for calls that asked a person and red for calls it blocked.
+6. **Refresh.** Loads the list again.
+7. **A run.** Click anywhere on the row to open the run. See [the columns](#the-columns) below.
 
-The list holds the newest 200 runs. The refresh button at the end of the toolbar loads new ones. Before your first run, the table is drawn empty with the note "No runs yet".
+The table holds the newest 200 runs, newest first.
+
+### The columns
+
+| Column          | What it shows                                                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run             | The agent that started the run. Under it, the short run id (its first 8 characters), how many agents worked on it and how many steps it has                      |
+| Status          | Where the run stands. See the table below                                                                                                                        |
+| Guard decisions | A strip of 30 small cells, split in proportion: grey for allowed, amber for asked, red for blocked. **None yet** means no guard has decided anything in this run |
+| Cost            | The estimated cost of the run's model calls. **—** means the price of one of its models is unknown                                                               |
+| Spend           | What the run paid in settled [x402 payments](/concepts/payments). See [Spend](#spend) below                                                                      |
+| Duration        | How long the run took, or how long it has been running so far                                                                                                    |
+| Started         | How long ago it started, such as `7 min ago`                                                                                                                     |
 
 | Status    | Meaning                                                                            |
 | --------- | ---------------------------------------------------------------------------------- |
@@ -24,28 +42,246 @@ The list holds the newest 200 runs. The refresh button at the end of the toolbar
 
 A run counts as waiting only while the waiting process still runs. If that process stops, for example after a crash, the request stays open in Approvals and the run's status comes from the rest of the table.
 
+A guard can block a call and the agent can still finish its task. That run shows **Completed**, and the red cells in its strip show the block.
+
+### Spend
+
+**Spend** is the money a run paid with [x402](/concepts/payments), in US dollars. Only settled payments count. A payment that settled but did not deliver still counts, because the money was spent.
+
+| Value   | Meaning                                                                                                                                    |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `$0.01` | The settled spend. Amounts under a cent keep two significant digits, such as `$0.0042`                                                     |
+| None    | The run paid nothing                                                                                                                       |
+| Unknown | The run paid in a token with no known US dollar value. Hover it to see any known part, such as `$0.05 plus tokens with no known USD value` |
+
+**Cost** is what the model calls cost. **Spend** is what the agents paid to other services. They are kept apart.
+
+The list counts the [x402 guard's](/sdk/reference/x402) checks in **Guard decisions** and in the run's step count. The run page leaves them out of both, so a run that paid can show fewer steps and decisions on its own page.
+
+### Search and filters
+
+Search looks for every word you type. Each word must match the start of the run id, or part of an agent name, a tool name or the status. The list updates a moment after you stop typing, or at once when you press Enter.
+
+Search and the status filter look through the newest 200 runs. The agent filter finds that agent's newest runs, however many newer runs other agents have. The **Waiting** filter also finds older runs that still wait.
+
+Filters are part of the page address, so you can share a link to a filtered list. When nothing matches, the table reads **No runs match**, with a **Clear filters** button.
+
 ## Read a run
+
+The screenshot shows a run from the [agents in two processes](https://github.com/oynozan/quard/blob/main/sandbox/22-agents-in-two-processes.ts) example. An `orchestrator` agent reads a supplier's web page and hands the payment to a `billing` agent. The page carries different bank details, and the action guard blocks the payment.
 
 ![A run page](/images/guides/run.webp)
 
-1. **Header.** The run id with a copy button, the status, when the run started and how long it has taken. While a call waits for a person, a note under it names the call, with a link to answer it in Approvals. If the waiting process stopped, **Open approval** links to the request it left open.
-2. **Summary.** How many agents and steps the run has, its estimated cost and its guard decisions. **Would block** counts decisions by rules in observe mode, which record but never stop a call.
-3. **Timeline.** One lane per agent and one cell per step, in time order. A step is a model call, a tool call, a guard decision or a call waiting for a person. A cell's color is the label of everything the agent had read before that step: grey for trusted and public, blue for trusted and internal, light peach for untrusted and public, and copper for untrusted and internal. Untrusted cells also have a hole in the middle, so you can tell them apart without color. A mark under a cell shows a decision: amber when a person was asked, red when a call was blocked, and an outline for a rule in observe mode.
-4. **Run graph.** Who delegated to whom. Each agent shows its model, steps and cost, and its name opens its agent page. **untrusted** marks an agent that read untrusted content.
-5. **Run limits.** How close the run came to each limit: delegation depth, fan-out, loops, model calls and cost. **Observe** means the limit only records. **Enforced** means it stops the run. **No limits reported** means the run sent none.
+1. **Header.** **Runs** goes back to the list. Then the short run id and the status. Under them: the full run id, which copies when you click it, when the run started in UTC, and how long it took, or **Running for** while it runs. **Open incident** opens the [incident](/guides/incidents) Quard found for this run. **Open approval** opens a request this run left open in Approvals.
+2. **Summary.** How many agents and steps the run has, its estimated cost, its x402 spend and its guard decisions. See [the summary](#the-summary).
+3. **Table.** Shows the same steps as a table. **Chart** switches back.
+4. **Untrusted context.** How many steps ran after untrusted content had been read in the run.
+5. **Timeline.** One lane per agent and one cell per step, in time order. See [the timeline](#the-timeline).
+6. **Legend.** The four context colors, then the marks this run has.
+7. **Run graph.** Who delegated to whom. See [the run graph](#the-run-graph).
+8. **Run limits.** See [run limits](#run-limits).
 
-**Untrusted context** above the timeline counts the steps that ran after the agent had read untrusted content. In the timeline, the arrow keys move between steps, Enter opens one and Escape clears. **Table** shows the same steps as a table.
+A run that made x402 payments also has a **Payments** section between the timeline and the run graph. See [Payments](#payments).
+
+### Waiting for a person
+
+While a call in the run waits for a person, an amber line under the header names the tool, the agent and how long it has waited. **Review in Approvals** opens the request. The header then leaves out **Open approval**, so the link is not shown twice.
+
+### The summary
+
+| Tile            | What it shows                                                                                                                                                                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agents          | How many agents worked on the run                                                                                                                                                                                                                                 |
+| Steps           | Model calls, tool calls, guard decisions and calls waiting for a person. Permission checks that let a call through are left out                                                                                                                                   |
+| Estimated cost  | The cost of the run's model calls, from each model's price. **—** means one model's price is unknown                                                                                                                                                              |
+| x402 spend      | What the run paid in settled x402 payments. **None** or **Unknown** as in [Spend](#spend)                                                                                                                                                                         |
+| Guard decisions | **blocked** with a red cross and **asked** with an amber sign, when there are any. **would block** and **would ask** count rules in [observe mode](/concepts/guards#block-mode-and-observe-mode), which record but never stop a call. **allowed** counts the rest |
+
+**allowed** includes every decision that let the run go on, such as a source guard's **Passed** or **Flagged**.
+
+### The timeline
+
+Each lane is an agent, named on the left. The agent that started the run comes first, then the agents it handed work to. Each column is one step, oldest on the left, so every column has one lit cell, in the lane of the agent that took the step. When a run has many steps the cells get smaller, and the timeline scrolls sideways. The numbers under the cells are the time since the run started, such as `4.2 s` or `4 min 15 s`.
+
+A step is a model call, a tool call, a guard decision or a call that waits for a person.
+
+A cell's color is the [context label](/concepts/labels#the-context-label) of the step: the least trusted and most sensitive label among everything read in the run before it, by any agent.
+
+| Color                    | Context            |
+| ------------------------ | ------------------ |
+| Grey                     | Trusted public     |
+| Blue                     | Trusted internal   |
+| Light peach, with a hole | Untrusted public   |
+| Copper, with a hole      | Untrusted internal |
+
+The hole in the middle of an untrusted cell lets you tell them apart without color. Once one agent reads untrusted content, the cells after it stay untrusted, in every lane.
+
+A short bar under a cell marks a decision:
+
+| Mark          | Meaning                                                             |
+| ------------- | ------------------------------------------------------------------- |
+| Solid red     | **Blocked or failed.** A guard blocked the call, or the step failed |
+| Solid amber   | **Waiting for a human.** A guard asked a person                     |
+| Red outline   | **Would block.** A rule in observe mode would have blocked          |
+| Amber outline | **Would ask.** A rule in observe mode would have asked              |
+
+Hover a cell to see a ring around it and a readout: the step's name and kind, its agent, its context and its decision. Its time lights up under the cells. Click the cell to open the step.
+
+You can also use the keyboard. Press Tab to move into the timeline, then:
+
+| Key            | What it does                                |
+| -------------- | ------------------------------------------- |
+| Left and Right | Previous and next step                      |
+| Up and Down    | The nearest step in the lane above or below |
+| Home and End   | First and last step                         |
+| Enter or Space | Opens the step with the ring                |
+| Escape         | Takes the ring away                         |
+
+The **Table** view lists every step in time order. **#** is its place in the run. **At** is the time since the run started, and **Took** how long it ran. **Decision** shows the guard's decision, or the step's status when it did not go well, or **—**. Click a row to open the step.
+
+### Payments
+
+The screenshot shows the first run of the [paid link in a page](/sdk/examples/paid-link-in-a-page) example. A weather page sends the agent to a paid forecast on another host. The x402 guard's untrusted check only observes in this run, so the agent pays $0.01.
+
+![The payments of a run](/images/guides/run-payments.webp)
+
+1. **Payments.** How many payment rows the run has, oldest first.
+2. **A price request.** The first request to a paid URL gets a price back, not the content. Quard records it as its own row, with the status **Price asked** and the first price the server listed. The paid request that follows gets the next row.
+3. **Payment.** The host that was paid. Under it, the agent and the time in UTC. Hover it to see the paid URL, with secrets removed.
+4. **Amount.** The value in US dollars, over the exact amount in the token's smallest unit (**atomic**). **Value unknown** means Quard does not know the token's dollar value.
+5. **Payee.** The wallet the money goes to, shortened, such as `0xBAD0…0001`. Hover it for the full address.
+6. **Network.** The chain, such as **Base Sepolia**. A network Quard does not know shows as recorded, such as `eip155:999`. Hover it for the recorded name.
+7. **Status.** How far the payment got. See the table below. Hover it to see the reason, when there is one, such as `x402_untrusted_payee`.
+8. **Transaction.** The transaction hash, shortened, with the full hash on hover. On Base, Base Sepolia, Ethereum, Polygon, Avalanche and Solana it links to a block explorer, such as BaseScan, in a new tab. **None** means there is no hash, such as for a refused payment.
+
+| Status              | Square | Meaning                                                              |
+| ------------------- | ------ | -------------------------------------------------------------------- |
+| Price asked         | Hollow | The server named a price. Nothing was paid in this row               |
+| Refused             | Red    | The x402 guard refused the payment before the wallet signed it       |
+| Signed              | Grey   | The wallet signed the payment and sent it. No settlement is recorded |
+| Settled             | Grey   | The server settled the payment                                       |
+| Paid, not delivered | Amber  | The server settled the payment, then answered with an error          |
+| Failed              | Red    | Settling failed, or the server turned the payment down               |
+
+When a payment was paid but not delivered, an amber line above the table says so, such as **1 payment paid, not delivered**, with the note **The server settled, then answered with an error.**
+
+The x402 guard's checks are not steps in the timeline. A refused payment shows here as **Refused**. When the paid call ran inside a guarded tool, that tool call shows **Blocked** in the timeline. See [When a payment is refused](/concepts/payments#when-a-payment-is-refused).
+
+A run with no payments has no **Payments** section.
+
+### The run graph
+
+The agent that started the run is at the top, and the agents it handed work to sit under it. Each agent shows its model, how many steps it took and what its model calls cost. **untrusted** marks an agent with a step that ran on untrusted context. Click an agent's name to open its [agent page](/guides/agents#agent-page).
+
+Under each agent that was handed work, a line says how the work reached it, such as **Message · 13.6 s**: a **Message**, **Delegation** or **Handoff**, and how long after the run started. **untrusted** on that line means what it carried was untrusted. Hover the line to see who sent it, and over which channel.
+
+Under the agents, **1 message** (or the number there were) opens the list of every message, delegation and handoff in the run, in time order. Each row shows the time since the run started, the kind, the sender and the receiver, the channel when there is one, the labels of what it carried, and the start of its text. Click it again to fold the list. A run with none reads **No messages**. See [Multi-agent](/concepts/multi-agent) for how messages carry labels.
+
+### Run limits
+
+This pane is for the [run limits](/concepts/run-limits). The dashboard does not read run limit use yet, so it reads **No limits reported**. Each limit check still shows on the timeline as a **Limit guard** decision, with the limit in **Rule**, such as `max-depth`.
 
 ## Look at one step
 
-Click a cell in the timeline, or a row in its table, to open the step in the drawer.
+Click a cell in the timeline, or a row in its table, to open the step in the drawer. A link that ends in `?step=` and a step id opens the run with that step open. [Search](/guides/search) results link this way.
 
 ![A step in the drawer](/images/guides/run-step.webp)
 
-1. **Step.** The tool, model or rule name, the step id with a copy button and a one-line summary of what happened.
-2. **Details.** The kind of step, the agent, its status, when it started and how long it took. **Context** is the label of everything the agent had read before this step, with the origin that made it untrusted. **Parent step** is the step that led here.
-3. **Arguments.** Each argument of a tool call with where its value first appeared. **First seen in** names the origin, then the agent, the time and how the value matched: an exact match, found inside a longer value, the same host or the same domain. **+1 more** means it appeared in other places too. **model-generated** means the value appeared nowhere earlier in the run. **not traced** means the value is a plain word, date or amount, which Quard does not trace on its own.
+1. **Step.** The tool, model or rule name.
+2. **Step id.** The full step id. **Copy** copies it. Under it, a one-line summary, such as the first argument of a tool call, or the reason for a guard decision.
+3. **Details.** The step's kind, agent and status. **Started** is the time in UTC, then the time since the run started. **Took** is how long it ran, with **so far** while it waits. **Context** is the step's context label, with the origin that set it. **Parent step** is the id of the step that led here.
+4. **Arguments.** Each argument of a tool call with where its value first appeared. See [Arguments](#arguments).
 
-Other sections show what the step has. A guard decision shows the guard, rule, mode and reason. A model call shows its tokens, its cost and the tools it asked for. A tool call shows the label of its output, and a failed step shows its error. A call waiting for a person shows its request, with a link to answer it.
+The drawer adds a section for what the step has:
 
-The open step is part of the page address, so you can share a link that opens it.
+| Section        | Shows for                   | What it says                                                                                                                                   |
+| -------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Error          | A failed step               | The error message                                                                                                                              |
+| Guard decision | A guard decision            | See [Guard decisions](#guard-decisions)                                                                                                        |
+| Arguments      | A tool call                 | Each argument and where its value came from. **No arguments** when the call has none                                                           |
+| Model          | A model call                | The model, its input, cached and output tokens, its cost and the tools it **Asked for**. **No price for this model** means the cost is unknown |
+| Output         | A tool call that returned   | The origin chip of what the tool returned                                                                                                      |
+| Approval       | A call waiting for a person | The request id, its state, who decided (**Nobody yet** while it waits) and the arguments hash. **Answer in Approvals** opens the request       |
+
+The step's status reads **Ok**, **Failed**, **Blocked** or **Waiting**.
+
+The drawer has no section for payments. A tool call that paid, such as `fetchPaid`, opens like any other tool call. Its payment is in the run's [Payments](#payments) table.
+
+### Arguments
+
+Each argument shows its name, its kind and its value. A nested argument is named by its path, such as `lines[0].amount`. The kind is `iban`, `email`, `url`, `path`, `id`, `domain`, `amount` or `text`. **masked** means the value is shown masked, such as `GB82…5432`.
+
+The line under the value says where the value came from:
+
+- **First seen in** names the origin where Quard first saw the value. Under it: the agent that read it, the time since the run started, and how the value matched: **exact match**, **found inside** a longer value, **same host** or **same domain**. **+1 more** means it was seen in other places too.
+- **model-generated**, with an amber sign, means the value appeared nowhere earlier in the run. The model wrote it.
+- **not traced** means the value has nothing Quard traces, such as an amount or plain words.
+
+In the screenshot, the billing agent's IBAN was first seen in the web page the orchestrator read, though the billing agent never opened that page. See [Value tracing](/concepts/value-tracing).
+
+### Guard decisions
+
+![A guard decision in the drawer](/images/guides/run-step-guard.webp)
+
+1. **Parent step.** The call this guard checked. Its id matches the tool call's step id.
+2. **Guard decision.** What the guard decided and why.
+
+| Row        | What it shows                                                                                                                           |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Decision   | **Blocked**, **Asked a human**, **Allowed**, **Passed**, **Stripped** or **Flagged**. In observe mode, **Would block** or **Would ask** |
+| Guard      | Source, action, approval, egress or limit guard, permission check or signature feed                                                     |
+| Tool       | The tool the guard checked                                                                                                              |
+| Rule       | The rule that decided, such as `iban:from`                                                                                              |
+| Rules hash | Which version of your rules was in force                                                                                                |
+| Mode       | **Enforce**, **Observe**, or **Always asks** for an approval guard                                                                      |
+| Degraded   | **Yes, sent late** when the decision reached Quard after the fact, for example while its backend was down                               |
+| Jev score  | For a source guard, the risk score from Jev, Quard's [detector](/concepts/labels#labels-and-ai), from 0 to 1, or **Not scored**         |
+
+Under the rows, the reason code, such as `value_not_from_allowed_origin`. The summary under the step id says the same reason in plain words. A source guard also lists what it found in the content, such as `instructions` or `invisible_text`.
+
+Permission checks that let a call through are not shown as steps. A permission check shows only when it stopped something.
+
+## What you can click
+
+| Area         | Element                                  | What it does or where it goes                                       |
+| ------------ | ---------------------------------------- | ------------------------------------------------------------------- |
+| Runs list    | Search field                             | Filters runs by id, agent, tool or status. `/` jumps to it          |
+| Runs list    | **All agents**                           | Shows the runs of one agent                                         |
+| Runs list    | **All statuses**                         | Shows the runs with one status                                      |
+| Runs list    | Refresh button                           | Loads the list again                                                |
+| Runs list    | A row                                    | Opens the run                                                       |
+| Runs list    | **Clear filters**                        | Clears search and filters, when nothing matches                     |
+| Runs list    | Count                                    | Says on hover whether it counts all runs or the matches             |
+| Runs list    | **Unknown** spend                        | Shows on hover the part of the spend with a known value             |
+| Run header   | **Runs**                                 | Goes back to the list                                               |
+| Run summary  | **Unknown** spend                        | Shows on hover the part of the spend with a known value             |
+| Run header   | Full run id                              | Copies it. A short note confirms                                    |
+| Run header   | **Open incident**                        | Opens the run's incident                                            |
+| Run header   | **Open approval**                        | Opens the request this run left open                                |
+| Waiting line | **Review in Approvals**                  | Opens the request the call waits on                                 |
+| Timeline     | **Table** / **Chart**                    | Switches between the cells and a table                              |
+| Timeline     | A cell                                   | Opens the step. Hover for a readout                                 |
+| Timeline     | Arrow keys, Home, End, Enter, Escape     | Move between steps and open one                                     |
+| Timeline     | A table row                              | Opens the step                                                      |
+| Timeline     | A lane name                              | Shows the full agent name on hover                                  |
+| Payments     | A payment's host                         | Shows the paid URL on hover                                         |
+| Payments     | Payee                                    | Shows the full wallet address on hover                              |
+| Payments     | Network                                  | Shows the network as recorded on hover                              |
+| Payments     | Status                                   | Shows the reason on hover, when there is one                        |
+| Payments     | Transaction                              | On a known network, opens it on a block explorer in a new tab       |
+| Run graph    | An agent name                            | Opens the agent page                                                |
+| Run graph    | **1 message** (or the number there were) | Shows or hides every message, delegation and handoff, in time order |
+| Step drawer  | **Copy**                                 | Copies the step id. It reads **Copied** for a moment                |
+| Step drawer  | Origin chip                              | Shows its origin, trust and sensitivity on hover                    |
+| Step drawer  | **Answer in Approvals**                  | Opens the request, while the call waits                             |
+| Step drawer  | Close button or Escape                   | Closes the drawer                                                   |
+
+## With no data yet
+
+Before your first run, the runs list shows its toolbar and column titles with **No runs yet** under them. The count beside the title reads 0.
+
+A run that has no steps yet shows its lanes empty, with **No steps yet** in the first one, and its table says the same. The **Untrusted context** readout shows **—**.
+
+While a page loads, grey blocks stand in for the toolbar, rows, tiles and lanes. If the list cannot load, it says **Could not load runs.** If a run cannot load, it says **This run could not be loaded.** Both have a **Try again** button.
+
+A run id is 32 hex characters. A link with a wrong or unknown id shows **Run not found**, with **Back to runs**.

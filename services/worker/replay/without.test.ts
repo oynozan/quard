@@ -7,18 +7,23 @@ const other = { type: "function_call_output", call_id: "call_2", output: "ok" };
 
 describe("withoutContent", () => {
     it("removes the suspect tool result and keeps the call that asked for it", () => {
-        expect(withoutContent([null, call, page, other], "call_1")).toEqual([
-            null,
-            call,
-            { ...page, output: REMOVED },
-            other,
-        ]);
+        expect(withoutContent([null, call, page, other], ["call_1"])).toEqual({
+            callId: "call_1",
+            input: [null, call, { ...page, output: REMOVED }, other],
+        });
+    });
+
+    it("removes only the first suspect the input holds", () => {
+        expect(withoutContent([call, page, other], ["call_9", "call_2", "call_1"])).toEqual({
+            callId: "call_2",
+            input: [call, page, { ...other, output: REMOVED }],
+        });
     });
 
     it.each([
-        ["no call id", null],
-        ["a call id with no result in the input", "call_9"],
-    ])("finds nothing to remove with %s", (_what, callId) => {
-        expect(withoutContent([call, page], callId)).toBeUndefined();
+        ["no call ids", []],
+        ["call ids with no result in the input", ["call_9"]],
+    ])("finds nothing to remove with %s", (_what, callIds) => {
+        expect(withoutContent([call, page], callIds)).toBeUndefined();
     });
 });

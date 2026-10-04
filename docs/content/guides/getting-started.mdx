@@ -1,6 +1,6 @@
 # Getting started
 
-The dashboard is where your team watches agents, answers approvals and looks into incidents. This page covers signing in and finding your way around.
+The dashboard is where your team watches agents, answers approvals and looks into incidents. This page covers signing in, finding your way around, and the controls every page shares.
 
 ## Sign in
 
@@ -8,36 +8,215 @@ There are no passwords. Sign in with your GitHub account, or with a one-time cod
 
 ![The sign-in page](/images/guides/sign-in.webp)
 
-1. **Continue with GitHub.** Signs you in with your GitHub account.
+1. **Continue with GitHub.** Sends you to GitHub to sign in, then brings you back. While it opens, the button reads **Opening GitHub…**.
 2. **Email.** Your email address.
-3. **Email me a code.** Sends a code to that address. Enter it on the next screen to sign in. If it doesn't arrive, choose **Send a new code**.
+3. **Email me a code.** Sends a 6-digit code to that address.
 
-Any verified email address or GitHub account can sign in. You stay signed in for 7 days, or until you sign out.
+The line under **Sign in to Quard** says what is happening: **Loading sign-in…** while the page gets ready, **Code sent to** your address, **Signing in…** and **Opening Quard…** at the end, and **You are signed out.** after you sign out. The buttons stay greyed out until the page is ready.
 
-Everyone who signs in can use every page and answer approvals. Every approval records who answered it.
+### Sign in with an email code
+
+1. Type your email address and click **Email me a code**.
+2. The form changes. The field label reads **Code sent to** your address. Type the 6 digits. The field takes numbers only.
+3. Click **Sign in**. It turns on once all 6 digits are in. While the code is checked, it reads **Checking code…**.
+
+If the code doesn't arrive, click **Send a new code**. To use a different address, click **Use another email**. After 5 wrong codes, the field locks and you need a new code.
+
+### After you sign in
+
+You land on the page you were trying to open, or on the overview. Opening the sign-in page while you are signed in takes you to the dashboard.
+
+Anyone with a verified email address or a GitHub account can sign in. You stay signed in for 7 days, or until you sign out. Everyone who signs in can use every page and answer approvals. Every approval records who answered it.
+
+On your own computer, the person running Quard can skip sign-in by setting `QUARD_SKIP_SIGN_IN=1` for the dashboard. Everyone is then signed in as `dev@localhost`. Production ignores this setting.
+
+### If sign-in fails
+
+A grey box under the form says what went wrong. The common ones:
+
+| Message                                                                                 | What it means                                                                 |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Enter a valid email address.**                                                        | The address is missing a part, such as the `@` or the domain                  |
+| **That code did not work. Check it or send a new one.**                                 | The code is wrong                                                             |
+| **Too many tries. Send a new code.**                                                    | 5 wrong codes were entered. Click **Send a new code**                         |
+| **Too many attempts. Wait a minute, then try again.**                                   | Too many sign-in attempts in a short time                                     |
+| **Use an email address without a + part.**                                              | This sign-in setup doesn't accept addresses such as `name+tag@company.com`    |
+| **GitHub sign-in was cancelled.**                                                       | You said no on GitHub's page                                                  |
+| **Sign in with email or GitHub.**                                                       | The sign-in used another method. Only email codes and GitHub work             |
+| **Your browser did not keep the sign-in. Allow cookies for this site, then try again.** | Sign-in finished, but the browser dropped the cookie that keeps you signed in |
+| **Sign-in is not available right now. Try again in a minute.**                          | The sign-in service did not load, or the server could not use it              |
+
+If the page reads **Sign-in could not start**, click **Try again**. When it also says **Open this page over HTTPS, or on localhost.**, the dashboard was opened over plain `http` on another address, where sign-in can't run.
+
+If the page reads **Sign-in is not set up**, the server is missing a setting. In development the page lists what to fix. In production it only reads **Sign-in is not available** and the details go to the server log.
 
 ## Find your way around
 
 ![The sidebar](/images/guides/shell.webp)
 
-1. **Main pages.** Overview, Runs, Approvals, Incidents, Agents, Summary and Search. The page you are on has a green label. Approvals shows a count while requests are waiting.
-2. **Settings.** Agent keys, accounts, retention, and the rules your code reports.
-3. **Review approvals.** A shortcut to the Approvals page. It says how many requests are waiting.
-4. **Your account.** Who you are signed in as, by email or GitHub name. It opens settings.
-5. **Sign out.** Signs you out of the dashboard.
+1. **Quard.** The logo. It opens the overview.
+2. **Main pages.** [Overview](/guides/overview), [Runs](/guides/runs), [Approvals](/guides/approvals), [Incidents](/guides/incidents), [Agents](/guides/agents), [Summary](/guides/summary) and [Search](/guides/search). The page you are on has a green label on a raised tile. While requests are open, **Approvals** shows how many.
+3. **Settings.** Under **Workspace**. Agent keys, accounts, retention, and the rules your code reports. See [Settings](/guides/settings).
+4. **Approvals button.** A shortcut to the Approvals page. It reads **Review 2 approvals**, with the number of open requests, or **Open approvals** when none are open.
+5. **Your account.** Who you are signed in as: your email, or your GitHub name. The small line under it shows your GitHub name when you have both, **GitHub** when you signed in with GitHub only, or **Signed in**. Click it to open Settings.
+6. **Sign out.** Signs you out and takes you back to the sign-in page. If it fails, a note in the bottom-right corner reads **Sign-out failed. Try again.**
 
-On small screens, the sidebar folds into a menu button at the top of the page.
+The sidebar counts update by themselves, like the rest of the page. See [Live updates](#live-updates).
 
-## Reading the screens
+### On a small screen
 
-A few patterns repeat on every page. For any word you don't know, see the [glossary](/glossary).
+Below 760 pixels wide, the sidebar hides. A bar at the top shows a menu button and the name of the page you are on. The menu button opens the sidebar over the page. To close it, click the button again, press Escape, click the dimmed page, or choose a page.
 
-- **Origin chips.** A small tag such as `web:supplier-portal.example untrusted` says where content came from. Untrusted origins have a warm color. Hover a chip to see its origin, trust and sensitivity.
-- **Status squares.** A small square before a word shows state: green for running, amber for waiting on a person, red for blocked or failed, and grey for done or idle.
-- **Clickable rows.** A row that opens something ends in a chevron and lights up on hover. Click anywhere on it.
-- **Charts.** Every chart has a **Table** button that shows the same numbers as a table. Hover a chart, or move through it with the arrow keys, to read exact values.
-- **The drawer.** Details open in a panel on the right. Press Escape or the close button to go back.
-- **Hints.** When a button does more than its label says, hover or focus it to see a short hint.
-- **Masked values.** IBANs, card numbers and emails are shown masked, such as `DE89…3000`. An open approval request shows the full values, so you see exactly what will run. They are cleared once someone answers it.
-- **Links you can share.** Filters, searches and open steps are part of the page address. Copy the link to share exactly what you see.
-- **Empty pages.** Every page shows real data from your agents. Before the first run, its charts and tables stay in place, drawn empty with a short note such as "No runs yet".
+### With the keyboard
+
+The first Tab on a page shows **Skip to content**. Press Enter to jump past the sidebar to the page. Tab moves through links and buttons, and the focused one gets a green outline.
+
+## Common controls
+
+These patterns work the same on every page. For any word you don't know, see the [glossary](/glossary).
+
+### Colors
+
+| Color      | What it means                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| Green      | Live, running or selected. Chart cells with data, and the main button in a form              |
+| Grey       | Normal or done. Allowed calls, completed runs, and chart cells with no data                  |
+| Amber      | Needs a look. Calls that waited for a person, runs that wait, and values above a review line |
+| Red        | Stopped. Blocked calls and failed or blocked runs                                            |
+| Warm brown | Untrusted content, and the box before an action you can't undo                               |
+
+Errors in the dashboard itself, such as a page that could not load, show in a plain grey box, never in red.
+
+### Status squares
+
+A small square before a word shows a state.
+
+| Square | Meaning                |
+| ------ | ---------------------- |
+| Green  | Running, or live       |
+| Amber  | Waiting on a person    |
+| Red    | Blocked or failed      |
+| Grey   | Completed              |
+| Hollow | Idle, or not connected |
+
+### Chips and tags
+
+- **Origin chips.** A small tag such as `web:supplier-portal.example untrusted` says where content came from and whether it is trusted. Untrusted origins have the warm color. Hover a chip to see its origin, trust and sensitivity. See [Labels and trust](/concepts/labels).
+- **Count chips.** A small number beside a title or a filter counts what it holds. It shows **—** while the number is still loading.
+- **Grey chips.** A flat grey chip names a kind or a category. Its color has no meaning.
+- **Pane tags.** The short text at the right of a pane's title bar says what the pane covers. **24H** is the last 24 hours, **30D** the last 30 days, and **UTC** means the times are in UTC. Some tags count instead, such as **LAST 40** for the 40 latest items.
+- **Amber line.** A thin amber line on the left of a note marks something that needs attention.
+
+### Values
+
+- **Masked values.** IBANs, card numbers and emails are cut short so the full value never shows. An IBAN keeps its first and last four characters, such as `DE89…3000`. An email keeps its first letter and its domain, such as `j…@acme.com`. A card number keeps only a few of its digits. An open approval request shows the full values, so you see exactly what will run. They are cleared once someone answers it.
+- **Short ids.** Run and step ids are long. Lists show the first 8 characters, such as `4bf92f35`. The run page shows the full run id. Click it to copy it.
+- **Short hashes.** Hashes show their first 12 characters.
+- **Times.** Clock times and dates are in UTC. Ages such as `4 min ago`, `3 h ago` or `2 d ago` are rounded and count from when the page last loaded its data.
+- **Missing values.** **—** means a value is unknown, or there is no data to show. Words such as **None** or **Not set** in grey mean nothing is there.
+- **Durations and costs.** Durations read `18 ms`, `1.4 s` or `2 min 5 s`. Costs under a cent show more decimals, such as `$0.0042`.
+
+### Charts
+
+![A chart pane](/images/guides/chart-pane.webp)
+
+1. **Title.** What the chart measures.
+2. **Tag.** The time the chart covers. See [Chips and tags](#chips-and-tags).
+3. **Table.** Shows the same numbers as a table. The button then reads **Chart**. Click it to go back.
+4. **Readout.** A label and a number over the chart, such as the total. It shows **—** when there is no data.
+5. **Chart.** Charts are drawn in small square cells. Green cells hold the data. Grey cells are the empty field behind it.
+
+The numbers on the left of a chart are its scale. The times under it mark its time axis, in UTC.
+
+To read an exact value, hover the chart. The column or bar under the pointer turns light green, and a small box shows its value and the time or bucket it covers. Its label on the axis below stands out.
+
+With the keyboard, press Tab until the chart has a green outline. Then use the arrow keys to move from column to column. The first press lands on the newest column, or on the top bar in a ranked chart. Home and End jump to the first and the last. Escape hides the readout. In a grid of cells, the arrow keys move in all four directions, and Home and End stay in the row.
+
+Some charts show their y-axis numbers only while you hover or focus them. A grid chart has a scale on the right, from **0** to its top step. Brighter green cells mean more.
+
+While a chart loads, its cells stay grey and a lighter band sweeps across them. Its readouts show grey bars. A chart with no data keeps its grey field and shows a short sentence in the middle, such as **No data in this range**. Its axis shows **—**. Its table reads **No data**, or a sentence that fits the chart.
+
+### Tables and clickable rows
+
+A row that opens something lights up when you hover it and ends in a chevron (`›`) that brightens. Click anywhere on the row: the whole row is one link. With the keyboard, Tab to the row and press Enter. Rows that open nothing don't light up.
+
+A link inside text is underlined, so you can tell it is a link before you hover it. A link with words and a chevron, such as **View all**, goes to a fuller page.
+
+### Buttons and hints
+
+The green button is the main action in a form. When a button does more than its label says, hover or focus it for a moment to see a short hint. While a button works, it shows a small spinning ring and its label names the step, such as **Sending code…**.
+
+Short notes, such as **Run id copied**, show for a moment in the bottom-right corner.
+
+### Copy buttons
+
+A **Copy** button copies the value beside it. Its label turns green and reads **Copied** for a moment. If the browser doesn't allow copying, it reads **Copy unavailable**. Clicking the full run id on a run page copies it too, and a note confirms it.
+
+### Drawers
+
+Details open in a panel over the right side of the page. Its title repeats what you clicked. To close it, click the **X** at the top right, press Escape, or click the dimmed page beside it.
+
+### Filters, tabs and menus
+
+- **Segmented filters.** A row of words where one is always chosen. The chosen one has a green label on a raised tile. Some carry a count chip.
+- **Tabs.** They look like segmented filters and switch between parts of a page.
+- **Menus.** A small box with a down arrow opens a list. The chosen item has a green tick. Escape closes only the list.
+
+### Search fields
+
+A search field has a magnifier at the start and a `/` key hint at the end. Press `/` anywhere on the page to jump to it, unless you are typing in another field or a drawer is open. Phones don't show the hint.
+
+### Links you can share
+
+Filters, searches, tabs and an open step are part of the page address. Copy the address to share exactly what you see.
+
+### Live updates
+
+The dashboard keeps one connection to Quard open. When runs, approvals or fleet checks change, the page loads the new data by itself, at most once a second. A run page only reloads for its own run. A drawer you have open, text you typed and filters you chose stay as they are. A tab in the background catches up when you come back to it.
+
+**Live** with a green square means the connection is open. **Offline** with a hollow square means it dropped. The dashboard reconnects by itself and catches up once it is back. While offline, the blinking green cell at the end of a live chart or log is gone.
+
+### Empty, loading and error states
+
+- **No data yet.** Every page shows only real data from your agents. Before the first run, charts and tables stay in place, drawn empty with a short note such as **No runs yet**.
+- **Loading.** Grey bars stand in for text and rows, at their real size.
+- **Errors.** A grey box says what could not load, such as **Could not load runs.** Click **Try again**. The sidebar keeps working.
+- **Not found.** A link to something that doesn't exist reads **Run not found**, **Agent not found** or **Incident not found**, with a button back to its list. Any other address reads **Page not found**, with **Search runs** and **Go to overview**. Old runs may have been deleted by [retention](/guides/settings#retention).
+
+## What you can click
+
+| Area          | Element                                                       | What it does                                     |
+| ------------- | ------------------------------------------------------------- | ------------------------------------------------ |
+| Sign-in page  | **Continue with GitHub**                                      | Signs you in with GitHub                         |
+| Sign-in page  | **Email** field                                               | Takes your email address                         |
+| Sign-in page  | **Email me a code**                                           | Sends a 6-digit code to that address             |
+| Sign-in page  | Code field                                                    | Takes the 6 digits, numbers only                 |
+| Sign-in page  | **Sign in**                                                   | Checks the code and signs you in                 |
+| Sign-in page  | **Use another email**                                         | Goes back to the email field                     |
+| Sign-in page  | **Send a new code**                                           | Sends a fresh code to the same address           |
+| Sign-in page  | **Try again**                                                 | Loads sign-in again, when it could not start     |
+| Sidebar       | **Quard** logo                                                | Opens the overview                               |
+| Sidebar       | Overview, Runs, Approvals, Incidents, Agents, Summary, Search | Open those pages                                 |
+| Sidebar       | **Settings**                                                  | Opens Settings                                   |
+| Sidebar       | **Review approvals** / **Open approvals**                     | Opens the Approvals page                         |
+| Sidebar       | Your account                                                  | Opens Settings                                   |
+| Sidebar       | Sign out icon                                                 | Signs you out. Hover for a hint                  |
+| Small screens | Menu button                                                   | Opens or closes the sidebar                      |
+| Small screens | Dimmed page                                                   | Closes the sidebar                               |
+| Any page      | **Skip to content**                                           | Shows on the first Tab. Jumps past the sidebar   |
+| Any page      | `/` key                                                       | Jumps to the search field                        |
+| Charts        | **Table** / **Chart**                                         | Switches between the chart and its table         |
+| Charts        | Hover, or arrow keys, Home and End                            | Show the exact value of a column, bar or cell    |
+| Charts        | Escape                                                        | Hides the readout                                |
+| Lists         | A row with a chevron                                          | Opens what the row shows                         |
+| Lists         | Underlined link, **View all**                                 | Opens the linked page                            |
+| Lists         | Origin chip                                                   | Shows its origin, trust and sensitivity on hover |
+| Details       | **Copy**                                                      | Copies the value beside it                       |
+| Details       | Full run id                                                   | Copies it                                        |
+| Drawers       | **X**, Escape or the dimmed page                              | Close the drawer                                 |
+| Filters       | A segmented option or tab                                     | Chooses it                                       |
+| Filters       | A menu                                                        | Opens its list. Escape closes it                 |
+
+## With no data yet
+
+Before your agents send anything, the frame looks the same. **Approvals** in the sidebar shows no count, and the button reads **Open approvals**. Every page keeps its charts and tables in place, drawn empty. To send your first events, see the [SDK](/sdk).

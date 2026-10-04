@@ -1,0 +1,175 @@
+# OpenAI Agents SDK
+
+The `quard/openai-agents` entry point connects Quard to the OpenAI Agents SDK for JavaScript. `quardRunner()` gives you the SDK's own `Runner`, with every model call going through a wrapped client and every agent switch recorded. `guardedTool()` is the SDK's `tool()` with each call run through Quard's guards. The [integration guide](/integrations/openai-agents) shows how to set it up. This page gives the API.
+
+```ts
+import { guardedTool, quardRunner } from "quard/openai-agents";
+import type { GuardedToolOptions, QuardRunnerOptions } from "quard/openai-agents";
+```
+
+## Install
+
+| Package          | Version   | Notes                                                                                          |
+| ---------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| `quard`          |           | The entry point is part of the same package                                                    |
+| `@openai/agents` | `^0.18.0` | An optional peer dependency. Install it yourself. The main `quard` entry point doesn't need it |
+| `openai`         |           | The client you pass to `quardRunner()`                                                         |
+
+Node 22.12 or later. Set up Quard with [`quard.configure()`](/sdk/reference/configure) as usual.
+
+## Exports
+
+| Export               | Kind     | What it is                                                            |
+| -------------------- | -------- | --------------------------------------------------------------------- |
+| `quardRunner`        | Function | Returns the SDK's `Runner`, with model calls through a wrapped client |
+| `guardedTool`        | Function | The SDK's `tool()`, with every call run through Quard's guards        |
+| `QuardRunnerOptions` | Type     | The options of `quardRunner()`                                        |
+| `GuardedToolOptions` | Type     | The options of `guardedTool()`                                        |
+
+## quardRunner()
+
+```ts
+function quardRunner(options: QuardRunnerOptions): Runner;
+
+type QuardRunnerOptions = Partial<Omit<RunConfig, "modelProvider">> & {
+    client: OpenAIClient;
+};
+```
+
+| Option          | Type                  | What it does                                                                                                  |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `client`        | `OpenAIClient`        | Your OpenAI client. Quard wraps it with [`quard.wrap()`](/sdk/reference/quard#quardwrap) unless it already is |
+| any other field | the SDK's `RunConfig` | Passed to the `Runner` as it is, such as `tracingDisabled`. `modelProvider` is not accepted: Quard sets it    |
+
+The runner's model provider is the SDK's `OpenAIProvider`, with the wrapped client, the Responses API, and no WebSocket. So Quard sees each model call over HTTP, records it and checks the [run limits](/sdk/reference/run-limits#steps-and-cost) on steps and cost.
+
+### Runs and agents
+
+- **One run per `run()`.** Inside `quard.run()`, a `run()` joins that run, and the run ends with the scope. Outside it, a `run()` starts a new Quard run named after the first agent. The run ends when the result is ready, or for a streamed run, when the stream ends.
+- **The agent comes from the framework.** Model calls and guarded tools carry the agent the SDK is running.
+- **Handoffs** switch the agent in place. The new agent's parent step is the step that handed over, and the delegation depth stays the same.
+- **Agents run as tools**, with `agent.asTool()`, run under their own name, one level deeper, below the model call that asked for them. Their input, the caller's brief, is labeled `agent:<caller>` with the run's context label at that moment. A team's override for that origin still wins. In a trusted brief, values the run hasn't seen before are model-generated.
+- **The SDK's own tools**, its handoff tools and agent tools, are not app tools. Quard doesn't warn that they are unwrapped. The output the SDK writes for a handoff is labeled as `system` content.
+- **Runs stopped for approval.** A run stopped by the SDK's own `needsApproval` stays open. Resumed from `result.state`, or from a state rebuilt in the same process, it goes on in the same Quard run with the agent it stopped at. A run that stopped inside `quard.run()` ends with that scope. A state resumed in another run, or a second time, brings the labels of the run it stopped in.
+
+The SDK's handoffs are not delegate calls, so they don't count toward the fan-out or loop limits. To check those, give the tool that sends work a guard with [`delegateTo`](/sdk/reference/run-limits#delegateto).
+
+### The handoff event
+
+Each agent switch records a `handoff` event:
+
+| Field                  | What it holds                                                               |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `agent`                | The agent that handed over                                                  |
+| `stepId`               | The step that handed over                                                   |
+| `to`                   | The agent that takes over                                                   |
+| `via`                  | `"handoff"` for a handoff, `"tool"` for an agent run as a tool              |
+| `trust`, `sensitivity` | The run's [context label](/concepts/labels#the-context-label) at the switch |
+
+## guardedTool()
+
+```ts
+function guardedTool<TParameters, Context, TOutputSchema>(
+    options: GuardedToolOptions<TParameters, Context, TOutputSchema>,
+): FunctionTool<Context, TParameters>;
+
+type GuardedToolOptions<TParameters, Context, TOutputSchema> = ToolOptions<TParameters, Context, TOutputSchema> & {
+    guard: GuardOptions | GuardOptions[];
+};
+```
+
+| Option          | Type                             | What it does                                                                                                        |
+| --------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `guard`         | `GuardOptions \| GuardOptions[]` | One [guard](/sdk/reference/guard) or a list. Each one takes the tool's name. A `name` you set in it is replaced     |
+| any other field | the SDK's `tool()` options       | Passed to `tool()`: `name`, `description`, `parameters`, `execute`, `outputSchema`, `outputGuardrails` and the rest |
+
+- Every call runs through the same steps as [`guard()`](/sdk/reference/guard#the-steps-of-a-call). Only the input is checked. `execute` still gets the run context and the call details.
+- The tool's output guardrails start with Quard's own, named `quard`. Yours run after it, so they see what the model sees.
+- A [policy file](/sdk/reference/policy-file) entry for the tool's name replaces its guard options, as with `guard()`.
+
+### When a guard blocks
+
+| `onBlock`            | What happens                                                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"return"` (default) | The `quard` guardrail rejects the output. The model reads Quard's [refusal](/sdk/reference/refusals#guardrefusal) text as the tool result, and `result.toolOutputGuardrailResults` holds the refusal                                              |
+| `"throw"`            | The run stops, and `run()` rejects with [`GuardBlockedError`](/sdk/reference/refusals#guardblockederror). Its `cause` is the SDK's `ToolCallError`. A streamed run gives the same error through `result.completed`, its events and `result.error` |
+
+Inside an agent run as a tool, `onBlock: "throw"` stops only that agent's run. The calling agent reads the error as the tool result.
+
+### Output schemas
+
+With `outputSchema`, real results are checked against it, as the SDK does. A refusal is not checked, so the model still reads it. For a zod schema, the SDK shows the model the JSON schema, and Quard checks real results with the zod schema. A result that fails throws the SDK's `InvalidToolOutputError`.
+
+### Approvals and aborted calls
+
+- An [approval guard](/sdk/reference/approval-guard) waits inside the call for an answer, from the dashboard or your `approver`. The SDK's own `needsApproval` still works beside it.
+- The SDK gives up on a call on the tool's `timeoutMs`, when the app aborts the run, or when a sibling call fails. Quard gets the SDK's abort signal. The wait stops, the call uses up no limits, and the tool never runs. A call aborted after its checks is refused by the `abort` guard with the reason `call_aborted`.
+
+## How it hooks in
+
+| What Quard changes                                         | When                             | Why                                                                                                                                  |
+| ---------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `Runner.prototype.run`                                     | The first `quardRunner()` call   | To follow agents run as tools, which run on a new `Runner`. Only runners whose model provider came from `quardRunner()` are followed |
+| `Agent.prototype.getEnabledHandoffs`                       | The first `quardRunner()` call   | To mark each handoff tool offered inside a Quard run, so its output reads as `system` content                                        |
+| The runner's `agent_handoff` and `agent_tool_start` events | The first `run()` of each runner | To switch the agent on a handoff, and to find the model step behind each tool call                                                   |
+| The tool's `execute` and `outputGuardrails`                | Each `guardedTool()` call        | To run the guards and turn a block into the SDK's guardrail behavior                                                                 |
+
+Runners without a `quardRunner()` provider run as before. So do runs started with the SDK's `run()` function, and agent tools with their own `runConfig.modelProvider`. An agent whose `model` is a `Model` object, not a name, skips the wrapped client: its model calls are not recorded, but its guarded tools still carry the right agent.
+
+## Example
+
+```ts
+import OpenAI from "openai";
+import { Agent } from "@openai/agents";
+import { z } from "zod";
+import { guardedTool, quardRunner } from "quard/openai-agents";
+
+const fetchPage = guardedTool({
+    name: "fetchPage",
+    description: "Read a web page",
+    parameters: z.object({ url: z.string() }),
+    execute: async ({ url }) => (await fetch(url)).text(),
+    guard: { type: "source", origin: "web" },
+});
+
+const payInvoice = guardedTool({
+    name: "payInvoice",
+    description: "Pay an invoice by bank transfer",
+    parameters: z.object({ iban: z.string(), amount: z.number() }),
+    execute: async ({ iban, amount }) => pay(iban, amount),
+    guard: { type: "action", rules: [{ field: "iban", from: ["tool:getSupplier"] }] },
+});
+
+const billing = new Agent({ name: "billing", instructions: "Pay invoices.", tools: [payInvoice] });
+const triage = new Agent({
+    name: "triage",
+    instructions: "Find the invoice, then hand off to billing.",
+    tools: [fetchPage],
+    handoffs: [billing],
+});
+
+const runner = quardRunner({ client: new OpenAI(), tracingDisabled: true });
+const result = await runner.run(triage, "Pay the invoice at https://acme-billing.net/invoices/114.");
+```
+
+The triage agent reads the page and hands off to billing. Both agents' steps land in one run. The IBAN from the page is still traced to it, so `payInvoice` is blocked and the billing agent reads the refusal.
+
+## Related
+
+- [OpenAI Agents SDK](/integrations/openai-agents): the integration guide.
+- [24. The OpenAI Agents SDK](/sdk/examples/openai-agents-sdk): this example, end to end.
+- [Multi-agent](/concepts/multi-agent): one run across many agents.
+- [Run limits](/sdk/reference/run-limits): steps and cost on the wrapped client.
+
+## Source
+
+- [`packages/sdk/integrations/openai-agents/index.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/index.ts): the exports
+- [`packages/sdk/integrations/openai-agents/runner.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/runner.ts): `quardRunner()` and `QuardRunnerOptions`
+- [`packages/sdk/integrations/openai-agents/tool.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/tool.ts): `guardedTool()` and `GuardedToolOptions`
+- [`packages/sdk/integrations/openai-agents/guardrail.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/guardrail.ts): the `quard` output guardrail
+- [`packages/sdk/integrations/openai-agents/runs.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/runs.ts): how `run()` calls are followed
+- [`packages/sdk/integrations/openai-agents/frames.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/frames.ts): agent switches and the `handoff` event
+- [`packages/sdk/integrations/openai-agents/handoffs.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/handoffs.ts): the handoff tools' output
+- [`packages/sdk/integrations/openai-agents/paused.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/paused.ts): runs stopped for the SDK's approval
+- [`packages/sdk/integrations/openai-agents/output-schema.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/integrations/openai-agents/output-schema.ts): output schema checks
+- [`packages/sdk/package.json`](https://github.com/oynozan/quard/blob/main/packages/sdk/package.json): the entry points and the peer dependency

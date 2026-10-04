@@ -1,0 +1,155 @@
+# Limit guard
+
+A limit guard caps how often a tool runs and how much it moves, per run and per day. It also runs the fleet check, which blocks a new value, such as an IBAN, once many runs suddenly use it. On a tool that sends messages or delegates work to another agent, it checks the [run limits](/sdk/reference/run-limits) on depth, fan-out and loops. It fits any tool.
+
+```ts
+type LimitOptions = {
+    type: "limit";
+    name?: string;
+    mode?: "block" | "observe";
+    onBlock?: "return" | "throw";
+    maxCallsPerRun?: number;
+    maxAmountPerRun?: { field: string; max: number };
+    maxCallsPerDay?: number;
+    maxAmountPerDay?: { field: string; max: number };
+    fleetCheck?: string[];
+    delegateTo?: string;
+};
+```
+
+## Options
+
+| Option                    | Type                             | Default | What it does                                                                                         | Rule name                               |
+| ------------------------- | -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `maxCallsPerRun`          | `number`                         | none    | The most calls to the tool in one run                                                                | `max-calls-per-run`                     |
+| `maxAmountPerRun`         | `{ field: string; max: number }` | none    | The most the `field` values of the tool's calls may add up to in one run                             | `max-amount-per-run`                    |
+| `maxCallsPerDay`          | `number`                         | none    | The most calls to the tool per UTC day, across every process of the project                          | `max-calls-per-day`                     |
+| `maxAmountPerDay`         | `{ field: string; max: number }` | none    | The most the `field` values may add up to per UTC day, across every process                          | `max-amount-per-day`                    |
+| `fleetCheck`              | `string[]`                       | none    | The fields whose IBANs, email addresses and domains the [fleet check](#the-fleet-check) watches      | `fleet-check`                           |
+| `delegateTo`              | `string`                         | none    | For a send or delegate tool: the field that names the receiving agent. See [Delegation](#delegation) | `max-depth`, `max-fan-out`, `max-loops` |
+| `name`, `mode`, `onBlock` |                                  |         | See [Options every guard has](/sdk/reference/guard#options-every-guard-has)                          |                                         |
+
+Each option you set records a `decision` event on every call that reaches the checks, under its rule name. The fleet check records one only while the control link is on.
+
+A limit guard with no limit set checks nothing, but Quard still records every call and labels the result `tool:<name>`. That is a simple way to record a trusted tool, such as your supplier records.
+
+## Per-run limits
+
+- `maxCallsPerRun: 2` lets two calls run in each run and refuses the third. `0` refuses every call.
+- `maxAmountPerRun` reads `field` from each call as a number: a number as it is, a string through `Number()`. A call without the field adds 0.
+- A call is refused when its amount would take the run's total above `max`. A negative amount, or one that isn't a number, is refused too, so it can't lower the total.
+- Counts are per tool and per run, across all of the run's agents.
+- In a run that spans processes, after [`quard.inject()` or `quard.resume()`](/sdk/reference/messages), `control` keeps the per-run counts, so every process of the run adds to one total. When `control` can't be reached, each process counts on its own and sends its counts later. See [Runs across processes](/concepts/run-limits#runs-across-processes).
+- A call counts just before it runs, after every check and any approval. A call refused before that point adds nothing.
+- The reason is `limit_reached`.
+
+## Per-day limits
+
+`maxCallsPerDay` and `maxAmountPerDay` count per UTC day, with the same amount rules as per run.
+
+- With the [control link](/sdk/reference/configure#uploads-and-the-control-link) on, `control` keeps the count for the whole project, so every process and agent shares it. Just before a call runs, Quard asks `control` to count it, and `control` refuses a count that would pass the cap.
+- When the link connects, `control` sends today's counts. A cap already reached then refuses calls at once.
+- Without the control link, per-day limits count in this process only.
+- When the link is set up but `control` can't be reached, or doesn't answer within 5 seconds, the process counts on its own. It refuses calls once its own count passes the cap, and sends its counts to `control` when it is back.
+- The reason is `daily_limit_reached`.
+
+## The fleet check
+
+The fleet check stops a new value, such as an attacker's IBAN, that many runs start to use at once. Name the fields to watch:
+
+```ts
+const payInvoice = guard(rawPayInvoice, { type: "limit", name: "payInvoice", fleetCheck: ["iban"] });
+```
+
+- Quard reads the IBANs, email addresses and main domains in the watched fields, nested values included. An email address counts both as itself and by its main domain. A URL or host name counts by its main domain.
+- It needs the control link. Without it, the fleet check does nothing.
+- Before a call, Quard checks the values against the quarantine list synced from `control`. Just before the call runs, it reports them to `control`, which answers with the values it quarantines now. IBANs and email addresses travel as keyed hashes. Domains travel as they are.
+- `control` quarantines a value first seen in the project less than 7 days ago once a fifth separate run uses it within 24 hours. The value stays blocked everywhere until someone marks it as known in the dashboard. See [Quarantine](/guides/summary#quarantine).
+- For 7 days after the project's first fleet report, and for entries `control` marks as observe only, a match is recorded as "would block" and the call runs.
+- A refused call still reports its values, marked as blocked.
+- While `control` can't be reached, Quard uses the last synced list for up to 24 hours, and keeps its reports to send later.
+- The reason is `value_quarantined`, and the refusal names the watched field.
+
+## Delegation
+
+Set `delegateTo` on the function that sends a message or hands work to another agent. Its value is the field that names the receiving agent, as a [field path](/sdk/reference/guard#how-arguments-are-checked).
+
+```ts
+const delegate = guard(rawDelegate, { type: "limit", name: "delegate", delegateTo: "to" });
+
+await delegate({ to: "billing", brief });
+```
+
+Before each call, the guard checks three [run limits](/sdk/reference/run-limits), set with [`runLimits`](/sdk/reference/configure#run-limits):
+
+| Rule          | Fails when                                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `max-depth`   | The calling agent's depth plus one is above `depth`                                                                                                     |
+| `max-fan-out` | The call would make the number of different agents this agent delegates to more than `fanOut`                                                           |
+| `max-loops`   | The call would make the turns between this agent and the receiver more than `loops`. The first handoff is turn 1, and each change of direction adds one |
+
+- When the field is missing, or isn't a non-empty string, only `max-depth` is checked.
+- These rules follow the run limits' `mode`, which is `"observe"` by default, not the guard's own `mode`.
+- The reason is `limit_reached`.
+- A call counts its helper and its turn just before it runs. A call refused before that point adds nothing.
+- Fan-out and loops are counted in each process on its own. Depth goes with the message.
+- The dashboard's list of active rules shows these under the tool `*`, as rules for the whole run, not under this tool.
+
+[Run limits](/concepts/run-limits) explains the limits without code.
+
+## Observe mode
+
+With `mode: "observe"`, passed limits are recorded as "would block" with `enforced: false`, and the call runs. Calls still count toward the totals. The delegation rules ignore this `mode` and follow the run limits' `mode`.
+
+## Reason codes
+
+| Reason                | Refusal text, after "Blocked by the limit guard:"                                |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `limit_reached`       | a limit for this run was reached                                                 |
+| `daily_limit_reached` | a daily limit for this tool was reached                                          |
+| `value_quarantined`   | the iban value is new and many runs used it at once, so it is blocked everywhere |
+
+`limit_reached` comes from the per-run limits and from the delegation rules.
+
+## Labels
+
+A limit guard doesn't label anything. Without a source guard on the same tool, the result is labeled `tool:<name>`.
+
+## Example
+
+```ts
+import { guard } from "quard";
+
+const payInvoice = guard(rawPayInvoice, {
+    type: "limit",
+    name: "payInvoice",
+    maxCallsPerRun: 3,
+    maxAmountPerRun: { field: "amount", max: 50000 },
+    maxAmountPerDay: { field: "amount", max: 200000 },
+    fleetCheck: ["iban"],
+});
+```
+
+Each run pays at most three invoices and 50,000 in total. The whole project pays at most 200,000 per UTC day.
+
+## Related
+
+- [Your first guard](/sdk/examples/first-guard): `maxCallsPerRun` on a real agent.
+- [Daily limits](/sdk/examples/daily-limits): per-day limits shared through `control`.
+- [The fleet check](/sdk/examples/fleet-check): a new IBAN quarantined across runs.
+- [Run limits](/sdk/examples/run-limits): `delegateTo` and the run limits in a runnable example.
+- [Summary](/guides/summary#quarantine): the quarantine in the dashboard.
+
+## Source
+
+- [`packages/sdk/guards/options.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/options.ts): `LimitOptions`
+- [`packages/sdk/guards/limit/limit.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/limit.ts): `checkLimit()` and `countLimit()`, the per-run limits
+- [`packages/sdk/guards/limit/delegation.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/delegation.ts): `checkDelegation()` and `countDelegation()`, depth, fan-out and loops
+- [`packages/sdk/guards/limit/run-counts.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/run-counts.ts): the counters of a run that spans processes
+- [`packages/sdk/pipeline/count/runs.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/runs.ts): `countRuns()`, per-run counts through `control`
+- [`packages/sdk/guards/limit/daily.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/daily.ts): `checkDaily()` and the per-day counts this process knows
+- [`packages/sdk/guards/limit/fleet.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/fleet.ts): `fleetValues()` and `checkFleet()`
+- [`packages/sdk/pipeline/count/count.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/count.ts): `countCall()`, which counts a call just before it runs
+- [`packages/sdk/pipeline/count/days.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/days.ts): `countDays()`, per-day counts through `control`
+- [`packages/sdk/pipeline/count/fleet.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/count/fleet.ts): `reportUse()` and `reportRefused()`
+- [`packages/shared/control/constants.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/control/constants.ts): `FLEET_CHECK`, the fleet check's numbers

@@ -1,17 +1,25 @@
-import type { Db } from "@quard/db";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { startWorker } from "./worker.ts";
+import { hostname } from "node:os";
+import type { Db, WorkerInfo } from "@quard/db";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BEAT_MS, startWorker } from "./worker.ts";
 
 const runNextJob = vi.hoisted(() => vi.fn<() => Promise<string | undefined>>());
+const beatWorker = vi.hoisted(() => vi.fn<(db: Db, worker: WorkerInfo) => Promise<void>>());
 
 vi.mock("./jobs.ts", () => ({ runNextJob }));
+vi.mock("@quard/db", () => ({ beatWorker }));
 
 const deps = { db: {} as Db, openai: undefined };
+
+beforeEach(() => {
+    beatWorker.mockResolvedValue(undefined);
+});
 
 afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     runNextJob.mockReset();
+    beatWorker.mockReset();
 });
 
 describe("startWorker", () => {
@@ -83,5 +91,66 @@ describe("startWorker", () => {
         await vi.advanceTimersByTimeAsync(1000);
         await stopped;
         expect(log.mock.calls).toEqual([["worker started"], ["worker stopped"]]);
+    });
+
+    it("records that it runs at start and every 10 s, under a new id for each process, until stopped", async () => {
+        vi.useFakeTimers();
+        runNextJob.mockResolvedValue(undefined);
+        vi.spyOn(console, "log").mockImplementation(() => {});
+
+        const worker = startWorker(deps);
+        expect(beatWorker).toHaveBeenCalledTimes(1);
+        const [db, info] = beatWorker.mock.calls[0] ?? [];
+        expect(db).toBe(deps.db);
+        expect(info).toEqual({
+            id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+            host: hostname(),
+            pid: process.pid,
+            startedAt: expect.any(Date),
+        });
+
+        await vi.advanceTimersByTimeAsync(BEAT_MS);
+        expect(beatWorker).toHaveBeenCalledTimes(2);
+        expect(beatWorker.mock.calls[1]?.[1]).toBe(info);
+
+        const stopped = worker.stop();
+        await vi.advanceTimersByTimeAsync(1000);
+        await stopped;
+        await vi.advanceTimersByTimeAsync(3 * BEAT_MS);
+        expect(beatWorker).toHaveBeenCalledTimes(2);
+
+        const other = startWorker(deps);
+        expect(beatWorker.mock.calls[2]?.[1].id).not.toBe(info?.id);
+        const otherStopped = other.stop();
+        await vi.advanceTimersByTimeAsync(1000);
+        await otherStopped;
+    });
+
+    it("logs a heartbeat that failed and keeps working", async () => {
+        beatWorker.mockRejectedValueOnce(new Error("database is down"));
+        runNextJob.mockResolvedValueOnce("find inc_1: verdict: bad input").mockResolvedValue(undefined);
+        const log = vi.fn();
+
+        const worker = startWorker({ ...deps, log, pollMs: 5 });
+        await vi.waitFor(() => expect(log).toHaveBeenCalledWith("find inc_1: verdict: bad input"));
+        await worker.stop();
+
+        expect(log).toHaveBeenCalledWith("could not save the heartbeat: database is down");
+        expect(log).toHaveBeenLastCalledWith("worker stopped");
+    });
+
+    it("waits for a heartbeat in flight before it stops", async () => {
+        let finish = () => {};
+        beatWorker.mockReturnValueOnce(new Promise((resolve) => (finish = () => resolve())));
+        runNextJob.mockResolvedValue(undefined);
+        const log = vi.fn();
+
+        const stopped = startWorker({ ...deps, log, pollMs: 5 }).stop();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(log).not.toHaveBeenCalledWith("worker stopped");
+
+        finish();
+        await stopped;
+        expect(log).toHaveBeenLastCalledWith("worker stopped");
     });
 });

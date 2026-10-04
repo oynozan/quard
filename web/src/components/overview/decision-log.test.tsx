@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { logLine } from "../../../test/overview/fixtures";
+import { LiveStatusProvider } from "@/components/live/status";
 import { DecisionLog } from "./decision-log";
 
 const pane = () => within(screen.getByRole("region", { name: "Decision log" }));
@@ -21,5 +22,15 @@ describe("DecisionLog", () => {
         expect(pane().getByText("Live")).toBeTruthy();
         expect(pane().getByText("No guard decisions in the last 24 hours")).toBeTruthy();
         expect(container.querySelector(".cursor-blink")).toBeTruthy();
+    });
+
+    it("turns its live mark hollow and drops the cursor while the stream is down", () => {
+        const { container } = render(
+            <LiveStatusProvider value="offline">
+                <DecisionLog events={[]} />
+            </LiveStatusProvider>,
+        );
+        expect(pane().getByText("Offline")).toBeTruthy();
+        expect(container.querySelector(".cursor-blink")).toBeNull();
     });
 });

@@ -109,18 +109,15 @@ describe("OverviewPage", () => {
         expect(region("Decision log").getAllByRole("listitem")).toHaveLength(2);
     });
 
-    it("reads its data again every 5 seconds, so its Live marks hold", async () => {
+    it("does not poll, since the layout's live stream refreshes it", async () => {
         vi.useFakeTimers();
-        vi.stubGlobal(
-            "fetch",
-            vi.fn(async () => new Response(null, { status: 204 })),
-        );
+        const fetch = vi.fn(async () => new Response(null, { status: 204 }));
+        vi.stubGlobal("fetch", fetch);
         render(await OverviewPage());
 
-        await act(async () => vi.advanceTimersByTime(4999));
+        await act(async () => vi.advanceTimersByTime(60_000));
         expect(router.refresh).not.toHaveBeenCalled();
-        await act(async () => vi.advanceTimersByTime(1));
-        expect(router.refresh).toHaveBeenCalledTimes(1);
+        expect(fetch).not.toHaveBeenCalled();
     });
 
     it("keeps the whole layout on a new install, with empty frames, zeros and table headers", async () => {

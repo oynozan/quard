@@ -1,0 +1,275 @@
+import { Steps } from "nextra/components";
+
+# 9. Runs in the dashboard
+
+A billing agent pays a supplier: it looks up the supplier record, reads the amount on the supplier's portal, pays and emails the billing contact. The record holds an IBAN, an email address and a portal link with an API key in it. This example runs the task three times and ends it three ways, completed, failed and blocked. Then you check in the dashboard that the key never left your process and that the IBAN and the email arrived masked.
+
+## Run it
+
+```sh
+node sandbox/09-runs-in-the-dashboard.ts
+```
+
+Run it from the repo root. It needs [the local backend](/sdk/examples#the-local-backend): webhook, control, the worker, the database and the dashboard, with `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` set in `sandbox/.env`. The [sandbox README](https://github.com/oynozan/quard/blob/main/sandbox/README.md) has the exact commands. Without an agent key, the example stops at once:
+
+```text
+This example needs the local Quard backend. Start webhook, control and the worker as sandbox/README.md shows, then add QUARD_AGENT_KEY and QUARD_HASH_KEY to sandbox/.env.
+```
+
+If webhook doesn't answer its health check within a second, `lib/env.ts` warns and the example goes on:
+
+```text
+The Quard backend at http://localhost:4100 isn't answering. Start webhook, control and the worker as sandbox/README.md shows.
+```
+
+If the backend refuses the agent key, the SDK warns once for each service:
+
+```text
+Quard: webhook refused events (401). Check the agent key and the webhook URL.
+Quard: control refused the agent key. Check that the key is valid and not revoked.
+```
+
+## Step by step
+
+<Steps>
+
+### Connect the backend
+
+`lib/env.ts` connects the SDK when `sandbox/.env` holds an agent key:
+
+```ts
+export const DASHBOARD = Boolean(process.env.QUARD_AGENT_KEY);
+
+if (DASHBOARD) {
+    const webhookUrl = process.env.QUARD_WEBHOOK_URL || "http://localhost:4100";
+    quard.configure({
+        key: process.env.QUARD_AGENT_KEY,
+        webhookUrl,
+        controlUrl: process.env.QUARD_CONTROL_URL || "http://localhost:4200",
+        hashKey: process.env.QUARD_HASH_KEY,
+    });
+    // Only a warning: example 13 runs with the backend down on purpose
+    await fetch(`${webhookUrl}/health`, { signal: AbortSignal.timeout(1000) }).catch(() => {
+        console.warn(
+            `The Quard backend at ${webhookUrl} isn't answering. Start webhook, control and the worker as sandbox/README.md shows.`,
+        );
+    });
+}
+```
+
+With `key`, `webhookUrl` and `hashKey` set, the SDK uploads its events. Every event waits in a buffer in your process. About once a second, the uploader sends what is waiting to webhook's `/v1/events`, up to 500 events per request, with the agent key as a bearer token. When webhook can't be reached, it tries again, waiting longer each time, up to 60 seconds. The uploader never keeps your process alive on its own, so the SDK sends the last events when the process is about to exit.
+
+With `controlUrl` too, the SDK keeps a live link to control, for approvals, per-day counts and the fleet check. [Examples 10](/sdk/examples/approvals-in-the-dashboard) to [12](/sdk/examples/fleet-check) use it. See [Configuration](/sdk/reference/configure) and [Uploads and the control link](/sdk/internals/transport).
+
+The example calls `needsDashboard()` from `lib/env.ts` first. It stops the example when no agent key is set.
+
+### A record with a secret in it
+
+```ts
+// A fresh fake key each run, so no key sits in this file
+const KEY = `sk-proj-${randomUUID().replaceAll("-", "")}`;
+const RECORD = [
+    "Acme Ltd",
+    "IBAN: DE89 3704 0044 0532 0130 00",
+    "Billing contact: jane.doe@acme-ltd.co",
+    `Open invoices: https://portal.acme-ltd.co/invoices?api_key=${KEY}`,
+].join("\n");
+
+// A limit guard only so the calls are recorded; the limit doesn't matter
+const justRecord = { type: "limit", maxCallsPerRun: 5 } as const;
+const getSupplier = guard(async (_input: { name: string }) => RECORD, { ...justRecord, name: "getSupplier" });
+const sendEmail = guard(async (input: { to: string }) => `sent to ${input.to}`, { ...justRecord, name: "sendEmail" });
+```
+
+`getSupplier` returns the supplier record. Real records often hold links like this one, and the key in them ends up in tool arguments and error messages.
+
+Every tool here has a guard, even if only a loose [limit](/sdk/reference/limit-guard). Quard records a tool call only for a guarded tool. A call to a tool without a guard shows up only in the model call that asked for it, with an `unwrapped_tool` warning.
+
+### Three ways a run can end
+
+```ts
+// Errors often hold the URL they failed on, key and all
+const portalDown = guard(
+    async (input: { url: string }) => {
+        throw new Error(`GET ${input.url} failed: 503 Service Unavailable`);
+    },
+    { ...justRecord, name: "fetchPage" },
+);
+
+// A payment over 5000 EUR stops the whole run
+const payInvoice = guard(async (input: { iban: string; amount: number }) => `paid ${input.amount} EUR`, {
+    type: "action",
+    name: "payInvoice",
+    rules: [{ field: "amount", max: 5000 }],
+    onBlock: "throw",
+});
+```
+
+[`quard.run()`](/sdk/reference/quard) records how its function ended, so the dashboard doesn't have to guess:
+
+| Status      | When                                                                            |
+| ----------- | ------------------------------------------------------------------------------- |
+| `completed` | The function returned                                                           |
+| `failed`    | It threw an error, such as one from a tool                                      |
+| `blocked`   | It threw a `GuardBlockedError`, because a guard with `onBlock: "throw"` blocked |
+
+When a guarded tool throws, Quard records the call with the status `error` and the error message, then passes the error on unchanged. With `onBlock: "throw"`, a blocked call throws a `GuardBlockedError` instead of returning a [refusal](/sdk/reference/refusals), so the agent loop stops.
+
+### Print the run as it happens
+
+```ts
+// onEvent sees each event in this process, before any masking
+quard.configure({
+    onEvent: (event) => {
+        if (event.type === "run_started") {
+            console.log(`  Dashboard: http://localhost:3100/runs/${event.runId}`);
+        } else if (event.type === "model_call" && event.usage !== undefined) {
+            console.log(`    · ${event.model}: ${event.usage.inputTokens} tokens in, ${event.usage.outputTokens} out`);
+        } else if (event.type === "run_finished") {
+            console.log(`  The run ended: ${event.status}`);
+        } else if (event.type === "decision" || (event.type === "tool_call" && event.status === "error")) {
+            printEvent(event);
+        }
+    },
+});
+```
+
+The run id is the same one the dashboard uses, so the link opens the run's page. A `model_call` event carries the token counts the API reported. Cached tokens count as input. The backend prices them by model to estimate each call's cost. See [Events](/sdk/reference/events).
+
+While uploads are on, each `model_call` event also carries its request body, cut to the fields a replay sends again, such as the model, the instructions, the input and the tools. It is redacted like the rest of the event before it leaves. Quard uses it to [replay](/guides/incidents#replay) the call when it tests the cause of an incident. A body longer than 512 Ki characters as JSON is left out.
+
+### Run the task three times
+
+```ts
+async function pay(heading: string, fetchPage: Tools[string]) {
+    title(heading);
+    const tools = { getSupplier, fetchPage, payInvoice, sendEmail };
+    try {
+        await quard.run({ agent: "billing" }, () => runAgent(client, PROMPT, tools));
+    } catch {
+        // A failed or blocked run rethrows; its ending is printed above
+    }
+}
+
+await pay("The portal says 120 EUR", portalPage(120));
+await pay("The portal is down", portalDown);
+await pay("The portal says 9000 EUR", portalPage(9000));
+```
+
+The task is the same each time. Only the portal changes:
+
+1. **120 EUR.** The model looks up Acme Ltd, reads the portal, pays 120 EUR and emails the billing contact. The run ends `completed`.
+2. **The portal is down.** `fetchPage` throws, and its message holds the whole portal link, key included. The error leaves the agent loop and `quard.run()`, which records the run as `failed`. Nothing is paid.
+3. **9000 EUR.** The [action guard](/sdk/reference/action-guard) caps a payment at 5000 EUR, so it blocks with the reason `amount_over_cap`. The guard throws, and the run ends `blocked`. No email goes out.
+
+`quard.run()` records the ending, then throws the error again. `pay()` catches it, so the example moves on.
+
+### What leaves your process
+
+Before an event leaves your process, the SDK prepares it in [`packages/sdk/transport/prepare.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/prepare.ts):
+
+```ts
+// What leaves the process. Tool calls first gain the value keys of their
+// arguments, so search can still find them, then everything is redacted.
+export function prepareEvent(event: RunEvent, redactor: Redactor): RunEvent {
+    if (event.type !== "tool_call") {
+        return redactEvent(redactor, event);
+    }
+    const keys = [...new Set(extractValues(keyText(event.arguments)).flatMap((value) => value.keys))];
+    return redactEvent(redactor, { ...event, keys });
+}
+```
+
+`keyText()` skips values under fields named like secrets, such as `password` or `api_key`, so they never become search keys. Then every string in the event goes through the redactor:
+
+- **Secrets are removed.** That covers known key formats, such as API keys that start with `sk-`, Quard agent keys, AWS, GitHub, Slack, Google and Stripe keys, private keys and JWTs. It also covers bearer tokens and values written as `api_key=…` or `password: …`. A field named like `password`, `token` or `api_key` loses its whole value. The portal link arrives as `https://portal.acme-ltd.co/invoices?api_key=…`.
+- **IBANs, card numbers and emails are masked.** The IBAN reads `DE89…3000` and the email `j…@acme-ltd.co`.
+- **Search still works.** Sensitive value keys keep a hash made with your hash key, such as `iban:DE89…3000#` followed by the hash. The same value always gives the same hash, so value tracing and [search](/guides/search) still match it.
+
+Webhook checks the agent key, then redacts every event again before it stores it, so an old or broken SDK never stores a raw value. See [Retention](/guides/settings#retention).
+
+</Steps>
+
+## What you'll see
+
+The first run:
+
+```text
+The portal says 120 EUR
+  Dashboard: http://localhost:3100/runs/…
+  User: Pay Acme Ltd's open invoice. Get their bank details and portal link from our supplier records, read the portal page for the amount, then email their billing contact that it is paid.
+    · gpt-5.4-mini: … tokens in, … out
+  → getSupplier {"name":"Acme Ltd"}
+    ✓ Acme Ltd
+      IBAN: DE89 3704 0044 0532 0130 00
+      Billing contact: jane.doe@acme-ltd.co
+      Open invoices: https://portal.acme-ltd.co/invoices?api_key=sk-proj-…
+    · gpt-5.4-mini: … tokens in, … out
+  → fetchPage {"url":"https://portal.acme-ltd.co/invoices?api_key=sk-proj-…"}
+    ✓ Acme Ltd invoice 114: 120 EUR, due today.
+    · gpt-5.4-mini: … tokens in, … out
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":120}
+    ✓ paid 120 EUR
+  → sendEmail {"to":"jane.doe@acme-ltd.co","body":"…"}
+    ✓ sent to jane.doe@acme-ltd.co
+    · gpt-5.4-mini: … tokens in, … out
+  Model: …
+  The run ended: completed
+```
+
+The other two runs end like this:
+
+```text
+The portal is down
+  …
+  → fetchPage {"url":"https://portal.acme-ltd.co/invoices?api_key=sk-proj-…"}
+    · fetchPage error
+  The run ended: failed
+
+The portal says 9000 EUR
+  …
+  → payInvoice {"iban":"DE89 3704 0044 0532 0130 00","amount":9000}
+    · action guard: block (amount_over_cap)
+  The run ended: blocked
+
+Done. The SDK sends the last events as the process exits.
+```
+
+`…` stands for what changes from run to run: the run id, the token counts, the model's words and the fresh key. The terminal prints the key in full, because the agent loop and `onEvent` print inside your process, before any masking. The model may also order the calls differently, write the IBAN without spaces, or ask for two tools in one turn. With `OPENAI_MODEL` set, its name replaces `gpt-5.4-mini`.
+
+In the dashboard, open each **Dashboard** link, or find the runs on the [Runs](/guides/runs#find-a-run) page:
+
+| Where                       | What to look for                                                     |
+| --------------------------- | -------------------------------------------------------------------- |
+| The run list                | Three `billing` runs with the statuses Completed, Failed and Blocked |
+| A `fetchPage` step          | The link reads `https://portal.acme-ltd.co/invoices?api_key=…`       |
+| The failed `fetchPage` step | Its error, with the key removed                                      |
+| A `payInvoice` step         | The IBAN reads `DE89…3000`                                           |
+| The `sendEmail` step        | The address reads `j…@acme-ltd.co`                                   |
+| A model call                | Its tokens, its estimated cost and the tools it asked for            |
+
+See [Read a run](/guides/runs#read-a-run) and [Look at one step](/guides/runs#look-at-one-step).
+
+## Try this
+
+- **Return a refusal instead.** Remove `onBlock: "throw"` from `payInvoice`. The 9000 EUR payment gets a refusal, the model tells the user, and the third run ends `completed`, with the blocked call marked red on its timeline.
+- **Search for the IBAN.** On the dashboard's [Search](/guides/search) page, search for `DE89 3704 0044 0532 0130 00`. All three runs match through its hash, though none of them stores it in clear. This needs the dashboard to run with the same `QUARD_HASH_KEY`.
+- **Use a wrong key.** Put a typo in `QUARD_AGENT_KEY` in `sandbox/.env`. The guards still work and the example still runs, but webhook and control refuse the key, and the SDK prints the two warnings from [Run it](#run-it). No run reaches the dashboard.
+
+## Use it in your app
+
+- Pass `key`, `webhookUrl`, `controlUrl` and `hashKey` to `quard.configure()` from your secrets, the way `lib/env.ts` reads them from the environment. Create the agent key under [Settings](/guides/settings#agent-keys). The hash key belongs to your install and is the same one the server uses.
+- Run each task inside `quard.run()`, so the dashboard knows how it ended. Use `onBlock: "throw"` when a block must stop the whole task, and catch `GuardBlockedError` where you start it.
+- The SDK sends its last events when Node is about to exit on its own. `process.exit()` skips that moment, so let the process end by itself where you can.
+
+## Source
+
+- [`sandbox/09-runs-in-the-dashboard.ts`](https://github.com/oynozan/quard/blob/main/sandbox/09-runs-in-the-dashboard.ts): the example
+- [`sandbox/lib/env.ts`](https://github.com/oynozan/quard/blob/main/sandbox/lib/env.ts): connects the SDK to the local backend
+- [`packages/sdk/transport/configure.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/configure.ts): starts uploads and the control link
+- [`packages/sdk/transport/uploader.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/uploader.ts): sends events in batches and retries
+- [`packages/sdk/transport/prepare.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/transport/prepare.ts): redacts each event before it leaves
+- [`packages/shared/redact/redactor.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/redactor.ts): masks and keyed hashes
+- [`packages/shared/redact/secrets.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/secrets.ts): the secrets Quard removes
+- [`packages/sdk/context/scope.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/context/scope.ts): records how a run ended
+- [`services/webhook/routes/events.ts`](https://github.com/oynozan/quard/blob/main/services/webhook/routes/events.ts): takes in events and redacts them again

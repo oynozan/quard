@@ -8,7 +8,13 @@ const serve = vi.hoisted(() =>
 const connect = vi.hoisted(() => vi.fn(() => ({})));
 
 vi.mock("@hono/node-server", () => ({ serve }));
-vi.mock("@quard/db", () => ({ connect, ingestBatch: vi.fn(), projectForKey: vi.fn(), storeLabelRecords: vi.fn() }));
+vi.mock("@quard/db", () => ({
+    connect,
+    ingestBatch: vi.fn(),
+    projectForKey: vi.fn(),
+    runNotices: vi.fn(),
+    storeLabelRecords: vi.fn(),
+}));
 
 afterEach(() => {
     vi.unstubAllEnvs();

@@ -1,0 +1,190 @@
+import { Steps } from "nextra/components";
+
+# 25. Run limits
+
+A writer agent and a critic agent pass a tagline back and forth. Left alone, two agents like these can keep going, and every turn costs model calls. This example caps the turns between the two agents at three, and the app asks for four. It runs the conversation three times: with the limits in observe mode, where Quard only records the fourth turn, with them in block mode, where the fourth message is refused, and with a cap of three model calls a run, where the fourth model call never leaves the process.
+
+## Run it
+
+```sh
+node sandbox/25-run-limits.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows.
+
+## Step by step
+
+<Steps>
+
+### Guard the send tool with delegateTo
+
+```ts
+// The last message sent, which the other agent reads next
+let inbox = "";
+const sendMessage = guard(
+    async (input: { to: string; text: string }) => {
+        inbox = input.text;
+        return `delivered to ${input.to}`;
+    },
+    { type: "limit", name: "sendMessage", delegateTo: "to" },
+);
+```
+
+`delegateTo` on a [limit guard](/sdk/reference/limit-guard) names the argument that holds the receiving agent, here `to`. Each call then checks the [run limits](/sdk/reference/run-limits#delegateto) on depth, fan-out and loops, with the calling agent as the sender. The guard sets no other limit.
+
+### Take turns in one run
+
+```ts
+await quard.run({ agent: "team" }, async () => {
+    for (let turn = 1; turn <= turns; turn++) {
+        const agent = turn % 2 === 1 ? "writer" : "critic";
+        console.log(`  Turn ${turn}, the ${agent}`);
+        await quard.agent(agent, () => runAgent(client, promptFor(agent), { sendMessage }));
+    }
+});
+```
+
+The whole conversation is one run, started by [`quard.run()`](/sdk/reference/quard#quardrun) for an agent named `team`. Each turn runs as a child agent through [`quard.agent()`](/sdk/reference/quard#quardagent): the writer on odd turns, the critic on even ones. Each turn's prompt holds the last message, and asks the agent to send its reply to the other one with `sendMessage`.
+
+Loops count turns between the same two agents. The writer's first message to the critic is turn 1, and each change of direction adds one. So the critic's reply in turn 4 is the fourth turn.
+
+### Print what the limits decide
+
+```ts
+quard.configure({
+    onEvent: (event) => {
+        if (event.type === "decision" && event.guard === "limit" && event.decision === "block") {
+            const verdict = event.enforced ? "blocks" : "would block, but only observes";
+            console.log(`    · run limit ${event.rule} ${verdict} (${event.agent})`);
+        } else if (event.type === "run_finished") {
+            console.log(`  The run ended: ${event.status}`);
+        }
+    },
+});
+```
+
+Each run limit that a call passes records a `decision` [event](/sdk/reference/events) from the `limit` guard, with the rule, such as `max-loops`. `enforced` is false in observe mode. The example also prints how each run ended.
+
+### Part 1: observe mode
+
+```ts
+quard.configure({ runLimits: { loops: 3 } });
+await conversation(4);
+```
+
+[`quard.configure()`](/sdk/reference/configure#run-limits) with `runLimits` sets the limits. Fields left out keep their defaults, and the default mode is observe. In turn 4, the loop limit of 3 is passed, so Quard records `max-loops` as would block. The message is still delivered, and the run completes.
+
+### Part 2: block mode
+
+```ts
+quard.configure({ runLimits: { mode: "block", loops: 3 } });
+await conversation(4);
+```
+
+Now the limits are enforced. In turn 4, the limit guard refuses the critic's `sendMessage` with `limit_reached`, and the tool doesn't run. The model reads the [refusal](/sdk/reference/refusals):
+
+```text
+Blocked by the limit guard: a limit for this run was reached. The sendMessage call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+A refusal ends only that tool call, so the critic answers and the run completes.
+
+### Part 3: a cap on model calls
+
+```ts
+quard.configure({ runLimits: { mode: "block", loops: 5, steps: 3 } });
+try {
+    await conversation(4);
+} catch (error) {
+    const why = error instanceof OpenAI.APIError ? `${error.status} ${error.code}` : String(error);
+    console.log(`  The client threw: ${why}`);
+}
+```
+
+A later `runLimits` replaces the earlier one as a whole, so this one sets `loops` again. `steps: 3` allows three model calls in the run. Each turn takes two: one where the agent asks for `sendMessage`, and one after it reads the result. So the critic's second model call is the fourth of the run.
+
+The wrapped client checks steps and cost before it sends each model call. The fourth call is over, so it never leaves the process. Quard records `max-steps` and answers the client with an HTTP 403 that it won't retry. The OpenAI client throws an `OpenAI.APIError` with `status` 403 and `code` `"limit_reached"`. The error leaves `quard.run()`, which records the run as `blocked`. See [A blocked model call](/sdk/reference/run-limits#a-blocked-model-call).
+
+</Steps>
+
+## What you'll see
+
+```text
+1 · Observe mode, at most 3 turns between two agents
+  Turn 1, the writer
+  User: You are the writer. Write a tagline of at most six words for Acme's new coffee mug. Send it to "critic" with sendMessage.
+  → sendMessage {"to":"critic","text":"…"}
+    ✓ delivered to critic
+  Model: …
+  Turn 2, the critic
+  User: You are the critic. The writer sent this tagline: "…". Send one short suggestion to "writer" with sendMessage.
+  → sendMessage {"to":"writer","text":"…"}
+    ✓ delivered to writer
+  Model: …
+  Turn 3, the writer
+  User: You are the writer. The critic replied: "…". Write a better tagline of at most six words. Send it to "critic" with sendMessage.
+  → sendMessage {"to":"critic","text":"…"}
+    ✓ delivered to critic
+  Model: …
+  Turn 4, the critic
+  User: You are the critic. The writer sent this tagline: "…". Send one short suggestion to "writer" with sendMessage.
+  → sendMessage {"to":"writer","text":"…"}
+    · run limit max-loops would block, but only observes (critic)
+    ✓ delivered to writer
+  Model: …
+  The run ended: completed
+
+2 · Block mode, at most 3 turns between two agents
+  Turn 1, the writer
+  …
+  Turn 4, the critic
+  User: You are the critic. The writer sent this tagline: "…". Send one short suggestion to "writer" with sendMessage.
+  → sendMessage {"to":"writer","text":"…"}
+    · run limit max-loops blocks (critic)
+    ✗ blocked by the limit guard (limit_reached)
+  Model: …
+  The run ended: completed
+
+3 · Block mode, at most 3 model calls in the run
+  Turn 1, the writer
+  User: You are the writer. Write a tagline of at most six words for Acme's new coffee mug. Send it to "critic" with sendMessage.
+  → sendMessage {"to":"critic","text":"…"}
+    ✓ delivered to critic
+  Model: …
+  Turn 2, the critic
+  User: You are the critic. The writer sent this tagline: "…". Send one short suggestion to "writer" with sendMessage.
+  → sendMessage {"to":"writer","text":"…"}
+    ✓ delivered to writer
+    · run limit max-steps blocks (critic)
+  The run ended: blocked
+  The client threw: 403 limit_reached
+```
+
+In part 2, turns 1 to 3 print the same lines as in part 1. They are left out above.
+
+`…` stands for the model's words: the taglines, the suggestions and the answers. They change from run to run. The limits count turns and model calls, not words, so the same turn or call is refused each time, as long as each agent sends one message a turn.
+
+## Try this
+
+- **Allow one more turn.** In part 2, set `loops: 4`. All four messages go through.
+- **Cap the cost.** In part 3, set `costUsd: 0` instead of `steps: 3`. A call is over the cost limit once the run's cost reaches the cap, so the writer's first model call is refused with `max-cost`.
+- **Cap the depth.** In part 2, set `runLimits: { mode: "block", depth: 1 }`. Every message is refused with `max-depth`: `team` is at depth 0, so the writer and the critic are at depth 1, and a message from them would go one level deeper.
+
+## Use it in your app
+
+- Put a limit guard with `delegateTo` on every tool that sends a message or hands work to another agent, so Quard can count depth, fan-out and loops.
+- Leave the limits in observe mode first. Watch how many runs would be stopped on the [Summary page](/guides/summary#run-limits), then set `mode: "block"`.
+- In block mode, catch the OpenAI client's error with `code` `"limit_reached"` where you call the model, or let it end the run as `blocked`.
+- Teams can change the limits in the [policy file](/sdk/reference/policy-file) while agents run, without a deploy.
+
+[Run limits](/concepts/run-limits) explains each limit and how they count across processes.
+
+## Source
+
+- [`sandbox/25-run-limits.ts`](https://github.com/oynozan/quard/blob/main/sandbox/25-run-limits.ts): the example
+- [`packages/sdk/core/config.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/config.ts): `RunLimits` and the defaults
+- [`packages/sdk/guards/limit/limit.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/limit.ts): the limit guard, which runs the delegation checks
+- [`packages/sdk/guards/limit/delegation.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/delegation.ts): depth, fan-out and loops
+- [`packages/sdk/guards/limit/model-limits.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/limit/model-limits.ts): steps and cost before each model call
+- [`packages/sdk/monitor/fetch.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/monitor/fetch.ts): the 403 answer for a refused model call
+- [`packages/sdk/core/refusal.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/core/refusal.ts): why the run ends as `blocked`

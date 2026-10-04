@@ -1,0 +1,227 @@
+import { Steps } from "nextra/components";
+
+# 17. Sensitive data going out
+
+A support agent emails your finance team and posts updates to partners. Users paste all sorts of things into a chat: a card number, an IBAN, sometimes an API key. An allow list keeps data away from the wrong places, but some data shouldn't leave in clear even to the right ones. This example shows how an egress guard reads what a call sends: it masks a card number, lets an IBAN through, blocks an API key, and, with a policy file, masks the IBAN too. It also shows a tool whose arguments don't name where data goes.
+
+## Run it
+
+```sh
+node sandbox/17-sensitive-data-going-out.ts
+```
+
+Run it from the repo root. It needs only your OpenAI key in `sandbox/.env`, as [Set up](/sdk/examples#set-up) shows. The approver is a function in the file, so nothing asks you.
+
+## Step by step
+
+<Steps>
+
+### Make the test data
+
+```ts
+// A fresh fake key each run, so no key sits in this file
+const KEY = `sk-proj-${randomUUID().replaceAll("-", "")}`;
+// A test card number and a sample IBAN
+const CARD = "4111 1111 1111 1111";
+const IBAN = "DE89 3704 0044 0532 0130 00";
+
+// The tool returns what it was given, so you see what it really received
+async function send(input: { to: string; body: string }) {
+    return `sent to ${input.to}: ${input.body}`;
+}
+```
+
+The key is made up on each run, so no real secret is ever in the file or the prompt. The tool echoes its input, so each `✓` line shows exactly what the tool got after the guard.
+
+### Set an approver that says no
+
+```ts
+async function approver(request: ApprovalRequest): Promise<ApprovalAnswer> {
+    console.log(`    ? approver asked about ${request.tool} ${JSON.stringify(request.input)}`);
+    console.log("    ? approver: deny");
+    return "deny";
+}
+
+quard.configure({
+    approver,
+    onEvent: (event) => {
+        if (event.type === "decision") {
+            printEvent(event);
+        }
+    },
+});
+```
+
+An `approver` in [`quard.configure()`](/sdk/reference/configure) answers every ask in code. Its `ApprovalRequest` holds the call's input after masking, and `values`: where each argument value came from. This one denies everything. `printEvent()` from `lib/show.ts` prints each decision that isn't a plain allow or pass.
+
+### Choose what happens to each kind
+
+```ts
+const sendEmail = guard(send, {
+    type: "egress",
+    name: "sendEmail",
+    allow: ["acme.com"],
+    payload: { secrets: "block", cards: "mask", ibans: "allow" },
+});
+```
+
+Besides its [destination checks](/sdk/reference/egress-guard), an egress guard looks for three kinds of sensitive data in every text argument: secrets such as API keys, card numbers and IBANs. `payload` sets what happens to each kind:
+
+| Action  | What happens                                                                                                                       |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `allow` | It is sent as it is                                                                                                                |
+| `mask`  | A card becomes `•••• 1111` and an IBAN `DE89…3000` before the call is checked, approved or run. The tool never sees the real value |
+| `block` | The call is refused with `sensitive_data`                                                                                          |
+
+### Part 1: a card is masked, an IBAN goes through
+
+```ts
+runAgent(
+    client,
+    `Email finance@acme.com exactly this text: "Refund the double charge on card ${CARD} to IBAN ${IBAN}."`,
+    { sendEmail },
+);
+```
+
+Quard masks the card number in the arguments and records a `strip` decision for the rule `payload:mask`. The masked arguments are what the guards check and what the tool gets. The IBAN is allowed, so it stays as the model wrote it. `finance@acme.com` is on the allow list, so the call runs.
+
+### Part 2: an API key is blocked
+
+```ts
+runAgent(client, `Email devops@acme.com exactly this text: "The new payments API key is ${KEY}"`, {
+    sendEmail,
+});
+```
+
+The body holds a secret, and `secrets: "block"` refuses the call. The refusal names the kind of data, never the value:
+
+```text
+Blocked by the egress guard: the data to send holds a sensitive value (secret). The sendEmail call did NOT run. Do not retry it; tell the user what was blocked.
+```
+
+### Part 3: where a call goes, from a function
+
+```ts
+const notifyPartner = guard(
+    async (input: { partner: string; message: string }) => `posted to ${partnerUrl(input)}: ${input.message}`,
+    {
+        type: "egress",
+        name: "notifyPartner",
+        allow: ["hooks.globex.com"],
+        destinations: (input) => {
+            const url = partnerUrl(input);
+            return url === undefined ? [] : [url];
+        },
+        onFail: "ask",
+    },
+);
+```
+
+The egress guard reads destinations from fields such as `to`, `cc`, `url` or `webhook`. `notifyPartner` takes a partner name instead, so `destinations` turns the input into the partner's URL. Without it, the guard finds no destination, and any call made after the model read internal data, such as the user's message, would fail the allow list.
+
+Globex posts to `hooks.globex.com`, which is on the list, so that call runs. Initech posts to `hooks.initech-partners.net`, which is not. The user's message is internal, so the allow list fails with `destination_not_allowed`, and `onFail: "ask"` sends the call to the approver instead of refusing it. The approver denies it, so it is refused with `approval_denied`. See [Destinations](/sdk/reference/egress-guard#destinations).
+
+### Part 4: kinds left out follow the strictness preset
+
+```ts
+const sendEmailCardsOnly = guard(send, {
+    type: "egress",
+    name: "sendEmail",
+    allow: ["acme.com"],
+    payload: { cards: "mask" },
+});
+```
+
+A kind left out of `payload` follows the policy file's [strictness preset](/sdk/reference/policy-file#strictness-presets). With no policy file, the preset is `balanced`:
+
+| Strictness | Secrets | Cards | IBANs |
+| ---------- | ------- | ----- | ----- |
+| `lenient`  | mask    | mask  | allow |
+| `balanced` | block   | mask  | allow |
+| `strict`   | block   | block | mask  |
+
+So the card is masked, as set in code, and the IBAN goes through, from the preset.
+
+### Part 5: the same call with a strict policy file
+
+```ts
+const folder = mkdtempSync(join(tmpdir(), "quard-policy-"));
+const policyFile = join(folder, "quard.policy.json");
+writeFileSync(policyFile, JSON.stringify({ version: 1, strictness: "strict" }, null, 4));
+quard.configure({ policyFile });
+```
+
+[`policyFile`](/sdk/reference/policy-file) points Quard at a JSON file. This one sets only `strictness: "strict"`. The guard's own `cards: "mask"` still wins for cards, and IBANs now follow `strict`, so the IBAN is masked too. The file is temporary here. A real app keeps it next to its code, and Quard rereads it while the app runs.
+
+</Steps>
+
+## What you'll see
+
+```text
+A card number is masked, an IBAN goes through
+  User: Email finance@acme.com exactly this text: "Refund the double charge on card 4111 1111 1111 1111 to IBAN DE89 3704 0044 0532 0130 00."
+  → sendEmail {"to":"finance@acme.com","body":"Refund the double charge on card 4111 1111 1111 1111 to IBAN DE89 3704 0044 0532 0130 00."}
+    · egress guard: strip
+    ✓ sent to finance@acme.com: Refund the double charge on card •••• 1111 to IBAN DE89 3704 0044 0532 0130 00.
+  Model: …
+
+An API key is blocked
+  User: Email devops@acme.com exactly this text: "The new payments API key is sk-proj-…"
+  → sendEmail {"to":"devops@acme.com","body":"The new payments API key is sk-proj-…"}
+    · egress guard: block (sensitive_data)
+    ✗ blocked by the egress guard (sensitive_data)
+  Model: …
+
+Where a call goes, from a function; a place off the allow list asks
+  User: Send both our partners, Globex and Initech, this message: "Order 4471 shipped today."
+  → notifyPartner {"partner":"globex","message":"Order 4471 shipped today."}
+    ✓ posted to https://hooks.globex.com/acme: Order 4471 shipped today.
+  → notifyPartner {"partner":"initech","message":"Order 4471 shipped today."}
+    · egress guard: ask (destination_not_allowed)
+    ? approver asked about notifyPartner {"partner":"initech","message":"Order 4471 shipped today."}
+    ? approver: deny
+    · approval guard: block (approval_denied)
+    ✗ blocked by the approval guard (approval_denied)
+  Model: …
+
+IBANs left out: no policy file, so the balanced preset lets them through
+  User: Email finance@acme.com exactly this text: "Card 4111 1111 1111 1111 was charged twice. Refund it to IBAN DE89 3704 0044 0532 0130 00."
+  → sendEmail {"to":"finance@acme.com","body":"Card 4111 1111 1111 1111 was charged twice. Refund it to IBAN DE89 3704 0044 0532 0130 00."}
+    · egress guard: strip
+    ✓ sent to finance@acme.com: Card •••• 1111 was charged twice. Refund it to IBAN DE89 3704 0044 0532 0130 00.
+  Model: …
+
+The same call with strictness "strict" in the policy file: the IBAN is masked too
+  User: Email finance@acme.com exactly this text: "Card 4111 1111 1111 1111 was charged twice. Refund it to IBAN DE89 3704 0044 0532 0130 00."
+  → sendEmail {"to":"finance@acme.com","body":"Card 4111 1111 1111 1111 was charged twice. Refund it to IBAN DE89 3704 0044 0532 0130 00."}
+    · egress guard: strip
+    ✓ sent to finance@acme.com: Card •••• 1111 was charged twice. Refund it to IBAN DE89…3000.
+  Model: …
+```
+
+The `→` line shows what the model asked for, and the `✓` line what the tool got after masking. `sk-proj-…` stands for the fresh key, which the terminal prints in full, because the agent loop prints inside your process. `…` also stands for the model's answers, which change from run to run.
+
+The model may change the email text a little, or write the partner name in capitals. It may also refuse to email an API key at all, so part 2 may end with no tool call. Whenever it does send one, the egress guard blocks it.
+
+## Try this
+
+- **Mask the key.** Set `secrets: "mask"` on `sendEmail`. Part 2's email now goes out, with the key replaced by `[secret removed by Quard]`.
+- **Say yes.** Return `"once"` from the approver. The post to Initech now runs.
+- **Change the preset.** Write `"lenient"` in the policy file. Part 5's IBAN goes through again, because `lenient` allows IBANs.
+- **Watch first.** Add `mode: "observe"` to `sendEmail`. Nothing is masked or blocked. Part 2 prints `· egress guard would block (sensitive_data), but only observes`, and the key goes out.
+
+## Use it in your app
+
+- Put an egress guard on every tool that sends data out, such as email, chat, webhooks and uploads, with an `allow` list of where your data may go.
+- Set `payload` for the kinds that matter for each tool, or set `strictness` in a [policy file](/sdk/reference/policy-file) for the defaults of every egress guard at once.
+- When a tool's arguments name a place in their own words, such as a partner or a channel name, add `destinations` so the guard knows where the data goes.
+- Use `onFail: "ask"` when a new destination is sometimes fine and a person can tell. See [Approvals](/concepts/approvals).
+
+## Source
+
+- [`sandbox/17-sensitive-data-going-out.ts`](https://github.com/oynozan/quard/blob/main/sandbox/17-sensitive-data-going-out.ts): the example
+- [`packages/sdk/guards/egress/egress.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/egress/egress.ts): the destination checks and `destinations`
+- [`packages/sdk/guards/egress/payload.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/guards/egress/payload.ts): masking and the `payload` checks
+- [`packages/sdk/policy/presets.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/policy/presets.ts): the strictness presets
+- [`packages/shared/redact/sensitive.ts`](https://github.com/oynozan/quard/blob/main/packages/shared/redact/sensitive.ts): finds and masks secrets, cards and IBANs
+- [`packages/sdk/pipeline/approval/local.ts`](https://github.com/oynozan/quard/blob/main/packages/sdk/pipeline/approval/local.ts): the approver in code

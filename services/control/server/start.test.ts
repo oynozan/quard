@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { connect } from "node:net";
-import { createAgentKey, revokeAgentKey } from "@quard/db";
+import { beatWorker, createAgentKey, lastWorkerSeen, revokeAgentKey } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { openClient, refusedWith } from "../test/client.ts";
@@ -25,12 +25,14 @@ afterAll(async () => {
 const bearer = (key: string) => ({ authorization: `Bearer ${key}` });
 
 describe("startControl", () => {
-    it("serves the health route next to the WebSocket", async () => {
+    it("serves the health route next to the WebSocket, with when a worker last checked in", async () => {
         const control = await startTestControl(test);
+        await beatWorker(test.db, { id: "w1", host: "box-1", pid: 4242, startedAt: new Date() });
+        const seen = await lastWorkerSeen(test.db);
 
         const res = await fetch(`http://127.0.0.1:${control.port}/health`);
 
-        expect(await res.json()).toEqual({ status: "ok", service: "control" });
+        expect(await res.json()).toEqual({ status: "ok", service: "control", workerSeenAt: seen?.toISOString() });
         await control.close();
     });
 

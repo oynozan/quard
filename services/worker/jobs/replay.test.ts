@@ -10,7 +10,6 @@ import { claim, storeAttack } from "../test/db.ts";
 import { CALL_USD, OPENAI, payingModel, USAGE } from "../test/model.ts";
 import { runFind } from "./find.ts";
 import { NO_KEY, runReplayJob } from "./replay.ts";
-import { runReview } from "./review.ts";
 
 let test: TestDb;
 
@@ -28,11 +27,10 @@ beforeEach(async () => {
 
 const offline = () => ({ db: test.db, openai: undefined });
 
-// The M1 attack with its verdict found, the review skipped and a replay requested
+// The M1 attack with its verdict found and a replay requested
 async function replayDue(options: AttackOptions = {}) {
     const stored = await storeAttack(test.db, options);
     await runFind(offline(), await claim(test.db));
-    await runReview(offline(), await claim(test.db));
     await requestReplay(test.db, stored.projectId, stored.id, { by: "ana@acme.com" });
     return stored;
 }

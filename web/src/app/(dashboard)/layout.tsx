@@ -1,3 +1,4 @@
+import { LiveUpdates } from "@/components/live/live-updates";
 import { AppShell } from "@/components/shell/app-shell";
 import { displayName } from "@/lib/auth/access";
 import { requireSession } from "@/lib/auth/session";
@@ -10,9 +11,12 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
     const sub = session.email && session.github ? `@${session.github}` : session.github ? "GitHub" : "Signed in";
     const waiting = await openApprovalCount();
 
+    // One event stream keeps every dashboard page live
     return (
-        <AppShell openApprovals={waiting} account={{ email: displayName(session), role: sub }}>
-            {children}
-        </AppShell>
+        <LiveUpdates>
+            <AppShell openApprovals={waiting} account={{ email: displayName(session), role: sub }}>
+                {children}
+            </AppShell>
+        </LiveUpdates>
     );
 }

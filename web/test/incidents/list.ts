@@ -14,6 +14,7 @@ export const INCIDENTS: Incident[] = [
         damageAgent: "billing",
         replay: "running",
         openedAt: NOW - 3 * MINUTE,
+        seen: true,
     },
     {
         id: "inc_117",
@@ -26,6 +27,7 @@ export const INCIDENTS: Incident[] = [
         damageAgent: "billing",
         replay: "confirmed",
         openedAt: NOW - 5 * HOUR,
+        seen: true,
     },
     {
         id: "inc_115",
@@ -38,5 +40,6 @@ export const INCIDENTS: Incident[] = [
         damageAgent: "support",
         replay: "not confirmed",
         openedAt: NOW - 48 * HOUR,
+        seen: true,
     },
 ];

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubBrowser } from "../../../test/auth-app/browser";
 import { shadersModule } from "../../../test/auth-app/shell";
+import { FakeEventSource, stubEventSource } from "../../../test/live/event-source";
 import { signSession, type Session } from "@/lib/auth/session-token";
 import DashboardLayout from "./layout";
 
@@ -15,6 +16,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("next/navigation", () => ({
     usePathname: () => "/runs",
+    useRouter: () => ({ refresh: () => {} }),
     redirect: (to: string) => {
         throw new Error(`redirect:${to}`);
     },
@@ -42,6 +44,7 @@ describe("DashboardLayout", () => {
     beforeEach(() => {
         jar.clear();
         stubBrowser();
+        stubEventSource();
         vi.stubEnv("NEXT_PUBLIC_PRIVY_APP_ID", "cm0000000000000000000000a");
         vi.stubEnv("PRIVY_APP_SECRET", "secret");
         vi.stubEnv("QUARD_SESSION_SECRET", SECRET);
@@ -84,6 +87,12 @@ describe("DashboardLayout", () => {
         await signIn({ email: null, github: "jo-k" });
         await showLayout();
         expect(accountRow()).toEqual(["@jo-k", "GitHub"]);
+    });
+
+    it("keeps every page live over one event stream", async () => {
+        await signIn({ email: "jo@example.com", github: null });
+        await showLayout();
+        expect(FakeEventSource.all.map((source) => source.url)).toEqual(["/api/live"]);
     });
 
     it("sends visitors without a session to sign in", async () => {
