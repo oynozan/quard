@@ -6,6 +6,7 @@ import { stubBrowser } from "../../../test/fleet-shell/env";
 import { quarantineData } from "../../../test/fleet-shell/quarantine";
 import { expectEmptyChart, expectEmptyTable } from "../../../test/summary/frames";
 import { BY_GUARD, HEATMAP, emptyFleet, fullFleet } from "../../../test/summary/fleet";
+import { emptySpend, fullSpend } from "../../../test/payments/spend";
 import { FleetContainer, FleetView } from "./fleet-view";
 
 const NOTHING = quarantineData({ quarantine: [], watching: [] });
@@ -13,7 +14,15 @@ const NOTHING = quarantineData({ quarantine: [], watching: [] });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/data/fleet/actions", () => ({ markKnown: vi.fn() }));
 
-const SECTIONS = ["Where incidents start", "What guards block", "Agents and links", "Run limits", "Quarantine"];
+const SECTIONS = [
+    "Where incidents start",
+    "What guards block",
+    "Agents and links",
+    "Run limits",
+    "x402 spend",
+    "Payees",
+    "Quarantine",
+];
 const CHARTS = [
     "By entry source",
     "By damaging tool",
@@ -53,7 +62,7 @@ describe("FleetView", () => {
     it("shows the 30-day window and every section in order", () => {
         const fleet = fullFleet();
         const quarantine = quarantineData();
-        render(<FleetView fleet={fleet} quarantine={quarantine} />);
+        render(<FleetView fleet={fleet} quarantine={quarantine} spend={fullSpend()} />);
 
         expect(screen.getByRole("heading", { level: 1, name: "Summary" })).toBeTruthy();
         expect(screen.getByText(`${formatShortDate(fleet.startAt)} – ${formatShortDate(fleet.endAt)}`)).toBeTruthy();
@@ -63,7 +72,7 @@ describe("FleetView", () => {
     });
 
     it("keeps every section on a brand-new project, the quarantine with its empty tables", () => {
-        render(<FleetView fleet={emptyFleet()} quarantine={NOTHING} />);
+        render(<FleetView fleet={emptyFleet()} quarantine={NOTHING} spend={emptySpend()} />);
 
         expect(screen.getByRole("heading", { level: 1, name: "Summary" })).toBeTruthy();
         expect(screen.getByText("Last 30 days")).toBeTruthy();
@@ -76,7 +85,7 @@ describe("FleetView", () => {
 
     it("keeps every section's panes, tiles and table headers for a brand-new project", () => {
         const fleet = emptyFleet();
-        render(<FleetView fleet={fleet} quarantine={NOTHING} />);
+        render(<FleetView fleet={fleet} quarantine={NOTHING} spend={emptySpend()} />);
 
         expect(screen.queryByText("Nothing to summarize yet")).toBeNull();
         expectEmptyChart("By entry source", "No incidents in the last 30 days");
@@ -91,7 +100,11 @@ describe("FleetView", () => {
 
     it("keeps the empty panes unlit beside a section that has data", () => {
         render(
-            <FleetView fleet={emptyFleet({ blocksByGuard: BY_GUARD, blocksHeatmap: HEATMAP })} quarantine={NOTHING} />,
+            <FleetView
+                fleet={emptyFleet({ blocksByGuard: BY_GUARD, blocksHeatmap: HEATMAP })}
+                quarantine={NOTHING}
+                spend={emptySpend()}
+            />,
         );
 
         expect(within(section("Blocks per day")).getByRole("img").getAttribute("aria-label")).toContain(
@@ -103,17 +116,19 @@ describe("FleetView", () => {
     });
 
     it("shows every section loading while the summary is on its way", () => {
-        render(<FleetView fleet={null} quarantine={null} />);
+        render(<FleetView fleet={null} quarantine={null} spend={null} />);
 
         expect(screen.getByText("Last 30 days").textContent).toBe("Last 30 days");
         expect(screen.queryByText(/ – /)).toBeNull();
         expect(sectionNames()).toEqual(SECTIONS);
-        for (const name of [...CHARTS, "Run limits", "Quarantine"]) {
+        for (const name of [...CHARTS, "Spend per day", "By payee", "Run limits", "Quarantine"]) {
             expect(section(name).getAttribute("aria-busy"), name).toBe("true");
         }
         // Nothing is called empty while it loads
         expect(screen.getAllByRole("status").map((line) => line.textContent)).toEqual([
             "Loading links…",
+            "Loading new payees…",
+            "Loading quarantined payees…",
             "Loading quarantine…",
         ]);
         expect(screen.queryByRole("heading", { name: "Watching" })).toBeNull();

@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 import { PageHeading } from "@/components/kit/headings";
 import { PAGE_WIDE } from "@/components/kit/page";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PayeesPanes } from "@/components/payments/summary/payees-panes";
+import { SpendPanes } from "@/components/payments/summary/spend-panes";
 import type { FleetData, QuarantineData } from "@/lib/data/fleet";
+import type { SpendData } from "@/lib/data/payments/types";
 import { formatShortDate } from "@/lib/format";
 import { AgentPanes } from "./agent-panes";
 import { BlocksPanes } from "./blocks-panes";
@@ -16,8 +19,10 @@ export function FleetContainer({ children }: { children: ReactNode }) {
     return <div className={PAGE_WIDE}>{children}</div>;
 }
 
+type FleetViewProps = { fleet: FleetData | null; quarantine: QuarantineData | null; spend: SpendData | null };
+
 // The summary page, loading while its data is null
-export function FleetView({ fleet, quarantine }: { fleet: FleetData | null; quarantine: QuarantineData | null }) {
+export function FleetView({ fleet, quarantine, spend }: FleetViewProps) {
     return (
         <FleetContainer>
             <PageHeading
@@ -49,6 +54,12 @@ export function FleetView({ fleet, quarantine }: { fleet: FleetData | null; quar
                     <RunLimits limits={fleet?.runLimits ?? null} />
                 </Reveal>
                 <Reveal delay={160}>
+                    <div className="grid grid-cols-1 gap-[34px] max-[760px]:gap-[28px]">
+                        <SpendPanes spend={spend} />
+                        <PayeesPanes spend={spend} />
+                    </div>
+                </Reveal>
+                <Reveal delay={200}>
                     {quarantine ? (
                         <QuarantineSection
                             quarantine={quarantine.quarantine}
