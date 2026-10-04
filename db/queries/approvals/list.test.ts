@@ -19,13 +19,39 @@ afterAll(async () => {
 });
 
 const at = (minute: number) => new Date(Date.UTC(2026, 9, 3, 12, minute));
+// Far older than the stale limit
+const LONG_AGO = new Date("2026-01-01T00:00:00.000Z");
 
 async function setTimes(table: "approval_requests" | "approval_grants", id: string, times: Record<string, Date>) {
     await test.db.updateTable(table).set(times).where("id", "=", id).execute();
 }
 
+type Waiting = "live" | "stale" | "done" | "none";
+
+// Opens a request at `minute` with one call in the given state
+async function openAt(projectId: string, minute: number, waiting: Waiting): Promise<string> {
+    const argsHash = minute.toString(16).padStart(32, "0");
+    const { id } = await openApprovalRequest(test.db, projectId, requestInput({ argsHash }));
+    await setTimes("approval_requests", id, { opened_at: at(minute) });
+    if (waiting === "none") {
+        return id;
+    }
+    const waiter = waiterInput(id);
+    await addWaiter(test.db, projectId, waiter);
+    if (waiting === "stale") {
+        await test.db
+            .updateTable("approval_waiters")
+            .set({ last_beat_at: LONG_AGO })
+            .where("ask_id", "=", waiter.askId)
+            .execute();
+    } else if (waiting === "done") {
+        await finishWaiters(test.db, projectId, [waiter.askId]);
+    }
+    return id;
+}
+
 describe("listOpenRequests", () => {
-    it("lists open requests newest first, each with the calls waiting on it", async () => {
+    it("lists open requests, each with the calls waiting on it", async () => {
         const projectId = await createProject(test.db, "Acme");
         const input = requestInput();
         const older = await openApprovalRequest(test.db, projectId, input);
@@ -52,9 +78,9 @@ describe("listOpenRequests", () => {
 
         const open = await listOpenRequests(test.db, projectId);
 
-        expect(open.map((request) => request.id)).toEqual([newer.id, older.id]);
-        expect(open[0]?.waiters).toEqual([]);
-        expect(open[1]).toEqual({
+        expect(open.map((request) => request.id)).toEqual([older.id, newer.id]);
+        expect(open[1]?.waiters).toEqual([]);
+        expect(open[0]).toEqual({
             id: older.id,
             runId: RUN,
             stepId: STEP,
@@ -98,21 +124,19 @@ describe("listOpenRequests", () => {
         expect(await listOpenRequests(test.db, await createProject(test.db, "Other"))).toEqual([]);
     });
 
-    it("stops at the limit, keeping the newest", async () => {
+    it("puts calls that still wait first, the longest wait on top, and never cuts them at the limit", async () => {
         const projectId = await createProject(test.db, "Acme");
-        const ids: string[] = [];
-        for (const [minute, hash] of [
-            [1, "c"],
-            [3, "d"],
-            [2, "e"],
-        ] as const) {
-            const { id } = await openApprovalRequest(test.db, projectId, requestInput({ argsHash: hash.repeat(32) }));
-            await setTimes("approval_requests", id, { opened_at: at(minute) });
-            ids.push(id);
-        }
+        const left = await openAt(projectId, 1, "none");
+        const live = await openAt(projectId, 2, "live");
+        const done = await openAt(projectId, 3, "done");
+        const stale = await openAt(projectId, 4, "stale");
+        const newest = await openAt(projectId, 5, "live");
+        const ids = async (limit?: number) =>
+            (await listOpenRequests(test.db, projectId, limit)).map((request) => request.id);
 
-        expect((await listOpenRequests(test.db, projectId, 2)).map((request) => request.id)).toEqual([ids[1], ids[2]]);
-        expect(await listOpenRequests(test.db, projectId)).toHaveLength(3);
+        expect(await ids()).toEqual([live, newest, left, done, stale]);
+        expect(await ids(3)).toEqual([live, newest, left]);
+        expect(await ids(1)).toEqual([live, newest]);
     });
 });
 

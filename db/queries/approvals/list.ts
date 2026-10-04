@@ -2,7 +2,10 @@ import type { ApprovalAnswer } from "@quard/shared";
 import { sql } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import { REQUEST_FIELDS, type JsonFields } from "./fields.ts";
+import { REQUEST_LIVE } from "./live.ts";
 import type { ApprovalGrantItem, DecidedApprovalItem, OpenApprovalItem } from "./types.ts";
+
+type OpenRequest = Omit<OpenApprovalItem, "waiters">;
 
 // How many requests wait for an answer
 export async function countOpenRequests(db: Db, projectId: string): Promise<number> {
@@ -15,18 +18,32 @@ export async function countOpenRequests(db: Db, projectId: string): Promise<numb
     return row.open;
 }
 
-// The newest open requests, each with the calls waiting on it
+// Open requests as the approvals page orders them: those a call still waits on
+// first, then the longest wait on top. The limit cuts only requests nobody
+// waits on any more, so a waiting call is never left out.
 export async function listOpenRequests(db: Db, projectId: string, limit = 100): Promise<OpenApprovalItem[]> {
+    const live = db
+        .selectFrom("approval_requests")
+        .select(sql<number>`count(*)`.as("live"))
+        .where("project_id", "=", projectId)
+        .where("answer", "is", null)
+        .where(REQUEST_LIVE);
     const requests = await db
         .selectFrom("approval_requests")
         .select([...REQUEST_FIELDS, "args"])
         .$narrowType<JsonFields>()
         .where("project_id", "=", projectId)
         .where("answer", "is", null)
-        .orderBy("opened_at", "desc")
+        .orderBy(REQUEST_LIVE, "desc")
+        .orderBy("opened_at")
         .orderBy("id")
-        .limit(limit)
+        .limit(sql<number>`greatest(${limit}, ${live})`)
         .execute();
+    return withWaiters(db, projectId, requests);
+}
+
+// Adds the calls waiting on each request, oldest first
+async function withWaiters(db: Db, projectId: string, requests: OpenRequest[]): Promise<OpenApprovalItem[]> {
     const waiters = await db
         .selectFrom("approval_waiters")
         .select([
