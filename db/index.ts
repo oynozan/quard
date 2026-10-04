@@ -14,6 +14,8 @@ export type { AgentLinkRow, LinksOptions } from "./queries/agents/links.ts";
 export { agentMessageLinks } from "./queries/agents/messages.ts";
 export type { AgentMessageRow } from "./queries/agents/messages.ts";
 export { agentLastSeen, agentRoster } from "./queries/agents/roster.ts";
+export { runAgentEvents } from "./queries/agents/run-events.ts";
+export type { RunAgentEvent, RunHandoff, RunMemory, RunMessage } from "./queries/agents/run-events.ts";
 export type { AgentRosterRow, RosterWindow } from "./queries/agents/roster.ts";
 export { agentStats } from "./queries/agents/stats.ts";
 export type { AgentStatsRow } from "./queries/agents/stats.ts";
@@ -80,6 +82,8 @@ export type {
     ToolCoverage,
 } from "./queries/decisions.ts";
 export { ingestBatch } from "./queries/ingest/store.ts";
+export { RUN_LIMIT_RULES, runLimitCounts } from "./queries/limits/run-limits.ts";
+export type { RunLimitRow, RunLimitRule } from "./queries/limits/run-limits.ts";
 export { findMemoryRecords, findMessageRecord } from "./queries/labels/find.ts";
 export { storeLabelRecords } from "./queries/labels/store.ts";
 export { getModelCalls } from "./queries/incidents/calls.ts";
