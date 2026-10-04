@@ -1,6 +1,6 @@
 {
     "name": "quard",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "description": "Records every model call, stops dangerous actions before they run, and shows what caused a failure.",
     "type": "module",
     "license": "UNLICENSED",
