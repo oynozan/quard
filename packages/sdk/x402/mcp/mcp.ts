@@ -1,4 +1,4 @@
-import { priceFrom, removeSecrets, settlementFrom } from "@quard/shared";
+import { priceFrom, removeSecrets, settlementFrom, type PaymentRequired } from "@quard/shared";
 import { asRecord, parseJson } from "../../monitor/json.ts";
 import { isChecked } from "../checked.ts";
 import {
@@ -13,8 +13,8 @@ import {
 } from "../record/payments.ts";
 import { UNGUARDED_REASON, unguardedResult } from "../refusal.ts";
 
-// x402 over MCP: a paid tool answers with its price as an error result,
-// and the payment travels in _meta["x402/payment"].
+// x402 over MCP: a paid tool answers with its price as an error result
+// or a JSON-RPC 402 error, and the payment travels in _meta["x402/payment"].
 
 export const MCP_PAYMENT = "x402/payment";
 export const MCP_PAYMENT_RESPONSE = "x402/payment-response";
@@ -35,6 +35,30 @@ function priceIn(result: Record<string, unknown> | undefined): ReturnType<typeof
     const first = Array.isArray(result.content) ? asRecord(result.content[0]) : undefined;
     const text = first?.type === "text" && typeof first.text === "string" ? parseJson(first.text) : undefined;
     return priceFrom(result.structuredContent) ?? priceFrom(text);
+}
+
+// A price sent as a JSON-RPC error with code 402
+function priceInError(error: unknown): PaymentRequired | undefined {
+    const found = asRecord(error);
+    return found?.code === 402 ? priceFrom(found.data) : undefined;
+}
+
+// Calls the tool, and notes a price an error carries before throwing it on
+async function callNoting(
+    client: McpToolClient,
+    params: ToolParams,
+    rest: never[],
+    onPrice: (price: PaymentRequired) => void,
+): Promise<unknown> {
+    try {
+        return await client.callTool(params, ...rest);
+    } catch (error) {
+        const price = priceInError(error);
+        if (price !== undefined) {
+            onPrice(price);
+        }
+        throw error;
+    }
 }
 
 function urlIn(value: unknown): string | undefined {
@@ -66,10 +90,12 @@ export function x402Mcp<T extends McpToolClient>(client: T): T {
     const callTool = async (params: ToolParams, ...rest: never[]): Promise<unknown> => {
         const meta = params._meta;
         if (meta === undefined || !Object.hasOwn(meta, MCP_PAYMENT)) {
-            const result = await client.callTool(params, ...rest);
+            const notePrice = (price: PaymentRequired) =>
+                recordPrice(placeOf(client, params.name, urlIn(price)), price);
+            const result = await callNoting(client, params, rest, notePrice);
             const price = priceIn(asRecord(result));
             if (price !== undefined) {
-                recordPrice(placeOf(client, params.name, urlIn(price)), price);
+                notePrice(price);
             }
             return result;
         }
@@ -81,7 +107,7 @@ export function x402Mcp<T extends McpToolClient>(client: T): T {
             return unguardedResult();
         }
         recordSigned(step);
-        const result = await client.callTool(params, ...rest);
+        const result = await callNoting(client, params, rest, (price) => recordRejected(step, price.error));
         noteResult(asRecord(result), step);
         return result;
     };

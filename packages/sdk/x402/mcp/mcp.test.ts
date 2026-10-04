@@ -1,10 +1,11 @@
+import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { PaymentEvent, RunEvent } from "@quard/shared";
 import { x402MCPClient } from "@x402/mcp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { quard } from "../../index.ts";
 import { resetAll } from "../../test/reset.ts";
 import { testClient } from "../../test/x402/client.ts";
-import { PAYEE } from "../../test/x402/facilitator.ts";
+import { PAYEE, v2Options } from "../../test/x402/facilitator.ts";
 import { startX402McpServer } from "../../test/x402/mcp-server.ts";
 import { markChecked } from "../checked.ts";
 import { UNGUARDED_TEXT } from "../refusal.ts";
@@ -97,6 +98,33 @@ describe("x402Mcp", () => {
         expect(client.getServerVersion()?.name).toBe("paid-tools");
         expect(typeof client.transport).toBe("object");
         expect(payments()).toEqual([]);
+    });
+
+    it("records a price sent as a JSON-RPC 402 error, and throws the error on", async () => {
+        const price = { x402Version: 2, resource: { url: "mcp://tool/t" }, accepts: v2Options, error: "bad_sig" };
+        const payment = { x402Version: 2, accepted: v2Options[0], payload: {} };
+        markChecked(payment, "tool");
+        const asked = new McpError(402, "Payment required", price);
+        const errors: unknown[] = [asked, new McpError(402, "Payment rejected", price), "plain"];
+        errors.push(new McpError(402, "No price", { nope: 1 }), new McpError(-32603, "Down", price));
+        const client: McpToolClient = {
+            callTool: async () => {
+                throw errors.shift();
+            },
+        };
+        const wrapped = quard.x402Mcp(client);
+        const paid = { name: "t", _meta: { [MCP_PAYMENT]: payment } };
+        await expect(wrapped.callTool({ name: "t" })).rejects.toBe(asked);
+        await expect(wrapped.callTool(paid)).rejects.toThrow("Payment rejected");
+        await expect(wrapped.callTool({ name: "t" })).rejects.toBe("plain");
+        await expect(wrapped.callTool({ name: "t" })).rejects.toThrow("No price");
+        await expect(wrapped.callTool(paid)).rejects.toThrow("Down");
+        expect(payments().map((event) => [event.stage, event.resource, event.reason])).toEqual([
+            ["challenged", "mcp://tool/t", undefined],
+            ["signed", "mcp://tool/t", undefined],
+            ["failed", "mcp://tool/t", "bad_sig"],
+            ["signed", "mcp://tool/t", undefined],
+        ]);
     });
 
     it("works with any client that has callTool, with no server name", async () => {
