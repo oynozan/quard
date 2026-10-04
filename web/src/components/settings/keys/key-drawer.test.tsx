@@ -73,7 +73,9 @@ describe("KeyDrawer", () => {
         const snippet = screen.getByText(/^quard\.configure/).textContent;
         expect(snippet).toContain("key: process.env.QUARD_AGENT_KEY");
         expect(snippet).toContain("webhookUrl: process.env.QUARD_WEBHOOK_URL");
-        expect(snippet).toContain("hashKey: process.env.QUARD_HASH_KEY");
+        expect(snippet).toContain("controlUrl: process.env.QUARD_CONTROL_URL");
+        // The agent key is the only secret an agent holds
+        expect(snippet).not.toMatch(/hash/i);
         expect(onCreated).toHaveBeenCalledWith("billing-service");
     });
 

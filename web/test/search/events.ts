@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import type { ingestBatch } from "@quard/db";
 
 // Shared event schema types, as ingestBatch takes them
@@ -8,7 +7,6 @@ type Content = Extract<RunEvent, { type: "content" }>;
 type Label = Pick<Content, "origin" | "trust" | "sensitivity">;
 type Run = { runId: string; agent: string };
 
-export const HASH_KEY = "ab".repeat(32);
 export const T0 = Date.UTC(2026, 9, 3, 12, 0, 0);
 const at = (seconds: number) => new Date(T0 + seconds * 1000).toISOString();
 
@@ -24,17 +22,12 @@ export const FILE = "4444444444444444";
 // A model step whose own event has not been stored yet
 export const LATER = "5555555555555555";
 
-// A sensitive key as the SDK stores it, the mask and then the keyed hash
-function hashed(kind: string, normalized: string, mask: string): string {
-    const hash = createHmac("sha256", Buffer.from(HASH_KEY, "hex")).update(`${kind}:${normalized}`).digest("hex");
-    return `${kind}:${mask}#${hash.slice(0, 32)}`;
-}
-
 export const IBAN = "DE89370400440532013000";
 // The same IBAN as a person might type it
 export const IBAN_TYPED = "de89 3704 0044 0532 0130 00";
 export const IBAN_MASK = "DE89…3000";
-export const IBAN_KEY = hashed("iban", IBAN, IBAN_MASK);
+// Hashed with the project's own key when the runs are stored
+const IBAN_KEY = `iban:${IBAN}`;
 export const INVOICE_ID = "INV-20931";
 // ID keys are lowercase
 export const INVOICE_SHOWN = INVOICE_ID.toLowerCase();

@@ -1,7 +1,8 @@
 // @vitest-environment node
+import { createRedactor, parseHashKey, redactEvent } from "@quard/shared";
 import { describe, expect, it, vi } from "vitest";
 import { searchRuns } from "@/lib/data/search";
-import { found, setUpSearchDb } from "../../../../test/search/db";
+import { found, HASH_KEY, setUpSearchDb } from "../../../../test/search/db";
 import {
     DOCS_RUN,
     docsRun,
@@ -78,6 +79,14 @@ describe("searchRuns by value", () => {
             runs: 1,
             truncated: false,
         });
+    });
+
+    it("hashes an IBAN with the project's own key, never with the install's", async () => {
+        const install = createRedactor(parseHashKey(HASH_KEY));
+        await project(...invoiceRun().map((event) => redactEvent(install, event)));
+
+        expect((await found(IBAN)).total).toBe(0);
+        expect((await found(INVOICE_ID)).total).toBe(2);
     });
 
     it("finds a URL itself, its host and its main domain, newest first, with the runs they are in", async () => {

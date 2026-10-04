@@ -7,6 +7,7 @@ import {
     maskIban,
     normalizeCard,
     parseHashKey,
+    projectHashKey,
     redactText,
     type ValueType,
 } from "@quard/shared";
@@ -27,10 +28,8 @@ function clearKey(key: string): string {
     return `${key.slice(0, at)}:${redactText(key.slice(at + 1))}`;
 }
 
-// Builds the keys ingest stores for the first traceable value in a query.
-// Null when the query holds none. Throws when the hash key is set but is
-// not 64 hex characters, and only for an IBAN or email.
-export function searchKeys(query: string, hashKey: string | undefined): SearchKeys | null {
+// The keys ingest stores for the first traceable value in a query, null when it holds none
+export function searchKeys(query: string, installKey: string | undefined, projectId: string): SearchKeys | null {
     const text = query.trim();
     const digits = normalizeCard(text);
     if (isCard(digits)) {
@@ -43,11 +42,13 @@ export function searchKeys(query: string, hashKey: string | undefined): SearchKe
     if (value.type === "iban" || value.type === "email") {
         // The mask is the part of the key before the hash
         const shown = value.type === "iban" ? maskIban(value.value) : maskEmail(value.value);
-        if (!hashKey) {
+        if (!installKey) {
             return { status: "needs-hash-key", kind: value.type, shown };
         }
+        // Ingest hashes with the project's key, and a bad install key throws only for these
+        const redactor = createRedactor(projectHashKey(parseHashKey(installKey), projectId));
         // An email's host and domain keys would also match other people there
-        const keys = value.keys.slice(0, 1).map(createRedactor(parseHashKey(hashKey)).key);
+        const keys = value.keys.slice(0, 1).map(redactor.key);
         return { status: "ready", kind: value.type, shown, keys };
     }
     const keys = value.type === "url" || value.type === "host" ? value.keys : value.keys.slice(0, 1);

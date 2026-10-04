@@ -33,7 +33,7 @@ export async function searchRuns(query: string): Promise<SearchState> {
     const { db, project } = scope;
     let found = await byName(db, project.id, text);
     if (!found) {
-        const value = searchKeys(text, process.env.QUARD_HASH_KEY);
+        const value = searchKeys(text, process.env.QUARD_HASH_KEY, project.id);
         if (!value) return { state: "nothing" };
         if (value.status === "not-searchable") return { state: "card" };
         if (value.status === "needs-hash-key") return { state: "hash-off" };

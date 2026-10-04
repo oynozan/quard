@@ -20,11 +20,11 @@ type KeyDrawerProps = {
 
 const FAILED = "Could not create the key. Try again.";
 
-// The SDK takes the key in quard.configure, together with the webhook address and the hash key
+// The SDK takes the key in quard.configure, with the webhook and control addresses
 const USE_IT = `quard.configure({
     key: process.env.QUARD_AGENT_KEY,
     webhookUrl: process.env.QUARD_WEBHOOK_URL,
-    hashKey: process.env.QUARD_HASH_KEY,
+    controlUrl: process.env.QUARD_CONTROL_URL,
 });`;
 
 // Create a key, then show the full secret once with a Copy button
