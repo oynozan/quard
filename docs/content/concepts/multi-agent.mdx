@@ -128,3 +128,11 @@ A message reads as untrusted, with the default for agents, when:
 - The text changed on the way, so its hash no longer matches the record.
 
 So a rule that wants an IBAN from your supplier records still blocks a payment built from that message. A sender that couldn't store its record also records a `label_record_not_stored` warning, and the run shows the message as not verified.
+
+When the record is missing, the receiving agent also records a `label_record_not_found` warning and counts as past the depth limit, so it can't delegate further once depth limits are on.
+
+## Values the sender made up
+
+A record only vouches for values the sender's run had read. A value its model wrote itself, such as an IBAN it invented, stays model-generated in the receiver. It stays that way for the rest of the run: later output from your own tools doesn't make it seen. A `neverSeen` rule still asks or blocks.
+
+A sender run that has read nothing vouches for nothing. Its message reads as unknown content: untrusted and internal.

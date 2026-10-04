@@ -38,11 +38,14 @@ The wrapped store has the same methods as yours. Any of these may be there:
 
 An item reads back as untrusted and internal, the default for unknown content, when:
 
-- It was changed outside the wrapper, so its hash matches no record.
+- It was changed outside the wrapper, even by one hidden character, so its hash matches no record.
+- Your read function returns it in another shape than it was written, for example with an added score field. Return items as they were written.
 - It was written before the store was wrapped, or by code that skips the wrapper.
 - Its labels couldn't be stored, or couldn't be looked up in time.
 
 A write still goes ahead when its labels can't be stored. Other processes then read the item as untrusted.
+
+A write from a run that has read nothing, or from outside `quard.run()`, is stored as unknown content: untrusted and internal. And a value that a model wrote into a note stays model-generated when the note is read back, even inside your own tools.
 
 A team's [origin override](/concepts/labels#changing-the-defaults) for `memory:<name>` applies only to items that have labels. It can't make unlabeled content trusted.
 
