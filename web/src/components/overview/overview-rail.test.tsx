@@ -23,10 +23,10 @@ describe("OverviewRail", () => {
     it("counts the running agents and fills the meter to match", () => {
         render(<OverviewRail agents={AGENTS} guardCounts={GUARDS} />);
 
-        expect(rail().getByText("2 / 4")).toBeTruthy();
-        const meter = rail().getByRole("progressbar", { name: "2 of 4 agents running" });
+        expect(rail().getByText("2 / 3")).toBeTruthy();
+        const meter = rail().getByRole("progressbar", { name: "2 of 3 agents running" });
         expect(meter.getAttribute("aria-valuenow")).toBe("2");
-        expect(meter.getAttribute("aria-valuemax")).toBe("4");
+        expect(meter.getAttribute("aria-valuemax")).toBe("3");
     });
 
     it("shows each agent's state beside its name", () => {
@@ -35,15 +35,15 @@ describe("OverviewRail", () => {
             .getAllByRole("listitem")
             .map((item) => item.textContent);
 
-        expect(rows).toEqual(["billingRunning", "researcherRunning", "supportIdle", "deploy-botOffline"]);
+        expect(rows).toEqual(["billingRunning", "researcherRunning", "supportIdle"]);
     });
 
     it("keeps the meter when agents were seen but none is running", () => {
         const idle = AGENTS.map((agent) => ({ ...agent, state: "idle" as const }));
         render(<OverviewRail agents={idle} guardCounts={GUARDS} />);
 
-        expect(rail().getByText("0 / 4")).toBeTruthy();
-        expect(rail().getByRole("progressbar", { name: "0 of 4 agents running" })).toBeTruthy();
+        expect(rail().getByText("0 / 3")).toBeTruthy();
+        expect(rail().getByRole("progressbar", { name: "0 of 3 agents running" })).toBeTruthy();
     });
 
     it("lists guard counts by type with thousands separators", () => {

@@ -90,7 +90,6 @@ export const AGENTS: Agent[] = [
     { name: "billing", state: "running", model: "gpt-5.4-mini" },
     { name: "researcher", state: "running", model: "o4-mini" },
     { name: "support", state: "idle", model: null },
-    { name: "deploy-bot", state: "offline", model: null },
 ];
 
 let next = 0;

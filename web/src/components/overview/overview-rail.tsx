@@ -1,9 +1,9 @@
 import { FitMeter } from "@/components/charts/fit";
 import { StatusSquare } from "@/components/kit/labels";
 import type { GuardRow } from "@/lib/data/overview/rail";
-import type { Agent } from "@/lib/data/types";
+import type { Agent, AgentState } from "@/lib/data/types";
 
-const STATE_WORD = { running: "Running", idle: "Idle", offline: "Offline" } as const;
+const STATE_WORD: Record<AgentState, string> = { running: "Running", idle: "Idle" };
 
 type OverviewRailProps = { agents: Agent[]; guardCounts: GuardRow[] };
 

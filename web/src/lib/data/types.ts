@@ -14,7 +14,8 @@ export type GuardType = "source" | "action" | "approval" | "egress" | "limit" | 
 export type Outcome = "allow" | "ask" | "block" | "pass" | "strip" | "flag";
 export type RunStatus = "running" | "waiting" | "completed" | "failed" | "blocked";
 
-export type AgentState = "running" | "idle" | "offline";
+// No offline state, since control does not record which agents a connection runs
+export type AgentState = "running" | "idle";
 
 export type Agent = {
     name: string;

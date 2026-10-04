@@ -1,8 +1,7 @@
 import type { StepStatus } from "../runs/types";
-import type { GuardMode, Label, Outcome, StepKind } from "../types";
+import type { AgentState, GuardMode, Label, Outcome, StepKind } from "../types";
 
-// No offline state, since control does not record which agents a connection runs
-export type AgentState = "running" | "idle";
+export type { AgentState };
 
 export type AgentNode = {
     name: string;
