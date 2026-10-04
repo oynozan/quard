@@ -36,13 +36,9 @@ function worthRetrying(status: number): boolean {
 const encoder = new TextEncoder();
 
 // The event as sent with its size as JSON, or undefined when it can't be sent
-function sized(event: RunEvent, redactor: Redactor, now: number): Sized | undefined {
+function sized(event: RunEvent, redactor: Redactor): Sized | undefined {
     try {
-        const item = {
-            id: newEventId(),
-            event: prepareEvent(event, redactor),
-            ...(now - Date.parse(event.at) > LATE_MS ? { degraded: true } : {}),
-        };
+        const item = { id: newEventId(), event: prepareEvent(event, redactor) };
         return { item, bytes: encoder.encode(JSON.stringify(item)).length };
     } catch {
         return undefined;
@@ -104,8 +100,7 @@ export function createUploader(options: UploaderOptions): Uploader {
             if (events.length === 0) {
                 return undefined;
             }
-            const now = Date.now();
-            const items = events.flatMap((event) => sized(event, options.redactor, now) ?? []);
+            const items = events.flatMap((event) => sized(event, options.redactor) ?? []);
             if (items.length < events.length) {
                 drop(events.length - items.length);
             }
@@ -122,7 +117,11 @@ export function createUploader(options: UploaderOptions): Uploader {
 
     // True when the batch is stored, refused for good or can't be sent
     async function sendBatch(batch: Batch): Promise<boolean> {
-        const body = bodyOf(batch);
+        const now = Date.now();
+        const items = batch.items.map((item) =>
+            now - Date.parse(item.event.at) > LATE_MS ? { ...item, degraded: true } : item,
+        );
+        const body = bodyOf({ ...batch, items });
         // Resending would fail again, so its events and the count it carries go on as dropped
         if (body === undefined) {
             drop(batch.items.length + batch.dropped);
