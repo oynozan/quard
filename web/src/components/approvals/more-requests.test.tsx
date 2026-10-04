@@ -21,4 +21,12 @@ describe("MoreRequests", () => {
         fireEvent.click(screen.getByRole("button", { name: "Show 6 more" }));
         expect(router.replace).toHaveBeenCalledWith("/approvals?shown=400", { scroll: false });
     });
+
+    it("keeps listing the request a link asked for", () => {
+        render(<MoreRequests more={250} shown={100} linked="apr_7f31c0d2a9b84e15" />);
+        fireEvent.click(screen.getByRole("button", { name: "Show 100 more" }));
+        expect(router.replace).toHaveBeenCalledWith("/approvals?shown=200&request=apr_7f31c0d2a9b84e15", {
+            scroll: false,
+        });
+    });
 });

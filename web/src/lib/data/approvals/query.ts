@@ -27,19 +27,21 @@ async function runsOf(db: Db, projectId: string, runIds: string[], now: number):
     return runs;
 }
 
-// Everything the approvals page shows: at least `shown` open requests, with every one a call
-// still waits on, plus "always approve" grants and past answers
-export async function getApprovals(shown: number): Promise<ApprovalsData> {
+// The approvals page, with at least `shown` open requests, every live one and the `linked` one
+export async function getApprovals(shown: number, linked?: string): Promise<ApprovalsData> {
     const scope = await projectScope();
     if (!scope) return { open: [], more: 0, grants: [], decisions: [] };
     const { db, project } = scope;
     const now = Date.now();
-    const [open, total, grants, decided] = await Promise.all([
+    const [listed, target, total, grants, decided] = await Promise.all([
         listOpenRequests(db, project.id, shown),
+        linked === undefined ? undefined : getOpenRequest(db, project.id, linked),
         countOpenRequests(db, project.id),
         listGrants(db, project.id),
         listDecidedRequests(db, project.id),
     ]);
+    const past = target !== undefined && !listed.some((item) => item.id === target.id);
+    const open = past ? [...listed, target] : listed;
     const runs = await runsOf(
         db,
         project.id,

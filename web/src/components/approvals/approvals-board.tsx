@@ -15,12 +15,12 @@ import { SHOWN_STEP } from "./lib/shown";
 import { MoreRequests } from "./more-requests";
 import { RequestCard } from "./request-card";
 
-// `shown` is how many open requests the address asks for
-type Props = { data: ApprovalsData; now: number; approver: string; shown?: number };
+// `shown` is how many open requests the address asks for, and `linked` one request it asks to list
+type Props = { data: ApprovalsData; now: number; approver: string; shown?: number; linked?: string };
 
 // Open requests, standing grants and past answers. An answer shows at once and
 // is saved in the background; if saving fails, the request comes back.
-export function ApprovalsBoard({ data, now, approver, shown = SHOWN_STEP }: Props) {
+export function ApprovalsBoard({ data, now, approver, shown = SHOWN_STEP, linked }: Props) {
     const router = useRouter();
     const [view, change] = useOptimistic(boardOf(data), applyChange);
     const [announce, setAnnounce] = useState("");
@@ -121,7 +121,7 @@ export function ApprovalsBoard({ data, now, approver, shown = SHOWN_STEP }: Prop
                 ) : null}
                 {view.more > 0 ? (
                     <div className="mt-6">
-                        <MoreRequests more={view.more} shown={listed} />
+                        <MoreRequests more={view.more} shown={listed} linked={linked} />
                     </div>
                 ) : null}
             </section>

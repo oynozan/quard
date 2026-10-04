@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EMAIL } from "../../../../test/approvals-overview/fixtures";
+import { EMAIL, PAY } from "../../../../test/approvals-overview/fixtures";
 import { approvalsData } from "../../../../test/approvals-overview/history";
 import { NOW } from "../../../../test/time";
 import ApprovalsPage, { metadata } from "./page";
@@ -48,7 +48,7 @@ describe("ApprovalsPage", () => {
 
     it("shows every open request on the board", async () => {
         render(await page());
-        expect(data.getApprovals).toHaveBeenCalledWith(100);
+        expect(data.getApprovals).toHaveBeenCalledWith(100, undefined);
         expect(screen.getByRole("heading", { level: 1, name: "Approvals" })).toBeTruthy();
         const waiting = screen.getByRole("heading", { level: 2, name: /^Waiting for an answer/ });
         expect(waiting.textContent).toBe("Waiting for an answer4");
@@ -57,9 +57,17 @@ describe("ApprovalsPage", () => {
     it("lists as many open requests as the address asks for, and offers the rest", async () => {
         data.getApprovals.mockResolvedValueOnce(approvalsData({ more: 150 }));
         render(await page({ shown: "200" }));
-        expect(data.getApprovals).toHaveBeenCalledWith(200);
+        expect(data.getApprovals).toHaveBeenCalledWith(200, undefined);
         fireEvent.click(screen.getByRole("button", { name: "Show 100 more" }));
         expect(router.replace).toHaveBeenCalledWith("/approvals?shown=300", { scroll: false });
+    });
+
+    it("lists the request a link asks for, and keeps it when it shows more", async () => {
+        data.getApprovals.mockResolvedValueOnce(approvalsData({ more: 150 }));
+        render(await page({ request: PAY }));
+        expect(data.getApprovals).toHaveBeenCalledWith(100, PAY);
+        fireEvent.click(screen.getByRole("button", { name: "Show 100 more" }));
+        expect(router.replace).toHaveBeenCalledWith(`/approvals?shown=200&request=${PAY}`, { scroll: false });
     });
 
     it("signs each answer with the signed-in person's name", async () => {

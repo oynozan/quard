@@ -41,17 +41,21 @@ async function openAt(projectId: string, minute: number): Promise<string> {
 const ids = (items: { request: { id: string } }[]) => items.map((item) => item.request.id);
 
 describe("an approvals page with more than a hundred open requests", () => {
-    it("lists the call that still waits first, then the longest wait, and reaches every other one", async () => {
+    let live = "";
+    const stopped: string[] = [];
+
+    // The oldest request has a call that still waits, and nobody waits on the 105 after it
+    beforeAll(async () => {
         const projectId = await createProject(test.db, "Acme");
-        // The oldest request has a call that still waits; nobody waits on the 105 after it
-        const live = await openAt(projectId, 0);
+        live = await openAt(projectId, 0);
         const waiter = { askId: "a".repeat(16), requestId: live, runId: RUN, stepId: ASKED_STEP, agent: "billing" };
         await addWaiter(test.db, projectId, waiter);
-        const stopped: string[] = [];
         for (let minute = 1; minute <= 105; minute += 1) {
             stopped.push(await openAt(projectId, minute));
         }
+    }, 60_000);
 
+    it("lists the call that still waits first, then the longest wait, and reaches every other one", async () => {
         const first = await getApprovals(100);
         expect(ids(first.open)).toEqual([live, ...stopped.slice(0, 99)]);
         expect(first.more).toBe(6);
@@ -67,5 +71,17 @@ describe("an approvals page with more than a hundred open requests", () => {
             [live, true],
             ...stopped.slice(0, 4).map((id) => [id, false]),
         ]);
+    });
+
+    it("adds the request a link asks for when it is past the list, and only then", async () => {
+        const listed = [live, ...stopped.slice(0, 99)];
+
+        const linked = await getApprovals(100, stopped[104]);
+        expect(ids(linked.open)).toEqual([...listed, stopped[104]]);
+        expect(linked.more).toBe(5);
+        expect(linked.open.at(-1)?.request.waiting).toBe(false);
+
+        expect(ids((await getApprovals(100, stopped[0])).open)).toEqual(listed);
+        expect(ids((await getApprovals(100, "apr_ffffffffffffffff")).open)).toEqual(listed);
     });
 });
