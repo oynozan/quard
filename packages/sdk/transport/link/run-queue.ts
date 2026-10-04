@@ -48,6 +48,10 @@ export function createRunReplays(link: Link, requests: Requests, replyMs: number
     }
 
     function keep(run: RunState, counts: readonly RunCount[]): void {
+        // An empty entry would still take one of the MAX_RUNS places
+        if (counts.length === 0) {
+            return;
+        }
         const known = kept.get(run) ?? new Map<string, number>();
         for (const { counter, add } of counts) {
             known.set(counter, (known.get(counter) ?? 0) + add);

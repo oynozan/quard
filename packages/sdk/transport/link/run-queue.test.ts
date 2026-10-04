@@ -216,6 +216,19 @@ describe("run count replays", () => {
         expect(sent).toHaveLength(1000);
         expect(sent[0]?.runId).toBe(runs[1]?.runId);
     });
+
+    it("keeps no entry for a run with no counts, so real counts are not pushed out", () => {
+        const { fake, replays } = setup();
+        const run = newRun();
+        replays.keep(run, [{ counter: "calls:pay", add: 3 }]);
+        for (let n = 0; n < 1000; n++) {
+            replays.send(newRun(), []);
+        }
+
+        expect(counts(sentOf(fake.connect(), "run_count"))).toEqual([
+            { runId: run.runId, counts: [{ counter: "calls:pay", add: 3 }] },
+        ]);
+    });
 });
 
 describe("runCounted", () => {
