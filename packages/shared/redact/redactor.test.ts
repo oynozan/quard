@@ -19,8 +19,14 @@ describe("redactText", () => {
         expect(redactText(`${nbsp} ${card} ${email}`)).toBe("DE89…3000 4111…1111 j…@acme.com");
     });
 
+    it("removes the user and password of a URL, not just part of them as an email", () => {
+        expect(redactText("cache at redis://user:hunter2@cache.acme.com:6379")).toBe(
+            "cache at redis://…@cache.acme.com:6379",
+        );
+    });
+
     it("changes nothing the second time", () => {
-        const once = redactText(`IBAN ${IBAN}, jane@acme.com, 5555555555554444`);
+        const once = redactText(`IBAN ${IBAN}, jane@acme.com, 5555555555554444, redis://u:hunter2@cache.acme.com`);
         expect(redactText(once)).toBe(once);
     });
 });

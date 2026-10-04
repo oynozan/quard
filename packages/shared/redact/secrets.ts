@@ -6,6 +6,10 @@ export type SecretSpan = Span & { name: string };
 // Gitleaks-style patterns for common keys and tokens. Each starts
 // with a fixed prefix, so the scan stays linear.
 const PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
+    // The user and password in scheme://user:pass@host. The host starts
+    // after the last @, as URL parsers read it. First, so it wins over a
+    // token that starts in the same place.
+    ["url-credentials", /(?<=:\/\/)[^\s/?#@:"'`<>\\]*:[^\s/?#"'`<>\\]*(?=@)/g],
     ["quard-agent-key", /\bqk_(?:live|test)_[A-Za-z0-9]{16,}/g],
     ["sk-api-key", /\bsk-(?:proj-|svcacct-|admin-|ant-)?[A-Za-z0-9_-]{20,}/g],
     ["aws-access-key", /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g],

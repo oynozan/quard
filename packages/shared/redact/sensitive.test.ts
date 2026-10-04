@@ -61,6 +61,12 @@ describe("maskSensitive", () => {
         expect(maskSensitive(`use ${SECRET} today`, all)).toBe("use [secret removed by Quard] today");
     });
 
+    it("masks the user and password of a URL as a secret", () => {
+        expect(maskSensitive("use redis://user:hunter2@cache.acme.com", all)).toBe(
+            "use redis://[secret removed by Quard]@cache.acme.com",
+        );
+    });
+
     it("masks a whole token even when a card number sits inside it", () => {
         const token = ["eyJhbGciOiJI", "eyJzdWIiOiIx", "4242424242424242"].join(".");
 

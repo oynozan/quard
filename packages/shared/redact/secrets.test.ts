@@ -28,8 +28,17 @@ describe("findSecrets", () => {
         ["a short AKIA string", "AKIA1234"],
         ["a public key block", "-----BEGIN PUBLIC KEY-----"],
         ["two-part base64", "eyJhbGciOiJI.eyJzdWIiOiIx"],
+        ["a URL with a port and a path", "https://acme.com:8443/a:b@c"],
+        ["a URL with a user and no password", "ssh://git@github.com/acme/app"],
+        ["a user and password with no scheme", "user:hunter2@cache.acme.com"],
     ])("skips %s", (_, text) => {
         expect(findSecrets(text)).toEqual([]);
+    });
+
+    it("finds the user and password in a URL, not the host", () => {
+        expect(findSecrets("at redis://user:hunter2@cache.acme.com:6379/0")).toEqual([
+            { name: "url-credentials", start: 11, end: 23, value: "user:hunter2" },
+        ]);
     });
 
     it("covers the whole private key block, not just the header", () => {
@@ -97,6 +106,29 @@ describe("removeSecrets", () => {
     it("stays fast on long hyphenated text", () => {
         const text = "a-".repeat(50_000);
         expect(removeSecrets(text)).toBe(text);
+    });
+
+    it.each([
+        ["redis://user:hunter2@cache.acme.com:6379", "redis://…@cache.acme.com:6379"],
+        ["redis://:hunter2@localhost:6379", "redis://…@localhost:6379"],
+        // A raw @ in the password: the host starts after the last one
+        ["postgres://app:p@ss@db.acme.com/main", "postgres://…@db.acme.com/main"],
+        [
+            "https://login.acme.com/?next=ftp://bob:pw123@files.acme.com",
+            "https://login.acme.com/?next=ftp://…@files.acme.com",
+        ],
+        [
+            '{"url":"amqp://u:s3cret@mq.acme.com","to":"jane@acme.com"}',
+            '{"url":"amqp://…@mq.acme.com","to":"jane@acme.com"}',
+        ],
+    ])("removes the user and password in %s", (text, expected) => {
+        expect(removeSecrets(text)).toBe(expected);
+    });
+
+    it("removes a token used as a URL's user with its password, and keeps the token's prefix", () => {
+        expect(removeSecrets(`https://ghp_${tail(36)}:x-oauth-basic@github.com/acme/app.git`)).toBe(
+            "https://ghp_…@github.com/acme/app.git",
+        );
     });
 
     it("leaves plain text alone", () => {
