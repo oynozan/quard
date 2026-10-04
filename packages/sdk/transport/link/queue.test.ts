@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearDayCounts, dayUsed } from "../../guards/limit/daily.ts";
-import { fakeLink, sentOf } from "../../test/fake-socket.ts";
+import { fakeLink, sentOf, type FakeSocket } from "../../test/fake-socket.ts";
 import { createReplays, type FleetUse } from "./queue.ts";
 import { createRequests } from "./requests.ts";
 
@@ -22,6 +22,10 @@ function setup() {
 // Lets the replies' promise callbacks run
 const settle = () => vi.advanceTimersByTimeAsync(0);
 
+// Each count sent, with its tool and day
+const replayed = (socket: FakeSocket) =>
+    sentOf(socket, "count").flatMap(({ tool, day, counts }) => counts.map((count) => ({ tool, day, ...count })));
+
 beforeEach(() => {
     vi.useFakeTimers({ now: Date.parse(`${DAY}T12:00:00.000Z`) });
 });
@@ -39,12 +43,11 @@ describe("replays for control", () => {
         replays.keepCount({ day: DAY, tool: "pay", counter: "amount:amount", add: 50 });
 
         const socket = fake.connect();
-        const counts = sentOf(socket, "count");
-        expect(counts.map(({ tool, counter, day, add, max }) => ({ tool, counter, day, add, max }))).toEqual([
-            { tool: "pay", counter: "calls", day: DAY, add: 3, max: undefined },
-            { tool: "pay", counter: "amount:amount", day: DAY, add: 50, max: undefined },
+        expect(replayed(socket)).toEqual([
+            { tool: "pay", counter: "calls", day: DAY, add: 3 },
+            { tool: "pay", counter: "amount:amount", day: DAY, add: 50 },
         ]);
-        socket.reply({ type: "counted", id: counts[0]?.id as string, ok: true, used: 7 });
+        socket.reply({ type: "counted", id: sentOf(socket, "count")[0]?.id as string, ok: true, used: [7] });
         await settle();
 
         expect(dayUsed(DAY, "pay", "calls")).toBe(7);
@@ -59,7 +62,7 @@ describe("replays for control", () => {
         vi.advanceTimersByTime(1000);
         const again = fake.connect();
 
-        expect(sentOf(again, "count").map((count) => count.add)).toEqual([1]);
+        expect(replayed(again).map(({ add }) => add)).toEqual([1]);
     });
 
     it("takes back counts control turned out to have", () => {
@@ -74,7 +77,7 @@ describe("replays for control", () => {
 
         const socket = fake.connect();
 
-        expect(sentOf(socket, "count").map(({ tool, add }) => [tool, add])).toEqual([["pay", 2]]);
+        expect(replayed(socket).map(({ tool, add }) => [tool, add])).toEqual([["pay", 2]]);
     });
 
     it("sends a fleet report at once while control is there", async () => {
@@ -114,7 +117,7 @@ describe("replays for control", () => {
         replays.keepUse(USE);
         vi.advanceTimersByTime(30_000);
 
-        expect(sentOf(socket, "count").map((count) => count.add)).toEqual([1]);
+        expect(replayed(socket).map(({ add }) => add)).toEqual([1]);
         expect(sentOf(socket, "fleet")).toHaveLength(1);
     });
 
@@ -128,7 +131,7 @@ describe("replays for control", () => {
         const again = fake.connect();
 
         expect(sentOf(socket, "count")).toEqual([]);
-        expect(sentOf(again, "count").map((count) => count.add)).toEqual([1]);
+        expect(replayed(again).map(({ add }) => add)).toEqual([1]);
     });
 
     it("forgets a replayed count or report that control answers late", async () => {
@@ -141,7 +144,7 @@ describe("replays for control", () => {
 
         vi.advanceTimersByTime(5000);
         await settle();
-        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: 4 });
+        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: [4] });
         socket.reply({ type: "fleet_result", id: use?.id as string, quarantined: [], fleetObserveUntil: null });
         vi.advanceTimersByTime(30_000);
         socket.drop();

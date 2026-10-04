@@ -70,14 +70,14 @@ export function askMessage(fields: Partial<AskMessage> = {}): AskMessage {
     };
 }
 
+// One payInvoice call for today, adding to its call count when no counts are given
 export function countMessage(fields: Partial<CountMessage> = {}): CountMessage {
     return {
         type: "count",
         id: newEventId(),
         tool: "payInvoice",
-        counter: "calls",
         day: new Date().toISOString().slice(0, 10),
-        add: 1,
+        counts: [{ counter: "calls", add: 1 }],
         ...fields,
     };
 }

@@ -10,7 +10,7 @@ import {
 } from "@quard/shared";
 import { WebSocketServer, type WebSocket } from "ws";
 import { READY } from "./fake-socket.ts";
-import { countRun } from "./run-counts.ts";
+import { countAll, countRun } from "./run-counts.ts";
 
 export const CONTROL_KEY = "qk_live_control_test";
 
@@ -64,13 +64,12 @@ export async function startControlServer(key = CONTROL_KEY, labels: LabelRecord[
                 send(socket, { type: "decided", askId: message.askId, answer: state.autoAnswer, requestId });
             }
         } else if (message.type === "count") {
-            const id = `${message.day}/${message.tool}/${message.counter}`;
-            const used = (counters.get(id) ?? 0) + message.add;
-            const ok = message.max === undefined || used <= message.max;
-            if (ok) {
-                counters.set(id, used);
-            }
-            send(socket, { type: "counted", id: message.id, ok, used: ok ? used : (counters.get(id) ?? 0) });
+            const { ok, used } = countAll(
+                counters,
+                message.counts,
+                (counter) => `${message.day}/${message.tool}/${counter}`,
+            );
+            send(socket, { type: "counted", id: message.id, ok, used });
         } else if (message.type === "lookup" && state.answerLookups) {
             send(socket, { type: "labels", id: message.id, records: lookupIn(labels, message) });
         } else if (message.type === "run_count") {

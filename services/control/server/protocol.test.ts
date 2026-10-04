@@ -68,14 +68,14 @@ describe("the protocol over a real WebSocket", () => {
         const peer = await openClient(control.port, project.key);
         await caller.hello();
         await peer.hello();
-        const count = countMessage({ max: 10 });
+        const count = countMessage({ counts: [{ counter: "calls", add: 1, max: 10 }] });
 
         caller.send(count);
         for (let n = 1; n <= 5; n += 1) {
             caller.send(fleetMessage(n, [IBAN_VALUE]));
         }
 
-        expect(await caller.next("counted")).toEqual({ type: "counted", id: count.id, ok: true, used: 1 });
+        expect(await caller.next("counted")).toEqual({ type: "counted", id: count.id, ok: true, used: [1] });
         const results = [];
         for (let n = 1; n <= 5; n += 1) {
             results.push(await caller.next("fleet_result"));

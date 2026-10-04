@@ -7,10 +7,8 @@ const count = (id: string): CountMessage => ({
     type: "count",
     id,
     tool: "payInvoice",
-    counter: "calls",
     day: "2026-10-03",
-    add: 1,
-    max: 5,
+    counts: [{ counter: "calls", add: 1, max: 5 }],
 });
 const ID = "1".repeat(16);
 const lookup = (id: string): LookupMessage => ({
@@ -46,10 +44,10 @@ describe("requests to control", () => {
         const reply = requests.request(count(ID), { ms: 5000 });
         expect(socket.sent.at(-1)).toEqual(count(ID));
         expect(socket.held).toBe(true);
-        socket.reply({ type: "counted", id: "2".repeat(16), ok: true, used: 9 });
-        socket.reply({ type: "counted", id: ID, ok: true, used: 3 });
+        socket.reply({ type: "counted", id: "2".repeat(16), ok: true, used: [9] });
+        socket.reply({ type: "counted", id: ID, ok: true, used: [3] });
 
-        expect(await reply).toEqual({ type: "counted", id: ID, ok: true, used: 3 });
+        expect(await reply).toEqual({ type: "counted", id: ID, ok: true, used: [3] });
         expect(socket.held).toBe(false);
     });
 
@@ -82,9 +80,9 @@ describe("requests to control", () => {
 
         expect(await reply).toBeUndefined();
         expect(socket.held).toBe(false);
-        socket.reply({ type: "counted", id: ID, ok: false, used: 5 });
-        socket.reply({ type: "counted", id: ID, ok: true, used: 6 });
-        expect(late.mock.calls).toEqual([[{ type: "counted", id: ID, ok: false, used: 5 }]]);
+        socket.reply({ type: "counted", id: ID, ok: false, used: [5] });
+        socket.reply({ type: "counted", id: ID, ok: true, used: [6] });
+        expect(late.mock.calls).toEqual([[{ type: "counted", id: ID, ok: false, used: [5] }]]);
     });
 
     it("forgets a request with no use for a late answer", async () => {
@@ -95,7 +93,7 @@ describe("requests to control", () => {
         vi.advanceTimersByTime(5000);
         expect(await reply).toBeUndefined();
 
-        expect(() => socket.reply({ type: "counted", id: ID, ok: true, used: 1 })).not.toThrow();
+        expect(() => socket.reply({ type: "counted", id: ID, ok: true, used: [1] })).not.toThrow();
     });
 
     it("answers undefined for an error about the request", async () => {

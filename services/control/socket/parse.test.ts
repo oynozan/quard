@@ -14,7 +14,9 @@ describe("parseMessage", () => {
     });
 
     it("says what is wrong, with the request it is about", () => {
-        const parsed = parseMessage(JSON.stringify({ ...countMessage({ id: "abc" }), add: -1 }));
+        const parsed = parseMessage(
+            JSON.stringify(countMessage({ id: "abc", counts: [{ counter: "calls", add: -1 }] })),
+        );
 
         expect(parsed).toEqual({ ok: false, error: expect.stringContaining("add: "), id: "abc" });
     });

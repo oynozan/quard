@@ -116,7 +116,7 @@ describe("countCall for a run that spans processes", () => {
         socket.reply({ type: "run_counted", id: runCount?.id as string, ok: true, used: [1] });
         await settle();
         const [count] = sentOf(socket, "count");
-        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: 1 });
+        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: [1] });
         await settle();
         const [fleet] = sentOf(socket, "fleet");
         socket.reply({ type: "fleet_result", id: fleet?.id as string, quarantined: [], fleetObserveUntil: null });

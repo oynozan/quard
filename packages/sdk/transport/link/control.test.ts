@@ -140,7 +140,13 @@ describe("createControl", () => {
             undefined,
         );
         const count = control.requests.request(
-            { type: "count", id: "1".repeat(16), tool: "pay", counter: "calls", day: "2026-10-03", add: 1 },
+            {
+                type: "count",
+                id: "1".repeat(16),
+                tool: "pay",
+                day: "2026-10-03",
+                counts: [{ counter: "calls", add: 1 }],
+            },
             { ms: 5000 },
         );
 

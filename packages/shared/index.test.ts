@@ -14,6 +14,7 @@ describe("@quard/shared", () => {
             "LABELS_PATH",
             "MAX_BATCH",
             "MAX_BATCH_BYTES",
+            "MAX_DAY_COUNTS",
             "MAX_RUN_COUNTS",
             "SECRET_FIELD",
             "agentMessage",

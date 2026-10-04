@@ -1,4 +1,4 @@
-import { addDayCount, recordFleetUse } from "@quard/db";
+import { addDayCounts, recordFleetUse } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { brokenDb, newConnection, newProject, testContext } from "../test/context.ts";
@@ -62,9 +62,9 @@ describe("hello", () => {
         const project = await newProject(test.db);
         const now = new Date();
         const ctx = testContext(test.db, { now: () => now });
-        const day = { tool: "payInvoice", counter: "calls" };
-        await addDayCount(test.db, project.projectId, { ...day, day: utcDay(now), add: 3 });
-        await addDayCount(test.db, project.projectId, { ...day, day: "2020-01-01", add: 9 });
+        const today = { tool: "payInvoice", day: utcDay(now) };
+        await addDayCounts(test.db, project.projectId, today, [{ counter: "calls", add: 3 }]);
+        await addDayCounts(test.db, project.projectId, { ...today, day: "2020-01-01" }, [{ counter: "calls", add: 9 }]);
         for (let n = 1; n <= 5; n += 1) {
             const { runId, agent, tool, blocked, values } = fleetMessage(n, [IBAN_VALUE]);
             await recordFleetUse(test.db, project.projectId, { runId, agent, tool, blocked, values }, now);
@@ -79,7 +79,7 @@ describe("hello", () => {
                 at: now.toISOString(),
                 quarantine: [{ key: IBAN_VALUE.key, observe: true }],
                 fleetObserveUntil: new Date(now.getTime() + 7 * DAY).toISOString(),
-                counters: [{ ...day, day: utcDay(now), used: 3 }],
+                counters: [{ ...today, counter: "calls", used: 3 }],
             },
         ]);
         expect(connection.known).toEqual(new Map([[IBAN_VALUE.key, true]]));

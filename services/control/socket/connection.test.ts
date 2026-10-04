@@ -49,7 +49,7 @@ describe("a connection", () => {
         client.send(count);
 
         expect((await client.next("ready")).type).toBe("ready");
-        expect(await client.next("counted")).toEqual({ type: "counted", id: count.id, ok: true, used: 1 });
+        expect(await client.next("counted")).toEqual({ type: "counted", id: count.id, ok: true, used: [1] });
         await client.close();
         await control.close();
     });

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { connect, type Db } from "../../connect/connect.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
-import { addDayCount, dayCounts } from "./counters.ts";
+import { addDayCounts, dayCounts, type DayCountInput } from "./counters.ts";
 
 let test: TestDb;
 // A pool with several connections, for calls that race
@@ -22,7 +22,14 @@ const DAY = "2026-10-03";
 const calls = { day: DAY, tool: "payInvoice", counter: "calls" };
 const amount = { day: DAY, tool: "payInvoice", counter: "amount:amount" };
 
-describe("addDayCount", () => {
+// One count, as the single-counter cases below add
+async function addDayCount(db: Db, projectId: string, input: typeof calls & { add: number; max?: number }) {
+    const { day, tool, counter, add, max } = input;
+    const { ok, used } = await addDayCounts(db, projectId, { day, tool }, [{ counter, add, max }]);
+    return { ok, used: used[0] };
+}
+
+describe("addDayCounts with one count", () => {
     it("always adds without a max", async () => {
         const projectId = await createProject(test.db, "Acme");
 
@@ -93,6 +100,55 @@ describe("addDayCount", () => {
     });
 });
 
+describe("addDayCounts with several counts", () => {
+    const pay = { day: DAY, tool: "payInvoice" };
+    const callCount = (max?: number): DayCountInput => ({ counter: "calls", add: 1, max });
+    const amountCount = (add: number): DayCountInput => ({ counter: "amount:amount", add, max: 1000 });
+
+    it("adds every count, and gives each total in the order sent", async () => {
+        const projectId = await createProject(test.db, "Acme");
+
+        expect(await addDayCounts(test.db, projectId, pay, [callCount(5), amountCount(900)])).toEqual({
+            ok: true,
+            used: [1, 900],
+        });
+    });
+
+    it("adds none when one would pass its max, and gives the totals as they stay", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        await addDayCounts(test.db, projectId, pay, [callCount(5), amountCount(900)]);
+
+        expect(await addDayCounts(test.db, projectId, pay, [callCount(5), amountCount(200)])).toEqual({
+            ok: false,
+            used: [1, 900],
+        });
+        expect(
+            await addDayCounts(test.db, projectId, { ...pay, tool: "refund" }, [callCount(), amountCount(1001)]),
+        ).toEqual({ ok: false, used: [0, 0] });
+        expect(await dayCounts(test.db, projectId, DAY)).toEqual([
+            { ...amount, used: 900 },
+            { ...calls, used: 1 },
+        ]);
+    });
+
+    it("never passes a max when calls race with their counts in either order", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const capped = { counter: "amount:amount", add: 10, max: 50 };
+
+        const results = await Promise.all(
+            Array.from({ length: 8 }, (_, n) =>
+                addDayCounts(many, projectId, pay, n % 2 === 0 ? [capped, callCount()] : [callCount(), capped]),
+            ),
+        );
+
+        expect(results.filter((result) => result.ok)).toHaveLength(5);
+        expect(await dayCounts(test.db, projectId, DAY)).toEqual([
+            { ...amount, used: 50 },
+            { ...calls, used: 5 },
+        ]);
+    });
+});
+
 describe("dayCounts", () => {
     it("lists one day's counters in the project, with the day as text", async () => {
         const projectId = await createProject(test.db, "Acme");
@@ -107,5 +163,14 @@ describe("dayCounts", () => {
             { tool: "refund", counter: "calls", day: DAY, used: 2 },
         ]);
         expect(await dayCounts(test.db, await createProject(test.db, "Other"), DAY)).toEqual([]);
+    });
+});
+
+// Last in the file, since a failed query can leave the PGlite test connection out of step
+describe("addDayCounts when the query fails", () => {
+    it("passes the error on", async () => {
+        const pay = { day: DAY, tool: "payInvoice" };
+
+        await expect(addDayCounts(test.db, "not-a-project", pay, [{ counter: "calls", add: 1 }])).rejects.toThrow();
     });
 });

@@ -59,7 +59,7 @@ describe("the synced quarantine list", () => {
         expect(fleet.entry(IBAN_KEY, Date.now())?.observe).toBe(false);
         expect(fleet.entry("domain:evil.com", Date.now())?.observe).toBe(true);
         expect(fleet.pastObserve(Date.now())).toBe(false);
-        socket.reply({ type: "counted", id: "1".repeat(16), ok: true, used: 1 });
+        socket.reply({ type: "counted", id: "1".repeat(16), ok: true, used: [1] });
 
         socket.drop();
         vi.advanceTimersByTime(1000);

@@ -1,4 +1,4 @@
-import { newEventId, type FleetMessage } from "@quard/shared";
+import { newEventId, type CountedMessage, type CountMessage, type FleetMessage } from "@quard/shared";
 import { noteDayUsed } from "../../guards/limit/daily.ts";
 import type { Link } from "./link.ts";
 import type { Reply, Requests } from "./requests.ts";
@@ -19,6 +19,11 @@ export type Replays = {
 const MAX_USES = 1000;
 // How long what is left waits to be sent again while the link stays up
 const RETRY_MS = 30_000;
+
+// Control's answer to a count of `count` counters, or undefined when the reply is not one
+export function dayCounted(reply: Reply | undefined, count: number): CountedMessage | undefined {
+    return reply?.type === "counted" && reply.used.length === count ? reply : undefined;
+}
 
 export function createReplays(link: Link, requests: Requests, replyMs: number): Replays {
     // Counts for the same day, tool and counter add up into one
@@ -84,17 +89,19 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
     // Replayed counts have no cap, because the calls already ran
     function sendCount(count: QueuedCount): void {
         const { day, tool, counter, add } = count;
-        const message = { type: "count", id: newEventId(), tool, counter, day, add } as const;
+        const message: CountMessage = { type: "count", id: newEventId(), tool, day, counts: [{ counter, add }] };
         const late = (reply: Reply | undefined) => {
+            const counted = dayCounted(reply, 1);
             // Control counted it after all, so it is not sent again
-            if (reply?.type === "counted") {
-                noteDayUsed(day, tool, counter, reply.used);
+            if (counted !== undefined) {
+                noteDayUsed(day, tool, counter, counted.used[0] as number);
                 dropCount(count);
             }
         };
         void requests.request(message, { ms: replyMs, hold: false, late }).then((reply) => {
-            if (reply?.type === "counted") {
-                noteDayUsed(day, tool, counter, reply.used);
+            const counted = dayCounted(reply, 1);
+            if (counted !== undefined) {
+                noteDayUsed(day, tool, counter, counted.used[0] as number);
             } else {
                 keepCount(count);
             }

@@ -117,19 +117,26 @@ export const beatMessage = z.object({ type: z.literal("beat"), askIds: z.array(i
 // The call stopped waiting, for example after its timeout
 export const cancelMessage = z.object({ type: z.literal("cancel"), askId: id });
 
-// Adds to a per-day counter. With max, control only adds when the
-// total stays at or under it; without max it always adds.
-export const countMessage = z.object({
-    type: z.literal("count"),
-    id,
-    tool: name,
+// The most per-day counters one count adds to
+export const MAX_DAY_COUNTS = 20;
+
+// One addition to a per-day counter, only made while the total stays at or under max
+const dayCount = z.object({
     counter: z
         .string()
         .regex(/^(calls|amount:.+)$/)
         .max(200),
-    day,
     add: z.number().finite().nonnegative(),
     max: z.number().finite().nonnegative().optional(),
+});
+
+// Adds one call to a tool's per-day counters, all of them or none
+export const countMessage = z.object({
+    type: z.literal("count"),
+    id,
+    tool: name,
+    day,
+    counts: z.array(dayCount).min(1).max(MAX_DAY_COUNTS),
 });
 
 // A call used watched values. Blocked attempts are sent too.
@@ -178,7 +185,13 @@ export const decidedMessage = z.object({
     grantId: grantId.optional(),
 });
 
-export const countedMessage = z.object({ type: z.literal("counted"), id, ok: z.boolean(), used: z.number() });
+// Each counter's total in the order sent, with nothing added when ok is false
+export const countedMessage = z.object({
+    type: z.literal("counted"),
+    id,
+    ok: z.boolean(),
+    used: z.array(z.number()).max(MAX_DAY_COUNTS),
+});
 
 export const fleetResultMessage = z.object({
     type: z.literal("fleet_result"),
@@ -227,6 +240,7 @@ export type ServerMessage = z.infer<typeof serverMessage>;
 export type HelloMessage = z.infer<typeof helloMessage>;
 export type AskMessage = z.infer<typeof askMessage>;
 export type CountMessage = z.infer<typeof countMessage>;
+export type CountedMessage = z.infer<typeof countedMessage>;
 export type FleetMessage = z.infer<typeof fleetMessage>;
 export type ReadyMessage = z.infer<typeof readyMessage>;
 export type DecidedMessage = z.infer<typeof decidedMessage>;

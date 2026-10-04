@@ -82,7 +82,7 @@ describe("approvals through control", () => {
         socket.reply({ type: "decided", askId: await nextAsk(socket), answer: "once", requestId: REQUEST });
         await vi.waitFor(() => expect(sentOf(socket, "count")).toHaveLength(1));
         due.setUTCFullYear(2030);
-        socket.reply({ type: "counted", id: sentOf(socket, "count")[0]?.id as string, ok: true, used: 1 });
+        socket.reply({ type: "counted", id: sentOf(socket, "count")[0]?.id as string, ok: true, used: [1] });
 
         const refused = await out;
         expect(isGuardRefusal(refused) && refused.reason).toBe("approval_required");
@@ -144,11 +144,11 @@ describe("per-day limits through control", () => {
         const out = runScope({}, () => sendEmail({ to: "a@acme.com" }));
         await vi.waitFor(() => expect(sentOf(socket, "count")).toHaveLength(1));
         const [count] = sentOf(socket, "count");
-        socket.reply({ type: "counted", id: count?.id as string, ok: false, used: 10 });
+        socket.reply({ type: "counted", id: count?.id as string, ok: false, used: [10] });
 
         const refused = await out;
         expect(isGuardRefusal(refused) && refused.reason).toBe("daily_limit_reached");
-        expect(count).toMatchObject({ tool: "sendEmail", counter: "calls", add: 1, max: 10 });
+        expect(count).toMatchObject({ tool: "sendEmail", counts: [{ counter: "calls", add: 1, max: 10 }] });
         expect(raw).not.toHaveBeenCalled();
     });
 

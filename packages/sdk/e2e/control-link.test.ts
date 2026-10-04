@@ -146,8 +146,8 @@ describe("per-day limits and the fleet check", () => {
         expect(await sendEmail({ to: "a@acme.com" })).toBe("sent");
         const count = await server.waitFor("count");
 
-        expect(count).toMatchObject({ tool: "sendEmail", counter: "calls", add: 1 });
-        expect(count.max).toBeUndefined();
+        expect(count).toMatchObject({ tool: "sendEmail", counts: [{ counter: "calls", add: 1 }] });
+        expect(count.counts[0]?.max).toBeUndefined();
     });
 
     it("block a value control quarantines, and report the blocked attempt", async () => {

@@ -106,6 +106,36 @@ describe("per-day limits through control", { timeout: 30_000 }, () => {
         expect(rawSend).toHaveBeenCalledTimes(2);
         expect(await dayCounts(test.db, project.projectId, today)).toEqual(counted);
     });
+
+    it("adds none of a call's counts when control refuses one of them", async () => {
+        await linkSdk();
+        const today = utcDay(new Date());
+        // Another process paid 90 today, which this one has not seen
+        await test.db
+            .insertInto("day_counters")
+            .values({
+                project_id: project.projectId,
+                day: today,
+                tool: "payInvoice",
+                counter: "amount:amount",
+                used: 90,
+            })
+            .execute();
+        const rawPay = vi.fn(async (_input: { amount: number }) => "paid");
+        const payInvoice = guard(rawPay, {
+            type: "limit",
+            name: "payInvoice",
+            maxCallsPerDay: 10,
+            maxAmountPerDay: { field: "amount", max: 100 },
+        });
+
+        expect(reasonOf(await payInvoice({ amount: 80 }))).toBe("daily_limit_reached");
+
+        expect(rawPay).not.toHaveBeenCalled();
+        expect(await dayCounts(test.db, project.projectId, today)).toEqual([
+            { tool: "payInvoice", counter: "amount:amount", day: today, used: 90 },
+        ]);
+    });
 });
 
 describe("the fleet check through control", { timeout: 30_000 }, () => {

@@ -1,18 +1,16 @@
-import { parseHashKey } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeEvents } from "../../core/recorder.ts";
 import type { RuleResult } from "../../guards/call.ts";
 import { dayUsed, utcDay } from "../../guards/limit/daily.ts";
 import type { LimitOptions } from "../../guards/options.ts";
 import { makeAskableCall } from "../../test/call.ts";
+import { AMOUNT, CALLS, counted, dayControl, reconnect, sentDays } from "../../test/day-counts.ts";
 import { decisionsOf } from "../../test/events.ts";
-import { fakeSockets, sentOf } from "../../test/fake-socket.ts";
+import { sentOf } from "../../test/fake-socket.ts";
 import { resetAll } from "../../test/reset.ts";
-import { createControl, type Control } from "../../transport/link/control.ts";
+import type { Control } from "../../transport/link/control.ts";
 import { countDays } from "./days.ts";
 
-const CALLS: LimitOptions = { type: "limit", maxCallsPerDay: 1 };
-const AMOUNT: LimitOptions = { type: "limit", maxAmountPerDay: { field: "amount", max: 100 } };
 const OVER: RuleResult = {
     guard: "limit",
     rule: "max-calls-per-day",
@@ -24,12 +22,10 @@ const OVER: RuleResult = {
 let control: Control | undefined;
 
 function setup() {
-    const fake = fakeSockets();
-    control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
-    return { fake, control };
+    const made = dayControl();
+    control = made.control;
+    return made;
 }
-
-const settle = () => vi.advanceTimersByTimeAsync(0);
 
 beforeEach(() => {
     vi.useFakeTimers({ now: Date.parse("2026-10-03T12:00:00.000Z") });
@@ -98,138 +94,125 @@ describe("countDays with several guards on one tool", () => {
             { type: "limit", maxCallsPerDay: 3 },
         ];
 
-        const counted = countDays(makeAskableCall({}), list, control, []);
-        const counts = sentOf(socket, "count");
-        socket.reply({ type: "counted", id: counts[0]?.id as string, ok: true, used: 2 });
+        const result = countDays(makeAskableCall({}), list, control, []);
+        const [sent] = sentOf(socket, "count");
+        socket.reply(counted(sent?.id, true, [2]));
 
-        expect(counts.map(({ add, max }) => ({ add, max }))).toEqual([{ add: 1, max: 3 }]);
-        expect(await counted).toBeUndefined();
+        expect(sent?.counts).toEqual([{ counter: "calls", add: 1, max: 3 }]);
+        expect(await result).toBeUndefined();
         expect(decisionsOf(takeEvents())).toMatchObject([{ rule: "max-calls-per-day", mode: "observe" }]);
     });
 });
 
 describe("countDays through control", () => {
-    it("sends the cap in block mode and refuses what control refuses", async () => {
+    it("sends all of a call's counts in one message with the caps of block mode, and takes control's totals", async () => {
         const { fake, control } = setup();
         const socket = fake.connect();
         const call = makeAskableCall({ amount: 80 });
 
-        const counted = countDays(call, [{ ...CALLS, ...AMOUNT }], control, []);
-        const [calls, amount] = sentOf(socket, "count");
-        expect([calls?.counter, calls?.add, calls?.max, amount?.counter, amount?.add]).toEqual([
-            "calls",
-            1,
-            1,
-            "amount:amount",
-            80,
+        const result = countDays(
+            call,
+            [
+                { ...CALLS, ...AMOUNT },
+                { ...CALLS, maxCallsPerDay: 9, mode: "observe" },
+            ],
+            control,
+            [],
+        );
+        const [sent] = sentOf(socket, "count");
+        expect(sent).toMatchObject({ tool: "payInvoice", day: "2026-10-03" });
+        expect(sent?.counts).toEqual([
+            { counter: "calls", add: 1, max: 1 },
+            { counter: "amount:amount", add: 80, max: 100 },
         ]);
-        socket.reply({ type: "counted", id: calls?.id as string, ok: true, used: 1 });
-        socket.reply({ type: "counted", id: amount?.id as string, ok: false, used: 90 });
+        socket.reply(counted(sent?.id, true, [1, 95]));
 
-        expect(await counted).toMatchObject({ rule: "max-amount-per-day", mode: "block" });
-        expect(dayUsed(utcDay(), "payInvoice", "amount:amount")).toBe(90);
+        expect(await result).toBeUndefined();
+        expect([dayUsed(utcDay(), "payInvoice", "calls"), dayUsed(utcDay(), "payInvoice", "amount:amount")]).toEqual([
+            1, 95,
+        ]);
+    });
+
+    it("adds the call to none of the counters when control refuses one, and refuses the call", async () => {
+        const { fake, control } = setup();
+        const socket = fake.connect();
+
+        const result = countDays(
+            makeAskableCall({ amount: 80 }),
+            [{ ...CALLS, maxCallsPerDay: 10 }, AMOUNT],
+            control,
+            [],
+        );
+        const [sent] = sentOf(socket, "count");
+        socket.reply(counted(sent?.id, false, [3, 90]));
+
+        expect(await result).toMatchObject({
+            rule: "max-amount-per-day",
+            mode: "block",
+            reason: "daily_limit_reached",
+        });
+        expect([dayUsed(utcDay(), "payInvoice", "calls"), dayUsed(utcDay(), "payInvoice", "amount:amount")]).toEqual([
+            3, 90,
+        ]);
+        expect(sentDays(await reconnect(fake))).toEqual([]);
     });
 
     it("sends no cap in observe mode, and records 'would block' from control's total", async () => {
         const { fake, control } = setup();
         const socket = fake.connect();
 
-        const counted = countDays(makeAskableCall({}), [{ ...CALLS, mode: "observe" }], control, []);
-        const [count] = sentOf(socket, "count");
-        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: 2 });
+        const result = countDays(makeAskableCall({}), [{ ...CALLS, mode: "observe" }], control, []);
+        const [sent] = sentOf(socket, "count");
+        socket.reply(counted(sent?.id, true, [2]));
 
-        expect(count?.max).toBeUndefined();
-        expect(await counted).toBeUndefined();
+        expect(sent?.counts).toEqual([{ counter: "calls", add: 1 }]);
+        expect(await result).toBeUndefined();
         expect(decisionsOf(takeEvents())).toMatchObject([{ rule: "max-calls-per-day", mode: "observe" }]);
     });
 
-    it("counts here while control is away, and sends the count once it is back", async () => {
-        const { fake, control } = setup();
-
-        expect(await countDays(makeAskableCall({}), [CALLS], control, [])).toBeUndefined();
-        expect(await countDays(makeAskableCall({}), [CALLS], control, [])).toMatchObject({ mode: "block" });
-        const socket = fake.connect();
-
-        expect(sentOf(socket, "count").map(({ add, max }) => ({ add, max }))).toEqual([{ add: 1, max: undefined }]);
-    });
-
-    it("counts here when control is slow, and forgets the local count if control counted after all", async () => {
+    it("counts here when control's answer has the wrong number of totals", async () => {
         const { fake, control } = setup();
         const socket = fake.connect();
 
-        const counted = countDays(makeAskableCall({}), [{ type: "limit", maxCallsPerDay: 5 }], control, []);
-        vi.advanceTimersByTime(5000);
-        expect(await counted).toBeUndefined();
-        const [late] = sentOf(socket, "count");
-        socket.reply({ type: "counted", id: late?.id as string, ok: true, used: 1 });
+        const result = countDays(makeAskableCall({}), [CALLS], control, []);
+        const [sent] = sentOf(socket, "count");
+        socket.reply(counted(sent?.id, true, [3, 4]));
 
-        socket.drop();
-        vi.advanceTimersByTime(1000);
-        expect(sentOf(fake.connect(), "count")).toEqual([]);
+        expect(await result).toBeUndefined();
         expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(1);
     });
 
-    it("keeps the local count when control's late answer is a refusal", async () => {
+    it("counts here a call with more counts than one message takes", async () => {
         const { fake, control } = setup();
         const socket = fake.connect();
+        const fields = Array.from({ length: 20 }, (_, n) => `a${n}`);
+        const list: LimitOptions[] = [
+            CALLS,
+            ...fields.map((field) => ({ type: "limit" as const, maxAmountPerDay: { field, max: 9 } })),
+        ];
+        const call = makeAskableCall(Object.fromEntries(fields.map((field) => [field, 1])));
 
-        const counted = countDays(makeAskableCall({}), [{ type: "limit", maxCallsPerDay: 5 }], control, []);
-        vi.advanceTimersByTime(5000);
-        await counted;
-        const [late] = sentOf(socket, "count");
-        socket.reply({ type: "counted", id: late?.id as string, ok: false, used: 5 });
+        expect(await countDays(call, list, control, [])).toBeUndefined();
 
-        socket.drop();
-        await settle();
-        vi.advanceTimersByTime(1000);
-        expect(sentOf(fake.connect(), "count")).toHaveLength(1);
-        expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(5);
-    });
-
-    it("keeps the local count of a counter no guard enforces when control is slow", async () => {
-        const { fake, control } = setup();
-        fake.connect();
-
-        const counted = countDays(makeAskableCall({}), [{ ...CALLS, mode: "observe" }], control, []);
-        vi.advanceTimersByTime(5000);
-        expect(await counted).toBeUndefined();
-        fake.last().drop();
-        await settle();
-        vi.advanceTimersByTime(1000);
-
-        expect(sentOf(fake.connect(), "count").map(({ add, max }) => ({ add, max }))).toEqual([
-            { add: 1, max: undefined },
+        expect(sentDays(socket)).toEqual([]);
+        expect(sentDays(await reconnect(fake))).toEqual([]);
+        expect([dayUsed(utcDay(), "payInvoice", "calls"), dayUsed(utcDay(), "payInvoice", "amount:a19")]).toEqual([
+            1, 1,
         ]);
     });
 
-    it("keeps the local count when the link drops before control answers", async () => {
+    it("keeps a counter whose name control can't take in this process", async () => {
         const { fake, control } = setup();
         const socket = fake.connect();
+        const field = "f".repeat(200);
 
-        const counted = countDays(makeAskableCall({}), [{ type: "limit", maxCallsPerDay: 5 }], control, []);
-        vi.advanceTimersByTime(5000);
-        await counted;
-        socket.drop();
-        await settle();
-        vi.advanceTimersByTime(1000);
+        const call = makeAskableCall({ [field]: 5 });
+        expect(
+            await countDays(call, [{ type: "limit", maxAmountPerDay: { field, max: 9 } }], control, []),
+        ).toBeUndefined();
 
-        expect(sentOf(fake.connect(), "count")).toHaveLength(1);
-    });
-
-    it("keeps nothing for later when it refuses a slow call itself", async () => {
-        const { fake, control } = setup();
-        const socket = fake.connect();
-        const call = makeAskableCall({});
-        await countDays(call, [CALLS], undefined, []);
-
-        const counted = countDays(call, [CALLS], control, []);
-        vi.advanceTimersByTime(5000);
-        expect(await counted).toMatchObject({ mode: "block" });
-        const [late] = sentOf(socket, "count");
-        socket.reply({ type: "counted", id: late?.id as string, ok: true, used: 2 });
-
-        socket.drop();
-        vi.advanceTimersByTime(1000);
-        expect(sentOf(fake.connect(), "count")).toEqual([]);
+        expect(sentDays(socket)).toEqual([]);
+        expect(sentDays(await reconnect(fake))).toEqual([]);
+        expect(dayUsed(utcDay(), "payInvoice", `amount:${field}`)).toBe(5);
     });
 });

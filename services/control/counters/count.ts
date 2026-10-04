@@ -1,12 +1,12 @@
-import { addDayCount } from "@quard/db";
+import { addDayCounts } from "@quard/db";
 import type { CountMessage } from "@quard/shared";
 import type { Context } from "../server/context.ts";
 import type { Connection } from "../socket/registry.ts";
 import { send } from "../socket/send.ts";
 
-// With max it only adds while the project's total for the day stays at or under it
+// A call's per-day counts for the project, all added or none when one would pass its max
 export async function count(ctx: Context, connection: Connection, message: CountMessage): Promise<void> {
-    const { day, tool, counter, add, max } = message;
-    const { ok, used } = await addDayCount(ctx.db, connection.projectId, { day, tool, counter, add, max });
+    const { day, tool, counts } = message;
+    const { ok, used } = await addDayCounts(ctx.db, connection.projectId, { day, tool }, counts);
     send(connection, { type: "counted", id: message.id, ok, used });
 }
