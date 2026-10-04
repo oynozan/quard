@@ -2,9 +2,8 @@ import { labelFor, labelUpload, type RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { newScope, type Scope } from "../context/scope.ts";
-import { printOf } from "../labels/content-index.ts";
 import { valueHash } from "../labels/hashed.ts";
-import { textOf } from "../labels/text-of.ts";
+import { printOf } from "../labels/print.ts";
 import { resetAll } from "../test/reset.ts";
 import { storeLabels } from "../transport/labels.ts";
 import { keptLabels } from "./kept.ts";
@@ -56,7 +55,7 @@ describe("writeThrough", () => {
             {
                 kind: "memory",
                 store: "notes",
-                print: printOf(textOf(value)),
+                print: printOf(value),
                 runId: scope.run.runId,
                 agent: "researcher",
                 label: { trust: "untrusted", sensitivity: "public", origins: ["web:evil.com"], flagged: false },

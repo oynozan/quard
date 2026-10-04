@@ -1,6 +1,6 @@
 import type { MessageRecord } from "@quard/shared";
 import { describe, expect, it } from "vitest";
-import { printOf } from "../../labels/content-index.ts";
+import { printOf } from "../../labels/print.ts";
 import type { FoundRecord } from "../../labels/records.ts";
 import { checkSource, originFor, receiveMessage } from "./source.ts";
 
@@ -168,7 +168,7 @@ describe("receiveMessage", () => {
     it("takes the sender's labels when the record matches the run and the content", () => {
         const incoming = { carrier, found: found({ trust: "trusted", sensitivity: "public" }) };
 
-        expect(receiveMessage(incoming, "  the\nbrief ", {})).toEqual({
+        expect(receiveMessage(incoming, "the brief", {})).toEqual({
             origin: "agent:orchestrator",
             from: "orchestrator",
             verified: true,
@@ -190,6 +190,9 @@ describe("receiveMessage", () => {
 
     it.each([
         ["changed content", carrier, true, "the brief, edited", "agent:orchestrator"],
+        ["changed spacing", carrier, true, "the  brief", "agent:orchestrator"],
+        ["a hidden mark", carrier, true, `the brief${String.fromCodePoint(0x200b)}`, "agent:orchestrator"],
+        ["the same text in an object", carrier, true, { brief: "the brief" }, "agent:orchestrator"],
         ["another run", { ...carrier, runId: OTHER_RUN }, true, "the brief", "agent:orchestrator"],
         ["an unknown reference", carrier, false, "the brief", "agent:unknown"],
     ])("counts %s as untrusted, whatever the overrides say", (_name, sent, known, output, origin) => {

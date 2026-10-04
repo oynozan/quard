@@ -9,7 +9,7 @@ import {
     type OriginOverrides,
 } from "@quard/shared";
 import type { Carrier, Incoming } from "../../context/carrier.ts";
-import { printOf } from "../../labels/content-index.ts";
+import { printOf } from "../../labels/print.ts";
 import { recordValues, type ValueRecord } from "../../labels/records.ts";
 import { textOf } from "../../labels/text-of.ts";
 import type { SourceOptions } from "../options.ts";
@@ -122,7 +122,7 @@ export function receiveMessage(incoming: Incoming | undefined, output: unknown, 
     const found = incoming?.found;
     const origin = `agent:${found?.record.sender ?? "unknown"}`;
     const text = textOf(output);
-    if (found === undefined || found.record.runId !== carrier?.runId || found.record.print !== printOf(text)) {
+    if (found === undefined || found.record.runId !== carrier?.runId || found.record.print !== printOf(output)) {
         const { trust, sensitivity } = labelFor(origin);
         const untrusted = { ...overrides, [origin]: { trust, sensitivity } };
         return { origin, from: "unknown", verified: false, carrier, overrides: untrusted, values: [] };

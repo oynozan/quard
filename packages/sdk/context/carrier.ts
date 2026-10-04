@@ -3,7 +3,7 @@ import { extractValues, isRunId, isStepId, newStepId } from "@quard/shared";
 import { runLimits } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import type { ContentIndex } from "../labels/content-index.ts";
-import { printOf } from "../labels/content-index.ts";
+import { printOf } from "../labels/print.ts";
 import { findRecord, keptRun, saveRecord, type FoundRecord, type ValueRecord } from "../labels/records.ts";
 import { textOf } from "../labels/text-of.ts";
 import { exactOccurrences } from "../labels/value-labels.ts";
@@ -91,7 +91,7 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
             stepId,
             sender: agent,
             depth: scope.depth,
-            print: printOf(text),
+            print: printOf(options.content),
             label: vouchedLabel(run.index),
             values: valuesOf(text, run.index),
             tools: scope.tools === undefined ? undefined : [...scope.tools].sort(),

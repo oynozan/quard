@@ -1,7 +1,7 @@
 import { newStepId, type ContextLabel, type ContextLabelRecord, type MemoryRecord } from "@quard/shared";
 import type { Scope } from "../context/scope.ts";
-import { printOf } from "../labels/content-index.ts";
 import { valueHash } from "../labels/hashed.ts";
+import { printOf } from "../labels/print.ts";
 import { textOf } from "../labels/text-of.ts";
 import { vouchedLabel } from "../labels/vouched-label.ts";
 import { storeLabels } from "../transport/labels.ts";
@@ -33,7 +33,7 @@ export async function writeThrough(
 ): Promise<unknown> {
     const stepId = newStepId();
     const text = textOf(value);
-    const print = printOf(text);
+    const print = printOf(value);
     const label = labelRecord(vouchedLabel(scope.run.index));
     keepLabels(print, { label, values: valueRecords(text, scope.run.index, localHash) });
     const record: MemoryRecord = {

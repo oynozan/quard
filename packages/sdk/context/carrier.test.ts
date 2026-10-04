@@ -1,7 +1,7 @@
 import { keyedHash, labelFor, parseHashKey, type LabelRecord } from "@quard/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { takeEvents } from "../core/recorder.ts";
-import { printOf } from "../labels/content-index.ts";
+import { printOf } from "../labels/print.ts";
 import { clearRecords, findRecord, forgetRuns } from "../labels/records.ts";
 import { resetAll } from "../test/reset.ts";
 import { startWebhookServer, WEBHOOK_KEY } from "../test/webhook-server.ts";
@@ -75,7 +75,7 @@ describe("inject", () => {
                 stepId: STEP_ID,
                 sender: "orchestrator",
                 depth: 0,
-                print: printOf(`brief\n${brief}`),
+                print: printOf({ brief }),
                 label: {
                     trust: "untrusted",
                     sensitivity: "internal",

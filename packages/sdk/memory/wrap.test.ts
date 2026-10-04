@@ -2,7 +2,7 @@ import type { MemoryEvent, RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { currentScope, runScope, type Scope } from "../context/scope.ts";
-import { printOf } from "../labels/content-index.ts";
+import { printOf } from "../labels/print.ts";
 import { resetAll } from "../test/reset.ts";
 import { keptLabels } from "./kept.ts";
 import { memory } from "./wrap.ts";
@@ -99,7 +99,7 @@ describe("quard.memory", () => {
         await store.write({ text: "first note" });
         expect(await store.read()).toEqual([{ text: "first note" }]);
 
-        expect(keptLabels(printOf("text\nfirst note"))).toBeDefined();
+        expect(keptLabels(printOf({ text: "first note" }))).toBeDefined();
         expect(memoryEvents()).toMatchObject([
             { op: "write", items: 1 },
             { op: "read", items: 1, verified: 1 },

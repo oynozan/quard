@@ -2,7 +2,8 @@ import { combineLabels, extractValues, labelFor, newStepId, originKind, type Lab
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import type { Scope } from "../context/scope.ts";
-import { printOf, type AddOptions } from "../labels/content-index.ts";
+import type { AddOptions } from "../labels/content-index.ts";
+import { printOf } from "../labels/print.ts";
 import { textOf } from "../labels/text-of.ts";
 import { lookupLabels } from "../transport/labels.ts";
 import { recordMemory } from "./event.ts";
@@ -91,8 +92,10 @@ export async function readThrough(
     const stepId = newStepId();
     const result = await read();
     const list: unknown[] = many && Array.isArray(result) ? result : [result];
-    const texts = list.filter((item) => item !== undefined && item !== null).map(textOf);
-    const found = await Promise.all(texts.map(async (text) => ({ text, labels: await findLabels(printOf(text)) })));
+    const items = list.filter((item) => item !== undefined && item !== null);
+    const found = await Promise.all(
+        items.map(async (item) => ({ text: textOf(item), labels: await findLabels(printOf(item)) })),
+    );
     const origin = `memory:${store}`;
     const labels = found.map(({ text, labels }) => {
         const label = itemLabel(origin, labels);
@@ -101,6 +104,6 @@ export async function readThrough(
     });
     const verified = found.filter((item) => item.labels !== undefined).length;
     const { trust, sensitivity } = combineLabels(labels);
-    recordMemory(scope, stepId, { store, op: "read", items: texts.length, verified, trust, sensitivity });
+    recordMemory(scope, stepId, { store, op: "read", items: items.length, verified, trust, sensitivity });
     return result;
 }

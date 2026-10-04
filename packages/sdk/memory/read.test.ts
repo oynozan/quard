@@ -2,8 +2,7 @@ import { labelFor, type ContentEvent, type MemoryRecord, type RunEvent } from "@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { newScope, type Scope } from "../context/scope.ts";
-import { printOf } from "../labels/content-index.ts";
-import { textOf } from "../labels/text-of.ts";
+import { printOf } from "../labels/print.ts";
 import { labelArguments } from "../labels/value-labels.ts";
 import { resetAll } from "../test/reset.ts";
 import { lookupLabels } from "../transport/labels.ts";
@@ -185,7 +184,7 @@ describe("readThrough", () => {
     it("reads one item from get and one per element from a list", async () => {
         const items = ["first note", { text: "second note" }, null, undefined];
         for (const item of items.slice(0, 2)) {
-            keepLabels(printOf(textOf(item)), labels("trusted"));
+            keepLabels(printOf(item), labels("trusted"));
         }
 
         await readThrough(newScope(), "notes", true, async () => items);
