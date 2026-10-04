@@ -1,0 +1,120 @@
+# Self-host Quard: copy .env.example to .env, fill it in, then run
+#   docker compose up -d --build
+# The docs page "Self-host Quard" walks through it.
+
+x-database: &database
+    DATABASE_URL: postgres://${POSTGRES_USER:-quard}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-quard}
+
+x-hash-key: &hash-key
+    QUARD_HASH_KEY: ${QUARD_HASH_KEY:?Set QUARD_HASH_KEY in .env}
+
+# webhook, control, worker and migrate share one image
+x-services: &services
+    build:
+        context: .
+        target: services
+    image: quard-services
+
+services:
+    postgres:
+        image: postgres:18
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-quard}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+            POSTGRES_DB: ${POSTGRES_DB:-quard}
+        volumes:
+            - postgres-data:/var/lib/postgresql
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+
+    # Applies database migrations once, then exits
+    migrate:
+        <<: *services
+        command: ["node", "db/main.ts"]
+        environment:
+            <<: [*database, *hash-key]
+        depends_on:
+            postgres:
+                condition: service_healthy
+
+    webhook:
+        <<: *services
+        restart: unless-stopped
+        environment:
+            <<: [*database, *hash-key]
+            SERVICE: webhook
+            PORT: "4100"
+        ports:
+            - "${QUARD_WEBHOOK_PORT:-4100}:4100"
+        healthcheck:
+            test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4100/health"]
+            interval: 10s
+            timeout: 3s
+            retries: 5
+        depends_on:
+            migrate:
+                condition: service_completed_successfully
+
+    control:
+        <<: *services
+        restart: unless-stopped
+        environment:
+            <<: [*database, *hash-key]
+            SERVICE: control
+            PORT: "4200"
+        ports:
+            - "${QUARD_CONTROL_PORT:-4200}:4200"
+        healthcheck:
+            test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4200/health"]
+            interval: 10s
+            timeout: 3s
+            retries: 5
+        depends_on:
+            migrate:
+                condition: service_completed_successfully
+
+    # Runs background jobs from Postgres; it has no port
+    worker:
+        <<: *services
+        restart: unless-stopped
+        environment:
+            <<: *database
+            SERVICE: worker
+            OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+            OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+        depends_on:
+            migrate:
+                condition: service_completed_successfully
+
+    web:
+        build:
+            context: .
+            target: web
+        image: quard-web
+        restart: unless-stopped
+        environment:
+            <<: [*database, *hash-key]
+            NEXT_PUBLIC_PRIVY_APP_ID: ${NEXT_PUBLIC_PRIVY_APP_ID:?Set NEXT_PUBLIC_PRIVY_APP_ID in .env}
+            PRIVY_APP_SECRET: ${PRIVY_APP_SECRET:?Set PRIVY_APP_SECRET in .env}
+            PRIVY_VERIFICATION_KEY: ${PRIVY_VERIFICATION_KEY:-}
+            QUARD_SESSION_SECRET: ${QUARD_SESSION_SECRET:?Set QUARD_SESSION_SECRET in .env}
+            QUARD_PROJECT_ID: ${QUARD_PROJECT_ID:-}
+            # Listen on every interface, not on the container's name
+            HOSTNAME: 0.0.0.0
+        ports:
+            - "${QUARD_WEB_PORT:-3000}:3000"
+        healthcheck:
+            test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+            interval: 10s
+            timeout: 3s
+            retries: 5
+        depends_on:
+            migrate:
+                condition: service_completed_successfully
+
+volumes:
+    postgres-data:
