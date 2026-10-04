@@ -125,6 +125,12 @@ describe("clientMessage", () => {
 });
 
 describe("fleetValue", () => {
+    it("takes a wallet address in clear, since it is public on chain", () => {
+        const wallet = { field: "payTo", kind: "wallet", key: "wallet:0x209693Bc6afc0C5328bA36FaF03C514EF312287C" };
+        expect(fleetValue.parse(wallet)).toEqual(wallet);
+        expect(fleetValue.safeParse({ ...wallet, key: "wallet:0x 1" }).success).toBe(false);
+    });
+
     it("refuses a raw IBAN or email, and a domain with a path", () => {
         expect(fleetValue.safeParse({ field: "iban", kind: "iban", key: "iban:DE89370400440532013000" }).success).toBe(
             false,

@@ -7,6 +7,22 @@ const base = { runId: RUN, stepId: "b".repeat(16), agent: "default", at: "2026-1
 describe("runEvent", () => {
     it.each([
         {
+            type: "payment",
+            ...base,
+            stage: "settled",
+            host: "api.example",
+            resource: "https://api.example/data",
+            x402Version: 2,
+            scheme: "exact",
+            network: "eip155:84532",
+            asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            amount: "10000",
+            usd: 0.01,
+            payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+            transaction: "0xabc",
+            delivered: true,
+        },
+        {
             type: "message",
             ...base,
             from: "orchestrator",

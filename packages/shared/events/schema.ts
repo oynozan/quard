@@ -196,6 +196,29 @@ export const memoryEvent = z.object({
     sensitivity,
 });
 
+// An x402 payment step, from the price request to the paid response
+export const paymentEvent = z.object({
+    type: z.literal("payment"),
+    ...base,
+    stage: z.enum(["challenged", "refused", "signed", "settled", "failed"]),
+    host: z.string().max(500),
+    // The paid URL, with secrets removed
+    resource: z.string().max(2000),
+    x402Version: z.number().int().min(1),
+    scheme: z.string().max(100),
+    network: z.string().max(200),
+    asset: z.string().max(200),
+    // Atomic units
+    amount: z.string().regex(/^\d{1,78}$/),
+    // Null when the token's USD value is unknown
+    usd: z.number().min(0).nullable(),
+    payTo: z.string().max(200),
+    transaction: z.string().max(200).optional(),
+    // Settled but the paid response was an error: "paid, not delivered"
+    delivered: z.boolean().optional(),
+    reason: z.string().max(100).optional(),
+});
+
 export const runEvent = z.discriminatedUnion("type", [
     runStartedEvent,
     runFinishedEvent,
@@ -209,6 +232,7 @@ export const runEvent = z.discriminatedUnion("type", [
     messageEvent,
     handoffEvent,
     memoryEvent,
+    paymentEvent,
 ]);
 
 export type RunEvent = z.infer<typeof runEvent>;
@@ -223,3 +247,4 @@ export type ConfigErrorEvent = z.infer<typeof configErrorEvent>;
 export type MessageEvent = z.infer<typeof messageEvent>;
 export type HandoffEvent = z.infer<typeof handoffEvent>;
 export type MemoryEvent = z.infer<typeof memoryEvent>;
+export type PaymentEvent = z.infer<typeof paymentEvent>;

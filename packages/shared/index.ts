@@ -7,6 +7,7 @@ export {
     memoryEvent,
     messageEvent,
     modelCallEvent,
+    paymentEvent,
     runEvent,
     runFinishedEvent,
     runStartedEvent,
@@ -21,6 +22,7 @@ export type {
     MemoryEvent,
     MessageEvent,
     ModelCallEvent,
+    PaymentEvent,
     RunEvent,
     RunFinishedEvent,
     RunStartedEvent,
@@ -145,6 +147,9 @@ export { refusalText } from "./refusals/templates.ts";
 export type { ReasonCode, RefusalInput } from "./refusals/templates.ts";
 export { canonicalJson, plainJson } from "./values/canonical.ts";
 export { extractValues } from "./values/extract.ts";
+export { paymentOption, paymentRequired, paymentResponse, X402_HEADERS } from "./x402/schema.ts";
+export type { PaymentOption, PaymentRequired, PaymentResponse } from "./x402/schema.ts";
+export { usdValue } from "./x402/stablecoins.ts";
 export type { ExtractedValue, ValueType } from "./values/extract.ts";
 export { flattenArgs, valueAtPath } from "./values/flatten.ts";
 export { keysOf, keyText, textOf, underSecret } from "./values/text-of.ts";

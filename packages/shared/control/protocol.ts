@@ -53,13 +53,15 @@ export const askReason = z.object({
 
 // IBANs and emails arrive hashed with a mask; domains stay in clear
 export const fleetValue = z
-    .object({ field: name, kind: z.enum(["iban", "email", "domain"]), key: z.string().max(500) })
+    .object({ field: name, kind: z.enum(["iban", "email", "domain", "wallet"]), key: z.string().max(500) })
     .refine(
         (value) =>
             value.kind === "domain"
                 ? /^domain:[a-z0-9.-]+$/.test(value.key)
-                : new RegExp(`^${value.kind}:[^#\\s]+#[0-9a-f]{32}$`).test(value.key),
-        "a fleet key must be hashed, or a plain domain",
+                : value.kind === "wallet"
+                  ? /^wallet:[A-Za-z0-9]{20,100}$/.test(value.key)
+                  : new RegExp(`^${value.kind}:[^#\\s]+#[0-9a-f]{32}$`).test(value.key),
+        "a fleet key must be hashed, or a plain domain or wallet",
     );
 
 export const quarantineEntry = z.object({
