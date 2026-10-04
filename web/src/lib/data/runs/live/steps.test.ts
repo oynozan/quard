@@ -220,6 +220,18 @@ describe("buildSteps", () => {
         expect(tied[0]).toBe("model_call");
     });
 
+    it("counts content labeled in the same ms a step started as read, like the worker", () => {
+        const run = storedRun();
+        // The page is labeled the ms the next model call starts
+        run.labels[2] = { ...run.labels[2]!, at: at(4) };
+        // Untrusted content labeled the ms the page fetch starts
+        run.labels.push({ ...run.labels[2]!, contentId: "c9", stepId: M1, at: at(2.8) });
+        const steps = buildSteps(run);
+
+        expect(steps.find((step) => step.id === M2)?.context.trust).toBe("untrusted");
+        expect(steps.find((step) => step.id === T1)?.context.trust).toBe("untrusted");
+    });
+
     it("ignores usage that is incomplete, and a cost that is not a number", () => {
         const run = storedRun();
         run.steps[0]!.detail = { usage: { inputTokens: 5, outputTokens: 1 }, costUsd: "0.1" };

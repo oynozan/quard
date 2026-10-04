@@ -106,6 +106,20 @@ describe("agentStats", () => {
         });
     });
 
+    it("counts a call that started in the same millisecond as a label as influenced", async () => {
+        const projectId = await projectWith([
+            label(r1, s9, "c1", noon("02.000")),
+            // Started at :02.000, the label's time
+            model(r1, "billing", s1, noon("03.000")),
+            // Started a millisecond before it
+            model(r1, "billing", s2, noon("02.999")),
+        ]);
+
+        const stats = await agentStats(test.db, projectId, "billing", { since });
+
+        expect(stats).toMatchObject({ modelCalls: 2, influenced: 1 });
+    });
+
     it("knows the cost is unknown when a call that answered has no price", async () => {
         const projectId = await projectWith([
             model(r1, "billing", s1, noon("01.000")),

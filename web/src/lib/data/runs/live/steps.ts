@@ -68,7 +68,7 @@ function toolDetailOf(detail: unknown): ToolDetail {
 }
 
 function readBefore(labels: RunLabel[], time: number): RunLabel[] {
-    return labels.filter((label) => ms(label.at) < time);
+    return labels.filter((label) => ms(label.at) <= time);
 }
 
 const base = {
@@ -82,10 +82,10 @@ const base = {
     hosted: false,
 };
 
-// A model call ends at `at`. It read what came before it, plus its own input.
+// A model call ends at `at`. It read what was labeled by its start (a tie counts), plus its own input.
 function modelStep(step: RunStep, labels: RunLabel[]): Step {
     const startedAt = ms(step.at) - step.durationMs;
-    const read = labels.filter((label) => ms(label.at) < startedAt || label.stepId === step.stepId);
+    const read = labels.filter((label) => ms(label.at) <= startedAt || label.stepId === step.stepId);
     const context = contextOf(read.map(labelOf));
     const names = callsOf(step.detail).map((call) => call.name);
     const { usage, costUsd } = usageOf(step.detail);

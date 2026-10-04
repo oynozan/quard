@@ -171,7 +171,7 @@ describe("agentLinks", () => {
                 call(2, s2, "2026-10-03T12:00:03.000Z"),
                 label(runOf(2), s2, "c1", "2026-10-03T12:00:02.500Z"),
             ),
-            // Stored right as the first call started
+            // Stored in the same millisecond the first call started
             ...handOff(
                 3,
                 call(3, s2, "2026-10-03T12:00:03.000Z"),
@@ -211,7 +211,7 @@ describe("agentLinks", () => {
                 from: "billing",
                 to: "researcher",
                 delegations: 7,
-                untrusted: 3,
+                untrusted: 4,
                 runs: 7,
                 lastAt: new Date("2026-10-03T12:00:05.000Z"),
             },
