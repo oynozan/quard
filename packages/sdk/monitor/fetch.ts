@@ -15,6 +15,7 @@ import { isShared } from "../guards/limit/run-counts.ts";
 import { addCost, countSharedModelCall } from "../pipeline/count/steps.ts";
 import { activeControl } from "../transport/link/active.ts";
 import { checkRequestedCalls } from "./check.ts";
+import { unguardedOutputLabel } from "./framework-tools.ts";
 import { asRecord, parseJson } from "./json.ts";
 import { readResponsesRequest, type ResponsesRequest } from "./request.ts";
 import { functionCallOf, functionCallsOf, responseIdOf, usageOf, type FunctionCall } from "./response.ts";
@@ -95,7 +96,7 @@ function labelInput(step: Step): void {
     for (const item of request.texts) {
         if (item.role === "tool") {
             const requested = findCall(item.callId);
-            add(item.text, requested?.outputLabel ?? labelFor("unknown", overrides), {
+            add(item.text, requested?.outputLabel ?? unguardedOutputLabel(requested, overrides), {
                 exclude: requested?.argKeys,
                 keepEarlier: requested?.outputLabel === undefined,
             });
