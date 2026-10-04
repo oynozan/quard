@@ -98,7 +98,7 @@ describe("openSocket", () => {
     it("keeps the process alive only while held", async () => {
         server = await startControlServer();
         const seen = events();
-        const before = liveSockets();
+        const before = await settledSockets();
 
         const socket = openSocket(socketUrl(server.url), CONTROL_KEY, seen);
         socket.ref();
