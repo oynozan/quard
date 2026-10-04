@@ -1,10 +1,11 @@
 import { getRun as storedRun, listRuns as storedRuns, runWaiters } from "@quard/db";
+import { APPROVAL_STALE_MS } from "@quard/shared";
 import { projectScope } from "../scope";
 import { runDetailOf } from "./live/detail";
 import { runRowsOf } from "./live/rows";
 import type { RunDetail, RunQuery, RunRow } from "./types";
 
-// The newest runs the list filters over
+// How many runs the list reads at most
 const WINDOW = 200;
 
 // Every word must match the id, an agent, a tool or the status.
@@ -19,12 +20,16 @@ function matches(row: RunRow, query: string): boolean {
 export async function listRuns(filter: RunQuery = {}): Promise<RunRow[]> {
     const scope = await projectScope();
     if (!scope) return [];
-    const runs = await storedRuns(scope.db, scope.project.id, { limit: WINDOW });
-    const rows = (await runRowsOf(scope.db, scope.project.id, runs, Date.now())).filter(
-        (row) =>
-            (!filter.agent || row.agents.includes(filter.agent)) &&
-            (!filter.status || row.status === filter.status) &&
-            (!filter.query || matches(row, filter.query)),
+    const now = Date.now();
+    const runs = await storedRuns(scope.db, scope.project.id, {
+        limit: WINDOW,
+        // In SQL, so newer runs cannot push an agent's runs out of the window
+        agent: filter.agent || undefined,
+        // Approvals never expire, so a run that waits is found however old it is
+        beatSince: filter.status === "waiting" ? new Date(now - APPROVAL_STALE_MS) : undefined,
+    });
+    const rows = (await runRowsOf(scope.db, scope.project.id, runs, now)).filter(
+        (row) => (!filter.status || row.status === filter.status) && (!filter.query || matches(row, filter.query)),
     );
     return filter.limit ? rows.slice(0, filter.limit) : rows;
 }

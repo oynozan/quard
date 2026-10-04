@@ -122,3 +122,45 @@ describe("runs that wait for a person", () => {
         expect(run?.steps.some((step) => step.approval)).toBe(false);
     });
 });
+
+describe("filters past the newest 200 runs", () => {
+    // Runs with no events that start an hour after the others, one a minute
+    async function addLaterRuns(projectId: string): Promise<void> {
+        const rows = Array.from({ length: 200 }, (_, n) => ({
+            project_id: projectId,
+            run_id: (n + 1).toString(16).padStart(32, "0"),
+            agent: "billing",
+            started_at: new Date(Date.UTC(2026, 9, 3, 13, n)),
+            last_event_at: new Date(Date.UTC(2026, 9, 3, 13, n)),
+        }));
+        await test.db.insertInto("runs").values(rows).execute();
+    }
+
+    it("lists an agent's runs however many runs started after them", async () => {
+        const projectId = await createProject(test.db, "Busy");
+        vi.stubEnv("QUARD_PROJECT_ID", projectId);
+        await ingestBatch(test.db, projectId, attack(RUN, "audit"));
+        await addLaterRuns(projectId);
+
+        const all = await listRuns();
+        const audit = await listRuns({ agent: "audit" });
+        vi.stubEnv("QUARD_PROJECT_ID", "");
+        expect(all).toHaveLength(200);
+        expect(all.map((row) => row.id)).not.toContain(RUN);
+        expect(audit.map((row) => row.id)).toEqual([RUN]);
+    });
+
+    it("lists a run that waits for a person however many runs started after it", async () => {
+        const projectId = await createProject(test.db, "Busy and waiting");
+        vi.stubEnv("QUARD_PROJECT_ID", projectId);
+        await ingestBatch(test.db, projectId, waitingRun(WAITING));
+        const { id } = await openApprovalRequest(test.db, projectId, askInput(WAITING));
+        const ask = { askId: "f".repeat(16), requestId: id, runId: WAITING, stepId: ASKED_STEP, agent: "billing" };
+        await addWaiter(test.db, projectId, ask);
+        await addLaterRuns(projectId);
+
+        const waiting = await listRuns({ status: "waiting" });
+        vi.stubEnv("QUARD_PROJECT_ID", "");
+        expect(waiting).toEqual([expect.objectContaining({ id: WAITING, status: "waiting", approvalId: id })]);
+    });
+});
