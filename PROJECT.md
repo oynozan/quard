@@ -51,7 +51,7 @@ Later:
 
 - Anthropic Messages, Chat Completions and a Python SDK.
 - Approvals in Slack, email or the app's own UI.
-- Rules edited in a file or in the dashboard.
+- Rules edited in the dashboard.
 - Near-match and paraphrase matching.
 - Integrations for the Vercel AI SDK, Mastra, LangGraph and others.
 - Native adapters for pgvector, Pinecone, Chroma and other stores.
@@ -78,7 +78,7 @@ Later:
 └── PROJECT.md
 ```
 
-Only `web/` exists today. The rest is the plan.
+All of these exist, plus `sandbox/` with runnable SDK examples. `services/worker` runs no jobs yet.
 
 How the parts talk:
 
@@ -124,8 +124,8 @@ packages/sdk/
 
 All **Claude's pick**, except the parts already set up in `web/`.
 
-- TypeScript everywhere, in one pnpm workspace at the repo root. When the workspace is created, move the settings in `web/pnpm-workspace.yaml` and `web/.prettierrc` up to the root.
-- Prettier with 4 spaces and a print width of 120, as `web/.prettierrc` already sets.
+- TypeScript everywhere, in one pnpm workspace at the repo root.
+- Prettier with 4 spaces and a print width of 120, set in the root `.prettierrc`.
 - Node 24 LTS for the services. The SDK supports Node 22.12 and later and ships as ESM.
 - TypeScript 5.9 or 6.x, pinned in each package.json, because npm's `latest` tag is now 7.0. Not 7.0 yet: it has no programmatic API, and typescript-eslint needs one.
 - Hono for `webhook` and `control`.
@@ -395,7 +395,7 @@ Decided by Q8, Q21 and Q24.
 - While a request is open, a new identical call (same agent, tool and arguments) waits on the same request instead of opening another. (**Claude's pick**)
 - A waiting process can stop, for example after a crash or a host time limit. Its heartbeats then stop, and the dashboard shows the request as "no longer waiting". The request stays open. An "approve once" given then is used by the next identical call. (**Claude's pick**)
 - Some hosts stop a waiting call. Vercel Functions and Cloud Run stop after 5 minutes by default. Vercel allows up to 800 seconds on Pro and Enterprise and 5 minutes on Hobby; Cloud Run allows up to 60 minutes. Teams there should raise the limit where they can, or set the optional `timeout`, in seconds, on the approval guard. There is no timeout by default. (**Claude's pick**)
-- The approver must see real values, so an open request keeps the full arguments. After the decision only the hash is kept. See [Redaction](#redaction).
+- The approver must see real values, so an open request keeps the full arguments. After the decision only the hash and the masked arguments are kept. See [Redaction](#redaction).
 
 ```ts
 const payInvoice = guard(rawPayInvoice, { type: "approval", name: "payInvoice" });
@@ -682,7 +682,7 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - The user and password in a URL, such as `redis://user:pass@host`, are removed. A password that holds an apostrophe is not found in v1.
 - The same normalized value always gives the same hash, so search and value tracing still match.
 - Guards see real values in memory. The dashboard shows masks. Replay uses stand-ins. The AI reviewer sees placeholders.
-- The one exception is an open approval request: the approver sees the full values. After the decision only the hash is kept.
+- The one exception is an open approval request: the approver sees the full values. After the decision only the hash and the masked arguments are kept.
 - Chunks Jev labels are stored as they were sent to it, for the review queue: secrets removed, and emails, IBANs and cards masked. Only public content is stored this way. (**Owner**)
 - The hash is HMAC-SHA-256 with one random 32-byte key per install. The key is set in every agent process and on the server, which needs it to hash search input. It is never sent to us.
 - To rotate the key, add a new one and keep the old one for search until old runs expire.
@@ -721,7 +721,7 @@ From the spec, plus the approval decisions.
 - **Search** across all runs: for example every run that touched a domain or used a given IBAN. Sensitive values are searched by their keyed hash.
 - **Approvals:** open requests with their arguments, origins and influence path, answered with approve once, always approve or deny. Also a list of "always" approvals that can be revoked.
 - **Labels:** a review queue of labeled chunks, least sure first. A person marks each label right or wrong, or picks the right one. It counts reviewed examples per label and shows how often each risky label was right at the current thresholds. (**Owner**, details **Claude's pick**)
-- **Settings:** agent keys, accounts and roles, and retention. Origin overrides and rules are shown read-only, because they live in code and the policy file.
+- **Settings:** agent keys, accounts and retention. Origin overrides and rules are shown read-only, because they live in code and the policy file.
 
 Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs before writing code there, as [web/AGENTS.md](web/AGENTS.md) says.
 
