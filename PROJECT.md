@@ -712,6 +712,8 @@ Decided by Q18 and Q19, all **Claude's pick**.
 - Labeled chunks go with their run. Runs with reviewed chunks are kept for 1 year, so the reviewed examples last. (**Claude's pick**)
 - Memory labels are not deleted with runs.
 - The hashed first-seen index for the fleet check is kept for 1 year, so old values don't look new again.
+- The worker deletes expired data every hour, in small batches, one project at a time. A run is deleted once both its start and its last event are past the window, so a run still getting events stays. (**Claude's pick**)
+- Approval requests go once their run is gone. Revoked "always approve" grants go after the run window; active ones stay. Day counters go 2 days after their day, and closed SDK connections after 30 days. (**Claude's pick**)
 
 ### Redaction
 
@@ -833,6 +835,8 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | When replay runs | On a click on the incident page; the verdict and AI note run on their own; past the cap, continue with $5 more | Owner |
 | — | Request for replay | The SDK records each model call's redacted request while uploads are on, up to 512 KiB | Claude's pick |
 | — | Bad handoff | From the messages and handoffs M4 records; a dropped constraint is never named, since message text is not stored | Owner, Claude's pick |
+| — | Self-hosting | One `compose.yaml` at the root; one image for webhook, control, worker and migrate, one for web; built from source | Claude's pick |
+| — | Content label review | A Labels page in the dashboard; the AI fallback for `none` uses the team's own key and the reviewer's model | Claude's pick |
 | — | Hosted MCP approvals | monitor keeps approval on and never sends the follow-up; `quard.mcpApprovals()` gives the app the answers, refusing blocked calls | Claude's pick |
 | — | Hosted tool rules | By the name the model uses, from the policy file or `hostedTools` in code | Claude's pick |
 
