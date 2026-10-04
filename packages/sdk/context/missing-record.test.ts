@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { configure } from "../core/config.ts";
+import { projectKey } from "../core/project-key.ts";
 import { takeEvents } from "../core/recorder.ts";
 import { isGuardRefusal } from "../core/refusal.ts";
 import { guard } from "../pipeline/guard.ts";
 import { CONTROL_KEY, startControlServer } from "../test/control-server.ts";
+import { PROJECT_KEY } from "../test/hash-key.ts";
 import { resetAll } from "../test/reset.ts";
+import { startWebhookServer, WEBHOOK_KEY } from "../test/webhook-server.ts";
 import { configureQuard } from "../transport/configure.ts";
 import { inject, resume } from "./carrier.ts";
 import { currentScope, runScope } from "./scope.ts";
@@ -12,7 +15,6 @@ import { currentScope, runScope } from "./scope.ts";
 // A label record that was never stored, or that a receiver can't find
 
 const RUN_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
-const HASH_KEY = "ab".repeat(32);
 
 afterEach(() => {
     resetAll();
@@ -21,7 +23,7 @@ afterEach(() => {
 describe("inject", () => {
     it("records a warning when the control link is on but uploads are off", async () => {
         const control = await startControlServer();
-        configureQuard({ key: CONTROL_KEY, controlUrl: control.url, hashKey: HASH_KEY });
+        configureQuard({ key: CONTROL_KEY, controlUrl: control.url });
 
         const carrier = await runScope({ agent: "orchestrator" }, () => inject({ content: "brief" }));
 
@@ -58,6 +60,17 @@ describe("resume", () => {
             },
             expect.objectContaining({ agent: "default", code: "label_record_not_found" }),
         ]);
+    });
+
+    it("still gets the project's key first, so what the receiver hashes matches the backend", async () => {
+        const webhook = await startWebhookServer();
+        configureQuard({ key: WEBHOOK_KEY, webhookUrl: webhook.url });
+
+        const key = await resume({ runId: RUN_ID, labelRef: "0".repeat(16) }, () => projectKey());
+
+        expect(key).toEqual(PROJECT_KEY);
+        resetAll();
+        await webhook.close();
     });
 
     it("gives only the agent's own tools when the record is unknown", async () => {

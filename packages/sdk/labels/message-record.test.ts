@@ -1,6 +1,7 @@
 import { messageRecord } from "@quard/shared";
 import { afterEach, describe, expect, it } from "vitest";
-import { configure, resetConfig } from "../core/config.ts";
+import { forgetProjectKey, learnProjectKey } from "../core/project-key.ts";
+import { PROJECT_KEY_TEXT } from "../test/hash-key.ts";
 import { messageRecordOf, type SentMessage } from "./message-record.ts";
 
 const RUN_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -20,7 +21,7 @@ function sent(fields: Partial<SentMessage> = {}): SentMessage {
     };
 }
 
-afterEach(resetConfig);
+afterEach(forgetProjectKey);
 
 describe("messageRecordOf", () => {
     it("keeps what the receiver needs, and no step or tools when there are none", () => {
@@ -40,7 +41,7 @@ describe("messageRecordOf", () => {
     });
 
     it("cuts what is too long to fit, so webhook stores it", () => {
-        configure({ hashKey: "ab".repeat(32) });
+        learnProjectKey(PROJECT_KEY_TEXT);
         const value = {
             type: "id" as const,
             value: "",

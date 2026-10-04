@@ -1,5 +1,10 @@
 import { APPROVAL_BEAT_MS, type ApprovalAnswer, type AskMessage } from "@quard/shared";
+import { projectKey } from "../../core/project-key.ts";
 import type { Link } from "./link.ts";
+
+// What a call asks a human, built each time it is sent: its arguments' hash
+// needs the project's key, which comes with control's ready message
+export type Ask = { askId: string; message(key: Buffer): AskMessage };
 
 export type Answer =
     | { kind: "decided"; answer: ApprovalAnswer; requestId?: string; grantId?: string }
@@ -12,12 +17,12 @@ export type Answer =
 export type Approvals = {
     // Waits for a human's answer, up to the approval guard's timeout or
     // until the signal aborts
-    ask(message: AskMessage, timeoutMs: number | undefined, signal?: AbortSignal): Promise<Answer>;
+    ask(ask: Ask, timeoutMs: number | undefined, signal?: AbortSignal): Promise<Answer>;
     stop(): void;
 };
 
 type Waiter = {
-    message: AskMessage;
+    ask: Ask;
     requestId: string | undefined;
     // Runs until control takes the ask, and gives up when it ends
     down: NodeJS.Timeout | undefined;
@@ -35,7 +40,13 @@ export function createApprovals(link: Link, downMs: number, beatMs: number = APP
     let beat: NodeJS.Timeout | undefined;
 
     function send(waiter: Waiter): void {
-        const { message, requestId } = waiter;
+        const key = projectKey();
+        // Ready brings the key, so it is only missing once forgotten
+        if (key === undefined) {
+            return;
+        }
+        const message = waiter.ask.message(key);
+        const { requestId } = waiter;
         link.send(requestId === undefined ? message : { ...message, requestId });
     }
 
@@ -93,23 +104,23 @@ export function createApprovals(link: Link, downMs: number, beatMs: number = APP
         },
     });
 
-    function ask(message: AskMessage, timeoutMs: number | undefined, signal?: AbortSignal): Promise<Answer> {
+    function ask(asked: Ask, timeoutMs: number | undefined, signal?: AbortSignal): Promise<Answer> {
         return new Promise((resolve) => {
             const release = link.hold();
             let timer: NodeJS.Timeout | undefined;
             // Control drops the request, so no one approves a call that is gone
             const cancel = (answer: Answer) => {
-                link.send({ type: "cancel", askId: message.askId });
+                link.send({ type: "cancel", askId: asked.askId });
                 waiter.finish(answer);
             };
             const abort = () => cancel({ kind: "aborted", requestId: waiter.requestId });
             const waiter: Waiter = {
-                message,
+                ask: asked,
                 requestId: undefined,
                 down: undefined,
                 retry: undefined,
                 finish: (answer) => {
-                    waiters.delete(message.askId);
+                    waiters.delete(asked.askId);
                     clearTimeout(waiter.down);
                     clearTimeout(waiter.retry);
                     clearTimeout(timer);
@@ -122,7 +133,7 @@ export function createApprovals(link: Link, downMs: number, beatMs: number = APP
                     resolve(answer);
                 },
             };
-            waiters.set(message.askId, waiter);
+            waiters.set(asked.askId, waiter);
             beat ??= setInterval(beatAll, beatMs);
             beat.unref();
             if (timeoutMs !== undefined) {

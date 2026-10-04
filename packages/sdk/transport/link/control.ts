@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { APPROVAL_BEAT_MS, createRedactor, type ClientMessage, type Redactor } from "@quard/shared";
+import { APPROVAL_BEAT_MS, redactText, type ClientMessage } from "@quard/shared";
 import type { FleetView } from "../../guards/limit/fleet.ts";
 import { knownVersions, type AgentVersion } from "../../monitor/versions.ts";
 import { rulesSnapshot } from "../../policy/rules.ts";
@@ -34,7 +34,6 @@ export type ControlOptions = {
     // The WebSocket URL, from controlSocketUrl()
     url: string;
     key: string;
-    hashKey: Buffer;
     open?: OpenSocket;
     warn?: (message: string) => void;
     timing?: Partial<ControlTiming>;
@@ -48,7 +47,6 @@ export type Control = {
     replays: Replays;
     // Counts of runs that span processes, sent again when control missed them
     runs: RunReplays;
-    hashKey: Buffer;
     replyMs: number;
     // Sends the active rules when they changed since control last saw them
     syncRules(): void;
@@ -60,7 +58,7 @@ const MAX_NAME = 200;
 const MAX_TOOLS = 500;
 const MAX_INSTRUCTIONS = 100_000;
 
-function agentMessage(version: AgentVersion, redactor: Redactor): ClientMessage {
+function agentMessage(version: AgentVersion): ClientMessage {
     const { instructions } = version;
     return {
         type: "agent",
@@ -68,14 +66,13 @@ function agentMessage(version: AgentVersion, redactor: Redactor): ClientMessage 
         version: version.version,
         model: version.model.slice(0, MAX_NAME),
         tools: version.tools.filter((tool) => tool !== "" && tool.length <= MAX_NAME).slice(0, MAX_TOOLS),
-        ...(instructions === undefined ? {} : { instructions: redactor.text(instructions).slice(0, MAX_INSTRUCTIONS) }),
+        ...(instructions === undefined ? {} : { instructions: redactText(instructions).slice(0, MAX_INSTRUCTIONS) }),
     };
 }
 
 // Approvals, per-day counts, the fleet check, rules and agent versions through control
 export function createControl(options: ControlOptions): Control {
     const timing = { ...CONTROL_TIMING, ...options.timing };
-    const redactor = createRedactor(options.hashKey);
     let sentRules: string | undefined;
     const link = createLink({
         url: options.url,
@@ -91,11 +88,11 @@ export function createControl(options: ControlOptions): Control {
     });
     const requests = createRequests(link);
     const approvals = createApprovals(link, timing.downMs, timing.beatMs);
-    const fleet = createFleetState(link, redactor, timing.staleMs);
+    const fleet = createFleetState(link, timing.staleMs);
     const replays = createReplays(link, requests, timing.replyMs);
     const runs = createRunReplays(link, requests, timing.replyMs);
     const sendAgent = (version: AgentVersion) => {
-        link.send(agentMessage(version, redactor));
+        link.send(agentMessage(version));
     };
     link.listen({
         ready: () => knownVersions().forEach(sendAgent),
@@ -108,7 +105,6 @@ export function createControl(options: ControlOptions): Control {
         fleet,
         replays,
         runs,
-        hashKey: options.hashKey,
         replyMs: timing.replyMs,
         syncRules: () => {
             const rules = rulesSnapshot();

@@ -7,7 +7,7 @@ import { configureQuard } from "../transport/configure.ts";
 import { createMonitorFetch } from "./fetch.ts";
 
 const URL_RESPONSES = "https://api.openai.com/v1/responses";
-const UPLOADS = { key: "qk_test_abcdefghijklmnop", webhookUrl: "http://webhook.test", hashKey: "ab".repeat(32) };
+const UPLOADS = { key: "qk_test_abcdefghijklmnop", webhookUrl: "http://webhook.test" };
 
 afterEach(() => {
     resetAll();

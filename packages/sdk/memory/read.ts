@@ -14,7 +14,7 @@ import type { Scope } from "../context/scope.ts";
 import type { AddOptions } from "../labels/content-index.ts";
 import { printOf } from "../labels/print.ts";
 import { unvouchedKeys } from "../labels/unvouched.ts";
-import { lookupLabels } from "../transport/labels.ts";
+import { lookupLabels, waitForKey } from "../transport/labels.ts";
 import { recordMemory } from "./event.ts";
 import { keptLabels } from "./kept.ts";
 import { mergeLabels, type MemoryLabels } from "./merge.ts";
@@ -22,10 +22,11 @@ import { localHash } from "./values.ts";
 
 // The labels this process kept for the content, merged with the
 // backend's, so a less trusted writer elsewhere wins. Only records of
-// this exact content vouch for it.
-async function findLabels(print: string): Promise<MemoryLabels | undefined> {
+// this exact content vouch for it, and the backend only knows prints
+// made with the project's key.
+async function findLabels(print: string, keyed: boolean): Promise<MemoryLabels | undefined> {
     // A lookup that fails counts as no record
-    const records = await lookupLabels({ kind: "memory", print }).catch(() => undefined);
+    const records = keyed ? await lookupLabels({ kind: "memory", print }).catch(() => undefined) : undefined;
     const found = (records ?? []).filter((record) => record.kind === "memory" && record.print === print);
     const own = keptLabels(print);
     const [first, ...rest] = own === undefined ? found : [own, ...found];
@@ -105,12 +106,13 @@ export async function readThrough(
     read: () => Promise<unknown>,
 ): Promise<unknown> {
     const stepId = newStepId();
-    const result = await read();
+    // Prints must match the backend's, so the project's key is fetched alongside
+    const [result, keyed] = await Promise.all([read(), waitForKey()]);
     const list: unknown[] = many && Array.isArray(result) ? result : [result];
     const items = list.filter((item) => item !== undefined && item !== null);
     // Values under secret-named fields never become keys
     const found = await Promise.all(
-        items.map(async (item) => ({ text: keyText(item), labels: await findLabels(printOf(item)) })),
+        items.map(async (item) => ({ text: keyText(item), labels: await findLabels(printOf(item), keyed === true) })),
     );
     const origin = `memory:${store}`;
     const labels = found.map(({ text, labels }) => {

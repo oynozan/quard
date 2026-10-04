@@ -1,9 +1,10 @@
-import type { ModelCallEvent, RunEvent, UploadBatch } from "@quard/shared";
+import { HASH_KEY_PATH, type ModelCallEvent, type RunEvent, type UploadBatch } from "@quard/shared";
 import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { guard, isGuardRefusal, quard } from "../index.ts";
 import { runAgent } from "../test/agent.ts";
 import { fakeResponses, toolOutputs } from "../test/fake-responses.ts";
+import { hashKeyAnswer } from "../test/hash-key.ts";
 import { resetAll } from "../test/reset.ts";
 import { flushUploads } from "../transport/configure.ts";
 
@@ -105,7 +106,7 @@ describe("an IBAN taken from a web page", () => {
 });
 
 describe("the turning point's request", () => {
-    const UPLOADS = { key: "qk_test_abcdefghijklmnop", webhookUrl: "http://webhook.test", hashKey: "ab".repeat(32) };
+    const UPLOADS = { key: "qk_test_abcdefghijklmnop", webhookUrl: "http://webhook.test" };
 
     function turningPoint(list: readonly RunEvent[]): ModelCallEvent | undefined {
         return list.find(
@@ -118,7 +119,10 @@ describe("the turning point's request", () => {
         const sent: UploadBatch[] = [];
         vi.stubGlobal(
             "fetch",
-            vi.fn(async (_url: string, init: RequestInit) => {
+            vi.fn(async (url: string, init: RequestInit) => {
+                if (url.endsWith(HASH_KEY_PATH)) {
+                    return hashKeyAnswer();
+                }
                 sent.push(JSON.parse(String(init.body)) as UploadBatch);
                 return new Response(null, { status: 202 });
             }),

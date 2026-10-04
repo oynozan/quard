@@ -1,6 +1,9 @@
+import { keyedHash } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forgetProjectKey, learnProjectKey } from "../../core/project-key.ts";
 import { clearDayCounts, dayUsed } from "../../guards/limit/daily.ts";
 import { fakeLink, sentOf, type FakeSocket } from "../../test/fake-socket.ts";
+import { PROJECT_KEY, PROJECT_KEY_TEXT } from "../../test/hash-key.ts";
 import { createReplays, type FleetUse } from "./queue.ts";
 import { createRequests } from "./requests.ts";
 
@@ -36,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
     clearDayCounts();
+    forgetProjectKey();
     vi.useRealTimers();
 });
 
@@ -230,5 +234,29 @@ describe("replays for control", () => {
 
         expect(sent).toHaveLength(999);
         expect(sent[0]?.agent).toBe("agent-1");
+    });
+
+    it("keeps an IBAN with its plain key, and hashes it with the project's key once control is there", () => {
+        const { fake, replays } = setup();
+        const iban = "DE89370400440532013000";
+
+        replays.use({ ...USE, values: [{ field: "iban", kind: "iban", key: `iban:${iban}` }] });
+        const [sent] = sentOf(fake.connect(), "fleet");
+
+        const key = `iban:DE89…3000#${keyedHash(PROJECT_KEY, "iban", iban)}`;
+        expect(sent?.values).toEqual([{ field: "iban", kind: "iban", key }]);
+    });
+
+    it("keeps a report while the project's key is unknown, even on a live link", () => {
+        const { fake, replays } = setup();
+        const socket = fake.connect();
+        forgetProjectKey();
+
+        replays.use(USE);
+        expect(sentOf(socket, "fleet")).toEqual([]);
+        learnProjectKey(PROJECT_KEY_TEXT);
+        vi.advanceTimersByTime(30_000);
+
+        expect(sentOf(socket, "fleet")).toHaveLength(1);
     });
 });

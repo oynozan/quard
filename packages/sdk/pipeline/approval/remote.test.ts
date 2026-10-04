@@ -1,10 +1,11 @@
-import { parseHashKey } from "@quard/shared";
+import { canonicalJson, keyedHash } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeEvents } from "../../core/recorder.ts";
 import type { FailResult } from "../../guards/call.ts";
 import { makeAskableCall } from "../../test/call.ts";
 import { decisionsOf } from "../../test/events.ts";
 import { fakeSockets, sentOf } from "../../test/fake-socket.ts";
+import { PROJECT_KEY } from "../../test/hash-key.ts";
 import { resetAll } from "../../test/reset.ts";
 import { createControl, type Control } from "../../transport/link/control.ts";
 import { askControl } from "./remote.ts";
@@ -19,7 +20,7 @@ let control: Control | undefined;
 
 function setup() {
     const fake = fakeSockets();
-    control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    control = createControl({ url: "ws://c", key: "k", open: fake.open });
     return { fake, control };
 }
 
@@ -42,14 +43,16 @@ async function answered(reply: (askId: string) => object, ms?: number) {
     const [ask] = sentOf(socket, "ask");
     socket.reply({ type: "asked", askId: ask?.askId as string, requestId: REQUEST });
     socket.reply(reply(ask?.askId as string) as never);
-    return { result: await result, decisions: decisionsOf(takeEvents()) };
+    return { ask, result: await result, decisions: decisionsOf(takeEvents()) };
 }
 
 describe("askControl", () => {
     it("approves on a human's approve once, and records the request", async () => {
-        const { result, decisions } = await answered((askId) => ({ type: "decided", askId, answer: "once" }));
+        const { ask, result, decisions } = await answered((askId) => ({ type: "decided", askId, answer: "once" }));
 
         expect(result).toBe("approved");
+        // Hashed with the key from control's ready message
+        expect(ask?.argsHash).toBe(keyedHash(PROJECT_KEY, "args", canonicalJson({ amount: 4950 })));
         expect(decisions).toMatchObject([{ guard: "approval", rule: "human", decision: "allow", request: REQUEST }]);
     });
 
@@ -77,6 +80,18 @@ describe("askControl", () => {
         vi.advanceTimersByTime(1000);
 
         expect(await result).toMatchObject({ rule: "timeout", reason: "approval_timed_out" });
+    });
+
+    it("asks only once control is there, with the key its ready message brings", async () => {
+        const { fake, control } = setup();
+
+        const result = askControl(control, makeAskableCall({ amount: 1 }), ASKS, undefined);
+        const socket = fake.connect();
+        const [ask] = sentOf(socket, "ask");
+        socket.reply({ type: "decided", askId: ask?.askId as string, answer: "once" });
+
+        expect(ask?.argsHash).toBe(keyedHash(PROJECT_KEY, "args", canonicalJson({ amount: 1 })));
+        expect(await result).toBe("approved");
     });
 
     it("refuses when control can't be reached in time", async () => {

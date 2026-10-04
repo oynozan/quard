@@ -1,33 +1,33 @@
-import { keyedHash, labelFor, parseHashKey } from "@quard/shared";
+import { keyedHash, labelFor } from "@quard/shared";
 import { afterEach, describe, expect, it } from "vitest";
-import { configure, resetConfig } from "../core/config.ts";
+import { forgetProjectKey, learnProjectKey } from "../core/project-key.ts";
 import { ContentIndex } from "../labels/content-index.ts";
 import { valueHash } from "../labels/hashed.ts";
+import { PROJECT_KEY, PROJECT_KEY_TEXT } from "../test/hash-key.ts";
 import { localHash, valueRecords } from "./values.ts";
 
-const KEY = "ab".repeat(32);
 const IBAN = "DE89370400440532013000";
 const STEP_A = "00f067aa0ba902b7";
 const STEP_B = "1111222233334444";
 
 afterEach(() => {
-    resetConfig();
+    forgetProjectKey();
 });
 
 describe("localHash", () => {
-    it("is the configured key's hash when a key is set", () => {
-        configure({ hashKey: KEY });
+    it("is the project's key's hash once the key is known", () => {
+        learnProjectKey(PROJECT_KEY_TEXT);
 
-        expect(localHash("iban", IBAN)).toBe(keyedHash(parseHashKey(KEY), "iban", IBAN));
+        expect(localHash("iban", IBAN)).toBe(keyedHash(PROJECT_KEY, "iban", IBAN));
     });
 
-    it("uses a key of this process when none is set", () => {
+    it("uses a key of this process until then", () => {
         const hash = localHash("iban", IBAN);
 
         expect(hash).toMatch(/^[0-9a-f]{32}$/);
         expect(localHash("iban", IBAN)).toBe(hash);
         expect(localHash("id", IBAN)).not.toBe(hash);
-        configure({ hashKey: KEY });
+        learnProjectKey(PROJECT_KEY_TEXT);
         expect(localHash("iban", IBAN)).not.toBe(hash);
     });
 });

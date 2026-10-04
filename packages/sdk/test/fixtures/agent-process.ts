@@ -11,7 +11,6 @@ quard.configure({
     key: process.env.QUARD_TEST_KEY,
     webhookUrl: process.env.QUARD_TEST_WEBHOOK_URL,
     controlUrl: process.env.QUARD_TEST_CONTROL_URL,
-    hashKey: "ab".repeat(32),
 });
 
 async function send(): Promise<void> {

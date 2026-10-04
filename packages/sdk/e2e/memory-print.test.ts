@@ -15,6 +15,7 @@ vi.mock("../transport/labels.ts", () => ({
     },
     lookupLabels: async (target: LookupMessage["target"]) =>
         backend.records.filter((found) => found.kind === "memory" && "print" in target && found.print === target.print),
+    waitForKey: async () => true,
 }));
 
 const NOTE = "Weekly note: all good.";

@@ -1,31 +1,32 @@
-import { createRedactor, parseHashKey, type LabelRecord } from "@quard/shared";
+import type { LabelRecord } from "@quard/shared";
 import { configure, getConfig, type QuardConfig } from "../core/config.ts";
+import { forgetProjectKey, projectRedactor, waitForProjectKey } from "../core/project-key.ts";
+import { createKeyFetch, type KeyFetch } from "./key-fetch.ts";
 import { createLabelSender, type LabelSender } from "./label-sender.ts";
-import { setActiveControl } from "./link/active.ts";
+import { activeControl, setActiveControl } from "./link/active.ts";
 import { createControl, type Control } from "./link/control.ts";
 import { controlSocketUrl } from "./link/url.ts";
 import { createUploader, type Uploader } from "./uploader.ts";
 
-type UploadSettings = { key: string; webhookUrl: string; hashKey: string };
-type LinkSettings = { key: string; url: string; hashKey: string };
+type UploadSettings = { key: string; webhookUrl: string };
+type LinkSettings = { key: string; url: string };
 
-let uploads: { settings: string; uploader: Uploader; labels: LabelSender } | undefined;
+let uploads: { settings: string; uploader: Uploader; labels: LabelSender; keys: KeyFetch } | undefined;
 let link: { settings: string; control: Control } | undefined;
 let exitHooked = false;
 
-// What to start from key, webhookUrl, controlUrl and hashKey, or throws
+// What to start from key, webhookUrl and controlUrl, or throws
 function servicesFor(config: Partial<QuardConfig>): { uploads?: UploadSettings; link?: LinkSettings } {
-    const { key, webhookUrl, controlUrl, hashKey } = config;
-    if (!key && !webhookUrl && !controlUrl && !hashKey) {
+    const { key, webhookUrl, controlUrl } = config;
+    if (!key && !webhookUrl && !controlUrl) {
         return {};
     }
-    if (!key || !hashKey || (!webhookUrl && !controlUrl)) {
-        throw new Error("Uploads and the control link need key and hashKey together with webhookUrl or controlUrl");
+    if (!key || (!webhookUrl && !controlUrl)) {
+        throw new Error("Uploads and the control link need key together with webhookUrl or controlUrl");
     }
-    parseHashKey(hashKey);
     return {
-        uploads: webhookUrl ? { key, webhookUrl, hashKey } : undefined,
-        link: controlUrl ? { key, url: controlSocketUrl(controlUrl), hashKey } : undefined,
+        uploads: webhookUrl ? { key, webhookUrl } : undefined,
+        link: controlUrl ? { key, url: controlSocketUrl(controlUrl) } : undefined,
     };
 }
 
@@ -33,7 +34,12 @@ function servicesFor(config: Partial<QuardConfig>): { uploads?: UploadSettings; 
 export function configureQuard(options: Partial<QuardConfig>): void {
     // Checked before anything changes, so a bad call leaves the old settings
     const services = servicesFor({ ...getConfig(), ...options });
+    const agentKey = getConfig().key;
     configure(options);
+    // Each project hashes with its own key, so another agent key needs its own
+    if (getConfig().key !== agentKey) {
+        forgetProjectKey();
+    }
     startUploads(services.uploads);
     startLink(services.link);
 }
@@ -45,11 +51,15 @@ function startUploads(settings: UploadSettings | undefined): void {
     }
     stopUploads();
     if (settings !== undefined) {
-        const redactor = createRedactor(parseHashKey(settings.hashKey));
-        const target = { webhookUrl: settings.webhookUrl, key: settings.key, redactor };
-        const uploader = createUploader(target);
+        const keys = createKeyFetch(settings);
+        const uploader = createUploader({ ...settings, redactor: keys.redactor });
         uploader.start();
-        uploads = { settings: id, uploader, labels: createLabelSender(target) };
+        uploads = {
+            settings: id,
+            uploader,
+            labels: createLabelSender({ ...settings, redactor: projectRedactor }),
+            keys,
+        };
         hookExit();
     }
 }
@@ -61,11 +71,7 @@ function startLink(settings: LinkSettings | undefined): void {
     }
     stopLink();
     if (settings !== undefined) {
-        const control = createControl({
-            url: settings.url,
-            key: settings.key,
-            hashKey: parseHashKey(settings.hashKey),
-        });
+        const control = createControl({ url: settings.url, key: settings.key });
         link = { settings: id, control };
         setActiveControl(control);
     }
@@ -83,6 +89,7 @@ function hookExit(): void {
 
 export function stopUploads(): void {
     uploads?.uploader.stop();
+    uploads?.keys.stop();
     uploads = undefined;
 }
 
@@ -104,4 +111,17 @@ export function uploadsOn(): boolean {
 // Stores label records in webhook now, false when uploads are off
 export function sendLabels(records: LabelRecord[]): Promise<boolean> {
     return uploads?.labels(records) ?? Promise.resolve(false);
+}
+
+// Waits up to ms for the project's hash key, which webhook hands out at
+// once and control with its ready message. Undefined when neither is set
+// up, else whether the key came.
+export async function waitForHashKey(ms: number): Promise<boolean | undefined> {
+    const control = activeControl();
+    if (uploads === undefined && control === undefined) {
+        return undefined;
+    }
+    const asked = uploads?.keys.redactor();
+    // Without control, nothing else can bring the key once webhook answered
+    return (await waitForProjectKey(ms, control === undefined ? asked : undefined)) !== undefined;
 }

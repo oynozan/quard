@@ -1,4 +1,3 @@
-import { parseHashKey } from "@quard/shared";
 import { vi } from "vitest";
 import type { LimitOptions } from "../guards/options.ts";
 import { createControl } from "../transport/link/control.ts";
@@ -10,7 +9,7 @@ export const AMOUNT: LimitOptions = { type: "limit", maxAmountPerDay: { field: "
 // A control link over sockets the test connects by hand
 export function dayControl() {
     const fake = fakeSockets();
-    const control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    const control = createControl({ url: "ws://c", key: "k", open: fake.open });
     return { fake, control };
 }
 

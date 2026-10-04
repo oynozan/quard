@@ -1,9 +1,9 @@
-import { keyedHash, parseHashKey } from "@quard/shared";
+import { keyedHash } from "@quard/shared";
 import { afterEach, describe, expect, it } from "vitest";
-import { configure, resetConfig } from "../core/config.ts";
+import { forgetProjectKey, learnProjectKey } from "../core/project-key.ts";
+import { PROJECT_KEY, PROJECT_KEY_TEXT } from "../test/hash-key.ts";
 import { hashValues, matchValues, type ValueRecord } from "./value-records.ts";
 
-const KEY = "ab".repeat(32);
 const IBAN = "DE89370400440532013000";
 const URL = "https://pay.acme.com/login";
 
@@ -20,19 +20,19 @@ function valueOf(type: ValueRecord["type"], value: string, origin: string): Valu
     };
 }
 
-afterEach(resetConfig);
+afterEach(forgetProjectKey);
 
 describe("hashValues", () => {
-    it("sends no values without a hash key", () => {
+    it("sends no values until the project's hash key is known", () => {
         expect(hashValues([valueOf("iban", IBAN, "web:evil.com")])).toEqual([]);
     });
 
     it("sends each value by its keyed hash, with its label", () => {
-        configure({ hashKey: KEY });
+        learnProjectKey(PROJECT_KEY_TEXT);
 
         expect(hashValues([valueOf("iban", IBAN, "web:evil.com")])).toEqual([
             {
-                hash: keyedHash(parseHashKey(KEY), "iban", IBAN),
+                hash: keyedHash(PROJECT_KEY, "iban", IBAN),
                 origin: "web:evil.com",
                 trust: "untrusted",
                 sensitivity: "public",
@@ -45,7 +45,7 @@ describe("hashValues", () => {
 
 describe("matchValues", () => {
     it("finds the values in a text that the stored hashes vouch for", () => {
-        configure({ hashKey: KEY });
+        learnProjectKey(PROJECT_KEY_TEXT);
         const stored = hashValues([valueOf("iban", IBAN, "web:evil.com"), valueOf("url", URL, "tool:crm")]);
 
         expect(matchValues(`Pay DE89 3704 0044 0532 0130 00 and log in at ${URL}. Ask bob@acme.com.`, stored)).toEqual([
@@ -54,10 +54,10 @@ describe("matchValues", () => {
         ]);
     });
 
-    it("matches nothing without a hash key", () => {
-        configure({ hashKey: KEY });
+    it("matches nothing without the project's hash key", () => {
+        learnProjectKey(PROJECT_KEY_TEXT);
         const stored = hashValues([valueOf("iban", IBAN, "web:evil.com")]);
-        resetConfig();
+        forgetProjectKey();
 
         expect(matchValues(`Pay ${IBAN}`, stored)).toEqual([]);
     });

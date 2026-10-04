@@ -12,10 +12,11 @@ const MAX_FLAGS = 20;
 const MAX_FLAG = 100;
 const MAX_ORIGIN = 2000;
 
-// Without a hash key, values kept in this process go by a key only it knows
+// Without the project's hash key, values kept in this process go by a
+// key only it knows
 const PROCESS_KEY = randomBytes(32);
 
-// The configured key's hash, or else one only this process can match
+// The project's key's hash, or else one only this process can match
 export function localHash(type: ValueType, value: string): string {
     return valueHash(type, value) ?? keyedHash(PROCESS_KEY, type, value);
 }

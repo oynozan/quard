@@ -81,7 +81,8 @@ describe("data sent by email", () => {
         const redactor = createRedactor(parseHashKey("ab".repeat(32)));
 
         await sendEmail({ to: TO, body: 4242424242424242 });
-        await createUploader({ webhookUrl: "http://webhook.test", key: "qk_test_abc", redactor, send }).flush();
+        const options = { webhookUrl: "http://webhook.test", key: "qk_test_abc", redactor: async () => redactor, send };
+        await createUploader(options).flush();
 
         expect(bodies.join("\n")).toContain('"body":"4242…4242"');
         expect(bodies.join("\n")).not.toContain("4242424242424242");

@@ -3,7 +3,7 @@ import type { Scope } from "../context/scope.ts";
 import { valueHash } from "../labels/hashed.ts";
 import { printOf } from "../labels/print.ts";
 import { vouchedLabel } from "../labels/vouched-label.ts";
-import { storeLabels } from "../transport/labels.ts";
+import { storeLabels, waitForKey } from "../transport/labels.ts";
 import { recordMemory } from "./event.ts";
 import { keepLabels } from "./kept.ts";
 import { MAX_ORIGINS } from "./merge.ts";
@@ -31,6 +31,9 @@ export async function writeThrough(
     write: () => Promise<unknown>,
 ): Promise<unknown> {
     const stepId = newStepId();
+    // The labels' hashes must match the backend's, so they wait for the
+    // project's key
+    const keyed = await waitForKey();
     // Values under secret-named fields never become records
     const text = keyText(value);
     const print = printOf(value);
@@ -45,7 +48,7 @@ export async function writeThrough(
         label,
         values: valueRecords(text, scope.run.index, valueHash),
     };
-    const stored = await storeLabels([record]).catch(() => false);
+    const stored = keyed === true && (await storeLabels([record]).catch(() => false));
     const result = await write();
     const { trust, sensitivity } = label;
     recordMemory(scope, stepId, { store, op: "write", items: 1, verified: stored ? 1 : 0, trust, sensitivity });

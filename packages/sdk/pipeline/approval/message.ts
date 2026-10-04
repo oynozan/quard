@@ -8,14 +8,18 @@ import {
     stripSecrets,
     tooDeepToStrip,
     type ArgumentLabelMessage,
-    type AskMessage,
 } from "@quard/shared";
 import type { FailResult, GuardCall } from "../../guards/call.ts";
 import type { ArgumentLabel } from "../../labels/value-labels.ts";
+import type { Ask } from "../../transport/link/approvals.ts";
 import { MAX_MESSAGE } from "../../transport/link/link.ts";
 
 // Why a call can't be shown to the approver, as the rule that refuses it
 export type Unshown = "unsendable" | "too-deep-to-show";
+
+// The arguments' hash needs the project's key, known once control is there.
+// It is always 32 hex characters, so this stand-in checks the ask now.
+const STANDIN_HASH = "0".repeat(32);
 
 // Where each argument value came from, without the values themselves.
 // Origins and paths can hold emails or keys, so they are redacted.
@@ -37,13 +41,9 @@ function labelsOf(values: readonly ArgumentLabel[]): ArgumentLabelMessage[] {
     }));
 }
 
-// The ask for the dashboard, or why it can't be shown
-export function askFor(
-    call: GuardCall,
-    asks: readonly FailResult[],
-    hashKey: Buffer,
-    rules: string | undefined,
-): AskMessage | Unshown {
+// The ask for the dashboard, made with the project's key when it is sent,
+// or why it can't be shown
+export function askFor(call: GuardCall, asks: readonly FailResult[], rules: string | undefined): Ask | Unshown {
     const { context } = call;
     const args = plainJson(call.input);
     // Deeper values would be cut, and no one may approve what they can't see
@@ -57,8 +57,7 @@ export function askFor(
         stepId: call.stepId,
         agent: call.agent,
         tool: call.tool,
-        // The hash covers secrets too, so a changed secret asks again
-        argsHash: keyedHash(hashKey, "args", canonicalJson(call.input)),
+        argsHash: STANDIN_HASH,
         // The approver sees real values, with secrets removed
         args: stripSecrets(args),
         labels: labelsOf(call.values),
@@ -76,5 +75,11 @@ export function askFor(
         })),
         rules,
     });
-    return parsed.success && Buffer.byteLength(JSON.stringify(parsed.data)) <= MAX_MESSAGE ? parsed.data : "unsendable";
+    if (!parsed.success || Buffer.byteLength(JSON.stringify(parsed.data)) > MAX_MESSAGE) {
+        return "unsendable";
+    }
+    const message = parsed.data;
+    // The hash covers secrets too, so a changed secret asks again
+    const canonical = canonicalJson(call.input);
+    return { askId: message.askId, message: (key) => ({ ...message, argsHash: keyedHash(key, "args", canonical) }) };
 }

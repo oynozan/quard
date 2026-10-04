@@ -10,6 +10,7 @@ import { memory } from "./wrap.ts";
 vi.mock("../transport/labels.ts", () => ({
     storeLabels: vi.fn(async () => true),
     lookupLabels: vi.fn(async () => undefined),
+    waitForKey: vi.fn(async () => true),
 }));
 
 let events: RunEvent[] = [];

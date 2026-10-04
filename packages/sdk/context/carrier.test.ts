@@ -1,8 +1,9 @@
-import { keyedHash, labelFor, parseHashKey, type LabelRecord } from "@quard/shared";
+import { keyedHash, labelFor, type LabelRecord } from "@quard/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { takeEvents } from "../core/recorder.ts";
 import { printOf } from "../labels/print.ts";
 import { clearRecords, findRecord, forgetRuns } from "../labels/records.ts";
+import { PROJECT_KEY } from "../test/hash-key.ts";
 import { resetAll } from "../test/reset.ts";
 import { startWebhookServer, WEBHOOK_KEY } from "../test/webhook-server.ts";
 import { configureQuard } from "../transport/configure.ts";
@@ -13,7 +14,6 @@ import { agentScope, currentScope, runScope } from "./scope.ts";
 const IBAN = "DE89370400440532013000";
 const RUN_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
 const STEP_ID = "00f067aa0ba902b7";
-const HASH_KEY = "ab".repeat(32);
 
 afterEach(() => {
     resetAll();
@@ -158,10 +158,10 @@ describe("inject", () => {
         );
     });
 
-    it("stores the record in webhook before it returns, its values hashed", async () => {
+    it("stores the record in webhook before it returns, hashed with the key webhook hands out", async () => {
         const labels: LabelRecord[] = [];
         const webhook = await startWebhookServer(labels);
-        configureQuard({ key: WEBHOOK_KEY, webhookUrl: webhook.url, hashKey: HASH_KEY });
+        configureQuard({ key: WEBHOOK_KEY, webhookUrl: webhook.url });
 
         const carrier = await runScope({}, async () => {
             currentScope()?.run.index.add(`Bank: ${IBAN}`, labelFor("web:evil.com"), STEP_ID);
@@ -172,9 +172,11 @@ describe("inject", () => {
             {
                 kind: "message",
                 ref: carrier.labelRef,
-                values: [{ hash: keyedHash(parseHashKey(HASH_KEY), "iban", IBAN) }],
+                values: [{ hash: keyedHash(PROJECT_KEY, "iban", IBAN) }],
+                print: printOf(`Pay ${IBAN}`),
             },
         ]);
+        expect(webhook.state.keyRequests).toBe(1);
         expect(takeEvents().filter((event) => event.type === "warning")).toEqual([]);
         await webhook.close();
     });
@@ -182,7 +184,7 @@ describe("inject", () => {
     it("still returns the carrier when the record could not be stored, and records a warning", async () => {
         const webhook = await startWebhookServer();
         webhook.state.labelStatus = 503;
-        configureQuard({ key: WEBHOOK_KEY, webhookUrl: webhook.url, hashKey: HASH_KEY });
+        configureQuard({ key: WEBHOOK_KEY, webhookUrl: webhook.url });
 
         const carrier = await runScope({ agent: "orchestrator" }, () => inject({ content: "brief" }));
 
@@ -191,6 +193,22 @@ describe("inject", () => {
             runId: carrier.runId,
             stepId: expect.stringMatching(/^[0-9a-f]{16}$/),
             agent: "orchestrator",
+            code: "label_record_not_stored",
+        });
+        await webhook.close();
+    });
+
+    it("stores nothing and records a warning when webhook won't hand out the key", async () => {
+        const labels: LabelRecord[] = [];
+        const webhook = await startWebhookServer(labels);
+        webhook.state.keyStatus = 503;
+        configureQuard({ key: WEBHOOK_KEY, webhookUrl: webhook.url });
+
+        const carrier = await runScope({ agent: "orchestrator" }, () => inject({ content: `Pay ${IBAN}` }));
+
+        expect(labels).toEqual([]);
+        expect((await findRecord(carrier.labelRef))?.record.values).toEqual([]);
+        expect(takeEvents().find((event) => event.type === "warning")).toMatchObject({
             code: "label_record_not_stored",
         });
         await webhook.close();

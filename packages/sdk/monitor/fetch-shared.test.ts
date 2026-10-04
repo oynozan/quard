@@ -1,4 +1,3 @@
-import { parseHashKey } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { currentScope, runScope } from "../context/scope.ts";
@@ -26,7 +25,7 @@ afterEach(() => {
 
 function linked(): FakeSocket {
     const fake = fakeSockets();
-    control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    control = createControl({ url: "ws://c", key: "k", open: fake.open });
     setActiveControl(control);
     return fake.connect();
 }

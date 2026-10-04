@@ -1,12 +1,11 @@
 import { createHash, createHmac } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import { configure, resetConfig } from "../core/config.ts";
+import { forgetProjectKey, learnProjectKey } from "../core/project-key.ts";
+import { PROJECT_KEY, PROJECT_KEY_TEXT, projectKeyOf } from "../test/hash-key.ts";
 import { printOf } from "./print.ts";
 
-const HASH_KEY = "ab".repeat(32);
-
 afterEach(() => {
-    resetConfig();
+    forgetProjectKey();
 });
 
 describe("printOf", () => {
@@ -67,21 +66,21 @@ describe("printOf keys", () => {
         expect([plain("bob@acme.com"), plain('"bob@acme.com"')]).not.toContain(printOf("bob@acme.com"));
     });
 
-    it("goes by the install's hash key once one is set", () => {
+    it("goes by the project's hash key once it is known", () => {
         const before = printOf("bob@acme.com");
-        configure({ hashKey: HASH_KEY });
+        learnProjectKey(PROJECT_KEY_TEXT);
         const first = printOf("bob@acme.com");
-        configure({ hashKey: "cd".repeat(32) });
+        learnProjectKey(projectKeyOf("other"));
         const other = printOf("bob@acme.com");
-        configure({ hashKey: HASH_KEY });
+        learnProjectKey(PROJECT_KEY_TEXT);
 
         expect(printOf("bob@acme.com")).toBe(first);
         expect(new Set([before, first, other]).size).toBe(3);
     });
 
-    it("gives another process with the same key the same print", () => {
-        configure({ hashKey: HASH_KEY });
-        const expected = createHmac("sha256", Buffer.from(HASH_KEY, "hex")).update('print:"x"').digest("hex");
+    it("gives another process of the same project the same print", () => {
+        learnProjectKey(PROJECT_KEY_TEXT);
+        const expected = createHmac("sha256", PROJECT_KEY).update('print:"x"').digest("hex");
 
         expect(printOf("x")).toBe(expected);
         expect(printOf("x")).toBe(expected);

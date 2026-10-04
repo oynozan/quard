@@ -1,4 +1,4 @@
-import { labelFor, parseHashKey } from "@quard/shared";
+import { labelFor } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { takeEvents } from "../core/recorder.ts";
 import { findCall, findConversation, findResponse, registerCall, registerResponse } from "../context/registry.ts";
@@ -257,7 +257,6 @@ describe("createMonitorFetch", () => {
         const control = createControl({
             url: "ws://c",
             key: "k",
-            hashKey: parseHashKey("ab".repeat(32)),
             open: fake.open,
         });
         setActiveControl(control);

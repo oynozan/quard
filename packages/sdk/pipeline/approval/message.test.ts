@@ -1,10 +1,10 @@
-import { keyedHash, parseHashKey, canonicalJson, type AskMessage } from "@quard/shared";
+import { keyedHash, canonicalJson, type AskMessage } from "@quard/shared";
 import { describe, expect, it } from "vitest";
 import type { FailResult, GuardCall } from "../../guards/call.ts";
 import { makeAskableCall } from "../../test/call.ts";
+import { PROJECT_KEY as KEY, projectKeyOf } from "../../test/hash-key.ts";
 import { askFor } from "./message.ts";
 
-const KEY = parseHashKey("ab".repeat(32));
 const IBAN = "DE89370400440532013000";
 const SECRET = "sk-live-abcdefghijklmnopqrstuvwxyz0123456789";
 const ASKS: FailResult[] = [
@@ -19,13 +19,13 @@ const ASKS: FailResult[] = [
     },
 ];
 
-// The ask for a call that can be shown
+// The ask for a call that can be shown, as sent with the project's key
 function asked(call: GuardCall, rules?: string): AskMessage {
-    const message = askFor(call, ASKS, KEY, rules);
-    if (typeof message === "string") {
-        throw new Error(`no ask: ${message}`);
+    const ask = askFor(call, ASKS, rules);
+    if (typeof ask === "string") {
+        throw new Error(`no ask: ${ask}`);
     }
-    return message;
+    return ask.message(KEY);
 }
 
 // A value nested this many levels deep
@@ -97,15 +97,29 @@ describe("askFor", () => {
         expect(asked(call).askId).not.toBe(asked(call).askId);
     });
 
+    it("sends the same ask each time, its hash made with the key it is sent with", () => {
+        const input = { iban: IBAN };
+        const ask = askFor(makeAskableCall(input), ASKS, undefined);
+        if (typeof ask === "string") {
+            throw new Error(`no ask: ${ask}`);
+        }
+        const other = Buffer.from(projectKeyOf("other"), "hex");
+
+        expect(ask.message(KEY)).toEqual(ask.message(KEY));
+        expect(ask.message(KEY).askId).toBe(ask.askId);
+        expect(ask.message(other).argsHash).toBe(keyedHash(other, "args", canonicalJson(input)));
+        expect(ask.message(other).argsHash).not.toBe(ask.message(KEY).argsHash);
+    });
+
     it("gives up on an ask control would refuse", () => {
         const call = makeAskableCall({ amount: 1 });
 
-        expect(askFor({ ...call, agent: "a".repeat(201) }, ASKS, KEY, undefined)).toBe("unsendable");
-        expect(askFor(makeAskableCall({ blob: "x".repeat(1_000_001) }), ASKS, KEY, undefined)).toBe("unsendable");
+        expect(askFor({ ...call, agent: "a".repeat(201) }, ASKS, undefined)).toBe("unsendable");
+        expect(askFor(makeAskableCall({ blob: "x".repeat(1_000_001) }), ASKS, undefined)).toBe("unsendable");
     });
 
     it("refuses to ask about arguments too deep to show in full", () => {
-        expect(askFor(makeAskableCall(nested(33)), ASKS, KEY, undefined)).toBe("too-deep-to-show");
+        expect(askFor(makeAskableCall(nested(33)), ASKS, undefined)).toBe("too-deep-to-show");
         expect(JSON.stringify(asked(makeAskableCall(nested(32))).args)).toContain('"x"');
     });
 });

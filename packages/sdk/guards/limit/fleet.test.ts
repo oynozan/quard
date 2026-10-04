@@ -1,9 +1,19 @@
-import { createRedactor, parseHashKey } from "@quard/shared";
-import { describe, expect, it } from "vitest";
+import { createRedactor } from "@quard/shared";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { forgetProjectKey, learnProjectKey } from "../../core/project-key.ts";
 import { makeCall } from "../../test/call.ts";
-import { checkFleet, fleetChunks, fleetResult, fleetValues, isEnforced, type FleetView } from "./fleet.ts";
+import { PROJECT_KEY, PROJECT_KEY_TEXT } from "../../test/hash-key.ts";
+import {
+    checkFleet,
+    fleetChunks,
+    fleetResult,
+    fleetValues,
+    hashedValues,
+    isEnforced,
+    type FleetView,
+} from "./fleet.ts";
 
-const redactor = createRedactor(parseHashKey("ab".repeat(32)));
+const redactor = createRedactor(PROJECT_KEY);
 const IBAN = "DE89370400440532013000";
 const IBAN_KEY = redactor.key(`iban:${IBAN}`);
 // 120 different main domains in one field
@@ -11,53 +21,74 @@ const HOSTS = Array.from({ length: 120 }, (_, n) => `https://site${n}.com`).join
 
 function view(entries: Record<string, boolean>, pastObserve = true): FleetView {
     return {
-        redactor,
         entry: (key) => (key in entries ? { key, observe: entries[key] as boolean } : undefined),
         pastObserve: () => pastObserve,
     };
 }
 
+beforeEach(() => {
+    learnProjectKey(PROJECT_KEY_TEXT);
+});
+
+afterEach(() => {
+    forgetProjectKey();
+});
+
 describe("fleetValues", () => {
-    it("finds IBANs, emails and main domains in the watched fields, hashed", () => {
+    it("finds IBANs, emails and main domains in the watched fields, hashed only for control", () => {
         const input = {
             payee: { iban: `IBAN ${IBAN}` },
             to: ["jane@mail.acme.co.uk", "https://pay.evil-pay.com/x"],
             note: "ignored: bob@other.com",
         };
 
-        const values = fleetValues(input, ["payee", "to"], redactor);
+        const values = fleetValues(input, ["payee", "to"]);
+        const hashed = hashedValues(values, redactor);
 
-        expect(values).toEqual([
+        expect(values.map((value) => value.key)).toEqual([
+            `iban:${IBAN}`,
+            "email:jane@mail.acme.co.uk",
+            "domain:acme.co.uk",
+            "domain:evil-pay.com",
+        ]);
+        expect(hashed).toEqual([
             { field: "payee", kind: "iban", key: IBAN_KEY },
             { field: "to", kind: "email", key: redactor.key("email:jane@mail.acme.co.uk") },
             { field: "to", kind: "domain", key: "domain:acme.co.uk" },
             { field: "to", kind: "domain", key: "domain:evil-pay.com" },
         ]);
-        expect(JSON.stringify(values)).not.toContain(IBAN);
-        expect(JSON.stringify(values)).not.toContain("jane@");
+        expect(JSON.stringify(hashed)).not.toContain(IBAN);
+        expect(JSON.stringify(hashed)).not.toContain("jane@");
+    });
+
+    it("leaves wallets in clear", () => {
+        const wallet = { field: "payTo", kind: "wallet" as const, key: `wallet:0x${"a".repeat(40)}` };
+
+        expect(hashedValues([wallet], redactor)).toEqual([wallet]);
     });
 
     it("skips values it can't watch, and lists each key once", () => {
         const input = { url: "/local/path x9f8a7b6c5d4 https://ACME.com/a https://acme.com/b" };
 
-        expect(fleetValues(input, ["url", "missing"], redactor)).toEqual([
+        expect(fleetValues(input, ["url", "missing"])).toEqual([
             { field: "url", kind: "domain", key: "domain:acme.com" },
         ]);
         // Control refuses a value without a field name
-        expect(fleetValues(input, [""], redactor)).toEqual([]);
+        expect(fleetValues(input, [""])).toEqual([]);
+        expect(fleetValues({ iban: IBAN }, [""])).toEqual([]);
     });
 
     it("keeps domains in clear, even ones that look like keys", () => {
         const input = { url: "https://sk-abcdefghijklmnopqrstuvwx.com/pay https://xoxb-1234567890-abc.com" };
 
-        expect(fleetValues(input, ["url"], redactor)).toEqual([
+        expect(fleetValues(input, ["url"])).toEqual([
             { field: "url", kind: "domain", key: "domain:sk-abcdefghijklmnopqrstuvwx.com" },
             { field: "url", kind: "domain", key: "domain:xoxb-1234567890-abc.com" },
         ]);
     });
 
     it("keeps every value, and splits them into reports of at most 100", () => {
-        const values = fleetValues({ urls: HOSTS }, ["urls"], redactor);
+        const values = fleetValues({ urls: HOSTS }, ["urls"]);
 
         expect(values).toHaveLength(120);
         expect(fleetChunks(values).map((chunk) => chunk.length)).toEqual([100, 20]);
@@ -73,6 +104,14 @@ describe("checkFleet", () => {
 
         expect(checkFleet(call, { type: "limit" }, "block", view({}))).toEqual([]);
         expect(checkFleet(call, options, "block", undefined)).toEqual([]);
+    });
+
+    it("matches nothing before control's ready message brought the key and the list", () => {
+        forgetProjectKey();
+
+        expect(checkFleet(makeCall({ iban: IBAN }), options, "block", view({ [IBAN_KEY]: false }))).toEqual([
+            { guard: "limit", rule: "fleet-check", decision: "allow", mode: "block" },
+        ]);
     });
 
     it("allows values that are not quarantined", () => {

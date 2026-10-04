@@ -1,4 +1,3 @@
-import { parseHashKey } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dayUsed, utcDay } from "../../guards/limit/daily.ts";
 import { markShared } from "../../guards/limit/run-counts.ts";
@@ -74,7 +73,6 @@ describe("countCall", () => {
         const control = createControl({
             url: "ws://c",
             key: "k",
-            hashKey: parseHashKey("ab".repeat(32)),
             open: fake.open,
         });
         setActiveControl(control);
@@ -93,7 +91,7 @@ describe("countCall", () => {
 
 function linkedControl() {
     const fake = fakeSockets();
-    const control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    const control = createControl({ url: "ws://c", key: "k", open: fake.open });
     setActiveControl(control);
     return { control, socket: fake.connect() };
 }

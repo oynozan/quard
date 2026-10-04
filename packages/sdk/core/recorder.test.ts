@@ -1,7 +1,7 @@
 import type { RunEvent } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure, resetConfig } from "./config.ts";
-import { addDropped, now, record, takeDropped, takeEvents } from "./recorder.ts";
+import { addDropped, bufferedEvents, now, record, takeDropped, takeEvents } from "./recorder.ts";
 
 function warning(code: string): RunEvent {
     return { type: "warning", runId: "r", stepId: "s", agent: "a", at: "t", code };
@@ -33,8 +33,10 @@ describe("recorder", () => {
     it("buffers events and hands them over once", () => {
         record(warning("one"));
 
+        expect(bufferedEvents()).toBe(1);
         expect(takeEvents()).toEqual([warning("one")]);
         expect(takeEvents()).toEqual([]);
+        expect(bufferedEvents()).toBe(0);
     });
 
     it("passes each event to onEvent", () => {

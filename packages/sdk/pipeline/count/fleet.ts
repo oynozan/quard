@@ -1,27 +1,29 @@
-import { newEventId } from "@quard/shared";
 import type { FailResult, GuardCall, Mode, RuleResult } from "../../guards/call.ts";
 import { fleetChunks, fleetMatch, fleetValues } from "../../guards/limit/fleet.ts";
 import type { GuardOptions, LimitOptions } from "../../guards/options.ts";
 import { activeControl } from "../../transport/link/active.ts";
 import type { Control } from "../../transport/link/control.ts";
-import type { FleetUse } from "../../transport/link/queue.ts";
+import { fleetMessage, type FleetUse } from "../../transport/link/queue.ts";
 import { recordDecision } from "../checks.ts";
 
 // Sends one report and finds its quarantined values, or keeps it when control can't answer
 export async function reportChunk(control: Control, use: FleetUse, mode: Mode): Promise<FailResult | undefined> {
+    const message = fleetMessage(use);
+    // Ready brings the key, so it is only missing once forgotten
+    if (message === undefined) {
+        control.replays.keepUse(use);
+        return undefined;
+    }
     let kept = false;
-    const reply = await control.requests.request(
-        { type: "fleet", id: newEventId(), ...use },
-        {
-            ms: control.replyMs,
-            late: (late) => {
-                // Control has the report after all
-                if (kept && late !== undefined) {
-                    control.replays.dropUse(use);
-                }
-            },
+    const reply = await control.requests.request(message, {
+        ms: control.replyMs,
+        late: (late) => {
+            // Control has the report after all
+            if (kept && late !== undefined) {
+                control.replays.dropUse(use);
+            }
         },
-    );
+    });
     if (reply?.type !== "fleet_result") {
         control.replays.keepUse(use);
         kept = true;
@@ -30,7 +32,7 @@ export async function reportChunk(control: Control, use: FleetUse, mode: Mode): 
     const until = reply.fleetObserveUntil === null ? null : Date.parse(reply.fleetObserveUntil);
     const pastObserve = until === null || Date.now() > until;
     const quarantined = new Map(reply.quarantined.map((entry) => [entry.key, entry]));
-    return fleetMatch(use.values, mode, pastObserve, (key) => quarantined.get(key));
+    return fleetMatch(message.values, mode, pastObserve, (key) => quarantined.get(key));
 }
 
 // Reports the watched values of a call about to run, and refuses newly quarantined ones
@@ -43,7 +45,7 @@ export async function reportUse(
     if (options.fleetCheck === undefined || control === undefined) {
         return undefined;
     }
-    const values = fleetValues(call.input, options.fleetCheck, control.fleet.redactor);
+    const values = fleetValues(call.input, options.fleetCheck);
     const uses = fleetChunks(values).map((chunk) => ({
         runId: call.runId,
         agent: call.agent,
@@ -77,7 +79,7 @@ export function reportRefused(call: GuardCall, list: readonly GuardOptions[]): v
     if (control === undefined || fields.length === 0) {
         return;
     }
-    for (const values of fleetChunks(fleetValues(call.input, fields, control.fleet.redactor))) {
+    for (const values of fleetChunks(fleetValues(call.input, fields))) {
         control.replays.use({ runId: call.runId, agent: call.agent, tool: call.tool, blocked: true, values });
     }
 }

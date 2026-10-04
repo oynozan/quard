@@ -28,7 +28,8 @@ function lookupIn(labels: readonly LabelRecord[], message: Extract<ClientMessage
         .slice(0, 20);
 }
 
-// A stand-in for services/control over a real WebSocket, with lookups read from `labels`
+// A stand-in for services/control over a real WebSocket, with lookups read
+// from `labels`. Its ready message hands out the test project's hash key.
 export async function startControlServer(key = CONTROL_KEY, labels: LabelRecord[] = []) {
     const server = new WebSocketServer({
         host: "127.0.0.1",

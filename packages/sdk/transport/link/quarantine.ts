@@ -1,4 +1,4 @@
-import type { QuarantineEntry, Redactor } from "@quard/shared";
+import type { QuarantineEntry } from "@quard/shared";
 import type { FleetView } from "../../guards/limit/fleet.ts";
 import type { Link } from "./link.ts";
 
@@ -7,7 +7,7 @@ function timeOf(at: string | null): number | null {
 }
 
 // The synced quarantine list, used for staleMs after control was last reached
-export function createFleetState(link: Link, redactor: Redactor, staleMs: number): FleetView {
+export function createFleetState(link: Link, staleMs: number): FleetView {
     const list = new Map<string, QuarantineEntry>();
     let observeUntil: number | null = null;
     let syncedAt = Date.now();
@@ -39,7 +39,6 @@ export function createFleetState(link: Link, redactor: Redactor, staleMs: number
     });
 
     return {
-        redactor,
         entry: (key, now) => {
             if (!link.ready() && now - syncedAt > staleMs) {
                 list.clear();

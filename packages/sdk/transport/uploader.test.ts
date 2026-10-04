@@ -53,7 +53,8 @@ function webhook(...statuses: Array<number | "down">) {
 }
 
 function uploader(send: Send, warn = vi.fn(), redactWith = redactor) {
-    return createUploader({ webhookUrl: "http://webhook.test/", key: "qk_live_abc", redactor: redactWith, send, warn });
+    const redactorOf = async () => redactWith;
+    return createUploader({ webhookUrl: "http://webhook.test/", key: "qk_live_abc", redactor: redactorOf, send, warn });
 }
 
 beforeEach(() => {
@@ -285,7 +286,7 @@ describe("uploader", () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
         record(toolCall());
 
-        await createUploader({ webhookUrl: "http://webhook.test", key: "k", redactor }).flush();
+        await createUploader({ webhookUrl: "http://webhook.test", key: "k", redactor: async () => redactor }).flush();
 
         expect(fetch).toHaveBeenCalledWith("http://webhook.test/v1/events", expect.any(Object));
         expect(warn).toHaveBeenCalled();

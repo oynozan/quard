@@ -51,7 +51,7 @@ Every type except `approval` takes `mode`: `"block"` (the default) enforces, and
 
 Options that are functions in code (`originOf`, `destinations` and custom rules with `check`) can't be written in the file.
 
-Per-day limits and the fleet check need the link to control (`controlUrl` with `key` and `hashKey`). Without it, per-day limits count in the process only, and the fleet check does nothing.
+Per-day limits and the fleet check need the link to control (`controlUrl` with `key`). Without it, per-day limits count in the process only, and the fleet check does nothing.
 
 ## Sensitive data sent out
 

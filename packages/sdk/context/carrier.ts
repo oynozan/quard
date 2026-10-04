@@ -6,9 +6,7 @@ import { printOf } from "../labels/print.ts";
 import { findRecord, keptRun, saveRecord, type FoundRecord, type ValueRecord } from "../labels/records.ts";
 import { exactOccurrences } from "../labels/value-labels.ts";
 import { vouchedLabel } from "../labels/vouched-label.ts";
-import { uploadsOn } from "../transport/configure.ts";
-import { storeLabels } from "../transport/labels.ts";
-import { activeControl } from "../transport/link/active.ts";
+import { storeLabels, waitForKey } from "../transport/labels.ts";
 import { readBaggage } from "./baggage.ts";
 import { newRun } from "./run.ts";
 import { currentScope, narrowTools, runScope, withScope, type Scope } from "./scope.ts";
@@ -82,10 +80,13 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
         throw new Error("quard.inject() must be called inside quard.run()");
     }
     const { run, agent } = scope;
+    const stepId = scope.lastStepId;
+    // The record's hashes must match the backend's, so they wait for the
+    // project's key
+    const keyed = await waitForKey();
     // Values under secret-named fields never become records
     const text = keyText(options.content);
     const labelRef = randomBytes(8).toString("hex");
-    const stepId = scope.lastStepId;
     const stored = saveRecord(
         {
             ref: labelRef,
@@ -102,10 +103,9 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
     );
     // The run now spans processes, so its counters move to control
     startSharing(run);
-    // Without uploads the record lives in this process only. That is a
-    // problem once the control link lets receivers elsewhere look it up.
-    const lookedUpElsewhere = uploadsOn() || activeControl() !== undefined;
-    if (lookedUpElsewhere && !(await storeLabels([stored]))) {
+    // With a backend, receivers elsewhere look the record up, so it must be
+    // stored, and only with the project's key
+    if (keyed !== undefined && !(keyed && (await storeLabels([stored])))) {
         // A receiver in another process will read the message as untrusted
         warn(run.runId, agent, "label_record_not_stored", stepId);
     }
@@ -120,7 +120,8 @@ export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOp
         // Messages received here have nothing to vouch for them
         return await runScope({ agent: options.agent, tools: options.tools }, fn);
     }
-    const found = await findRecord(checked.labelRef);
+    // The receive guard hashes the message, so the key is fetched alongside
+    const [found] = await Promise.all([findRecord(checked.labelRef), waitForKey()]);
     const known = found?.record.runId === checked.runId ? found.record : undefined;
     const kept = keptRun(checked.runId);
     const run = kept ?? newRun(checked.runId);

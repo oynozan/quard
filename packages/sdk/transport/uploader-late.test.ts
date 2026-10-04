@@ -44,7 +44,12 @@ describe("uploader", () => {
             }
             return new Response("{}", { status: 202 });
         };
-        const up = createUploader({ webhookUrl: "http://webhook.test", key: "k", redactor, send });
+        const up = createUploader({
+            webhookUrl: "http://webhook.test",
+            key: "k",
+            redactor: async () => redactor,
+            send,
+        });
         record(bigCall());
         record(bigCall());
         record(bigCall());

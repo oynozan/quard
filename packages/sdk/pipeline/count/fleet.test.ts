@@ -1,11 +1,13 @@
-import { parseHashKey } from "@quard/shared";
+import { keyedHash } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forgetProjectKey, learnProjectKey } from "../../core/project-key.ts";
 import { takeEvents } from "../../core/recorder.ts";
 import type { RuleResult } from "../../guards/call.ts";
 import type { LimitOptions } from "../../guards/options.ts";
 import { makeAskableCall } from "../../test/call.ts";
 import { decisionsOf } from "../../test/events.ts";
 import { fakeSockets, sentOf } from "../../test/fake-socket.ts";
+import { PROJECT_KEY, PROJECT_KEY_TEXT } from "../../test/hash-key.ts";
 import { resetAll } from "../../test/reset.ts";
 import { setActiveControl } from "../../transport/link/active.ts";
 import { createControl, type Control } from "../../transport/link/control.ts";
@@ -29,7 +31,7 @@ let control: Control | undefined;
 
 function setup() {
     const fake = fakeSockets();
-    control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    control = createControl({ url: "ws://c", key: "k", open: fake.open });
     return { fake, control };
 }
 
@@ -164,6 +166,38 @@ describe("reportUse", () => {
         vi.advanceTimersByTime(1000);
 
         expect(sentOf(fake.connect(), "fleet")).toHaveLength(1);
+    });
+});
+
+describe("reportUse with IBANs", () => {
+    const IBAN = "DE89370400440532013000";
+    const IBAN_KEY = `iban:DE89…3000#${keyedHash(PROJECT_KEY, "iban", IBAN)}`;
+    const PAYEE: LimitOptions = { type: "limit", fleetCheck: ["iban"] };
+
+    it("reports them hashed with the project's key, and refuses one control quarantined", async () => {
+        const { fake, control } = setup();
+        const socket = fake.connect();
+
+        const result = reportUse(makeAskableCall({ iban: IBAN }), PAYEE, control, []);
+        const [use] = sentOf(socket, "fleet");
+        const quarantined = [{ key: IBAN_KEY, observe: false }];
+        socket.reply({ type: "fleet_result", id: use?.id as string, quarantined, fleetObserveUntil: null });
+
+        expect(use?.values).toEqual([{ field: "iban", kind: "iban", key: IBAN_KEY }]);
+        expect(await result).toMatchObject({ mode: "block", reason: "value_quarantined", field: "iban" });
+    });
+
+    it("keeps the report while the project's key is unknown, and sends it once it is known", async () => {
+        const { fake, control } = setup();
+        const socket = fake.connect();
+        forgetProjectKey();
+
+        expect(await reportUse(makeAskableCall({ iban: IBAN }), PAYEE, control, [])).toBeUndefined();
+        expect(sentOf(socket, "fleet")).toEqual([]);
+        learnProjectKey(PROJECT_KEY_TEXT);
+        vi.advanceTimersByTime(30_000);
+
+        expect(sentOf(socket, "fleet")).toMatchObject([{ values: [{ key: IBAN_KEY }] }]);
     });
 });
 

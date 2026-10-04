@@ -1,9 +1,10 @@
 import { labelUpload, type LabelRecord, type LookupMessage, type RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { configure } from "../core/config.ts";
+import { learnProjectKey } from "../core/project-key.ts";
 import { guard, isGuardRefusal, quard, type GuardCall } from "../index.ts";
 import { firstAppearance, valuesAt } from "../labels/value-labels.ts";
 import { clearMemory } from "../memory/kept.ts";
+import { PROJECT_KEY_TEXT } from "../test/hash-key.ts";
 import { resetAll } from "../test/reset.ts";
 
 // Shared memory between two agents in separate runs: a researcher writes
@@ -19,6 +20,7 @@ vi.mock("../transport/labels.ts", () => ({
     },
     lookupLabels: async (target: LookupMessage["target"]) =>
         backend.records.filter((found) => found.kind === "memory" && "print" in target && found.print === target.print),
+    waitForKey: async () => true,
 }));
 
 const IBAN = "DE89370400440532013000";
@@ -118,7 +120,7 @@ describe("an IBAN from a web page, written to memory by one agent", () => {
     });
 
     it("is blocked in another process, which looks the labels up", async () => {
-        configure({ hashKey: "ab".repeat(32) });
+        learnProjectKey(PROJECT_KEY_TEXT);
         const agents = makeAgents();
         await research(agents);
         clearMemory();
@@ -148,7 +150,7 @@ describe("an IBAN from the supplier records, written to memory", () => {
     }
 
     it("is paid in a later run in another process, because its labels come back", async () => {
-        configure({ hashKey: "ab".repeat(32) });
+        learnProjectKey(PROJECT_KEY_TEXT);
         const agents = makeAgents();
         await research(agents);
         clearMemory();

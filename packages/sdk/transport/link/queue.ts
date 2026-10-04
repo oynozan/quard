@@ -5,10 +5,13 @@ import {
     type FleetMessage,
     type UncountMessage,
 } from "@quard/shared";
+import { projectRedactor } from "../../core/project-key.ts";
 import { dayEntry, noteDayUsed } from "../../guards/limit/daily.ts";
+import { hashedValues } from "../../guards/limit/fleet.ts";
 import type { Link } from "./link.ts";
 import type { Reply, Requests } from "./requests.ts";
 
+// A fleet report as this process keeps it, its values' keys still plain
 export type FleetUse = Omit<FleetMessage, "type" | "id">;
 export type QueuedCount = { day: string; tool: string; counter: string; add: number };
 export type TakenCount = { counter: string; add: number };
@@ -32,6 +35,15 @@ export type Replays = {
 const MAX_USES = 1000;
 // How long what is left waits to be sent again while the link stays up
 const RETRY_MS = 30_000;
+
+// The report as control takes it, hashed with the project's key. Undefined
+// while the key is unknown.
+export function fleetMessage(use: FleetUse): FleetMessage | undefined {
+    const redactor = projectRedactor();
+    return redactor === undefined
+        ? undefined
+        : { type: "fleet", id: newEventId(), ...use, values: hashedValues(use.values, redactor) };
+}
 
 // Control's answer to a count of `count` counters, or undefined when the reply is not one
 export function dayCounted(reply: Reply | undefined, count: number): CountedMessage | undefined {
@@ -119,19 +131,23 @@ export function createReplays(link: Link, requests: Requests, replyMs: number): 
     }
 
     function sendUse(use: FleetUse): void {
+        const message = fleetMessage(use);
+        // Ready brings the key, so it is only missing once forgotten
+        if (message === undefined) {
+            keepUse(use);
+            return;
+        }
         // A late answer means control has the report after all
         const late = (reply: Reply | undefined) => {
             if (reply !== undefined) {
                 dropUse(use);
             }
         };
-        void requests
-            .request({ type: "fleet", id: newEventId(), ...use }, { ms: replyMs, hold: false, late })
-            .then((reply) => {
-                if (reply === undefined) {
-                    keepUse(use);
-                }
-            });
+        void requests.request(message, { ms: replyMs, hold: false, late }).then((reply) => {
+            if (reply === undefined) {
+                keepUse(use);
+            }
+        });
     }
 
     // Replayed counts have no cap, because the calls already ran

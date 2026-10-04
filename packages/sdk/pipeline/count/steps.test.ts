@@ -1,4 +1,3 @@
-import { parseHashKey } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../../core/config.ts";
 import { takeEvents } from "../../core/recorder.ts";
@@ -18,7 +17,7 @@ let control: Control | undefined;
 
 function linked() {
     const fake = fakeSockets();
-    control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    control = createControl({ url: "ws://c", key: "k", open: fake.open });
     setActiveControl(control);
     return fake;
 }

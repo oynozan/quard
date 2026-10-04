@@ -1,5 +1,5 @@
 import { createServer } from "node:net";
-import { parseHashKey, type RunEvent } from "@quard/shared";
+import type { RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { guard, isGuardRefusal, quard } from "../index.ts";
 import { CONTROL_KEY, startControlServer, type ControlServer } from "../test/control-server.ts";
@@ -10,7 +10,6 @@ import { controlSocketUrl } from "../transport/link/url.ts";
 
 // The SDK against a stand-in for control over a real WebSocket
 
-const HASH_KEY = "ab".repeat(32);
 const IBAN = "DE89370400440532013000";
 
 let server: ControlServer;
@@ -30,7 +29,7 @@ afterEach(async () => {
 });
 
 function connect(): void {
-    quard.configure({ key: CONTROL_KEY, controlUrl: server.url, hashKey: HASH_KEY, onEvent: (e) => events.push(e) });
+    quard.configure({ key: CONTROL_KEY, controlUrl: server.url, onEvent: (e) => events.push(e) });
 }
 
 // A link with short waits, for the tests that drop the connection
@@ -38,7 +37,6 @@ function connectFast(url = controlSocketUrl(server.url), downMs = 3000): void {
     control = createControl({
         url,
         key: CONTROL_KEY,
-        hashKey: parseHashKey(HASH_KEY),
         timing: { firstDelay: 20, maxDelay: 50, downMs },
     });
     setActiveControl(control);

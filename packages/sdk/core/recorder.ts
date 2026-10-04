@@ -64,6 +64,10 @@ export function record(event: RunEvent): void {
     }
 }
 
+export function bufferedEvents(): number {
+    return buffer.length;
+}
+
 // Hands over the oldest buffered events, all of them by default
 export function takeEvents(max = buffer.length): RunEvent[] {
     return forget(buffer.splice(0, max));

@@ -1,4 +1,3 @@
-import { parseHashKey } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../../core/config.ts";
 import type { FailResult } from "../../guards/call.ts";
@@ -36,7 +35,6 @@ describe("askHuman", () => {
         const control = createControl({
             url: "ws://c",
             key: "k",
-            hashKey: parseHashKey("ab".repeat(32)),
             open: fake.open,
         });
         setActiveControl(control);
@@ -95,8 +93,7 @@ describe("askHuman with an abort signal", () => {
 
     it("stops waiting for the dashboard when the call aborts, and tells control", async () => {
         const fake = fakeSockets();
-        const hashKey = parseHashKey("ab".repeat(32));
-        const control = createControl({ url: "ws://c", key: "k", hashKey, open: fake.open });
+        const control = createControl({ url: "ws://c", key: "k", open: fake.open });
         setActiveControl(control);
         const socket = fake.connect();
         const controller = new AbortController();

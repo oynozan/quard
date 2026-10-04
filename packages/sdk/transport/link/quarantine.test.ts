@@ -1,9 +1,7 @@
-import { createRedactor, parseHashKey } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeLink, READY } from "../../test/fake-socket.ts";
 import { createFleetState } from "./quarantine.ts";
 
-const redactor = createRedactor(parseHashKey("ab".repeat(32)));
 const IBAN_KEY = `iban:DE89…3000#${"e".repeat(32)}`;
 const UNTIL = "2026-10-10T00:00:00.000Z";
 const DAY = 24 * 60 * 60 * 1000;
@@ -11,7 +9,7 @@ const DAY = 24 * 60 * 60 * 1000;
 // A long silence limit stands in for control's pings
 function setup() {
     const { fake, link } = fakeLink({ silentMs: 10 * DAY });
-    return { fake, link, fleet: createFleetState(link, redactor, DAY) };
+    return { fake, link, fleet: createFleetState(link, DAY) };
 }
 
 beforeEach(() => {
@@ -28,7 +26,6 @@ describe("the synced quarantine list", () => {
 
         fake.connect({ ...READY, quarantine: [{ key: IBAN_KEY, observe: true }], fleetObserveUntil: UNTIL });
 
-        expect(fleet.redactor).toBe(redactor);
         expect(fleet.entry(IBAN_KEY, Date.now())).toEqual({ key: IBAN_KEY, observe: true });
         expect(fleet.entry("domain:other.com", Date.now())).toBeUndefined();
         expect(fleet.pastObserve(Date.parse(UNTIL))).toBe(false);

@@ -1,20 +1,28 @@
 import { labelFor, labelUpload, type RunEvent } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
+import { learnProjectKey } from "../core/project-key.ts";
 import { newScope, type Scope } from "../context/scope.ts";
 import { valueHash } from "../labels/hashed.ts";
 import { printOf } from "../labels/print.ts";
+import { PROJECT_KEY_TEXT } from "../test/hash-key.ts";
 import { resetAll } from "../test/reset.ts";
-import { storeLabels } from "../transport/labels.ts";
+import { storeLabels, waitForKey } from "../transport/labels.ts";
 import { keptLabels } from "./kept.ts";
 import { localHash } from "./values.ts";
 import { writeThrough } from "./write.ts";
 
-vi.mock("../transport/labels.ts", () => ({ storeLabels: vi.fn(async () => true), lookupLabels: vi.fn() }));
+vi.mock("../transport/labels.ts", () => ({
+    storeLabels: vi.fn(async () => true),
+    lookupLabels: vi.fn(),
+    // A backend whose key is here, unless a test says otherwise
+    waitForKey: vi.fn(async () => true),
+}));
 
 const IBAN = "DE89370400440532013000";
 const STEP = "00f067aa0ba902b7";
 const stored = vi.mocked(storeLabels);
+const keyed = vi.mocked(waitForKey);
 
 let events: RunEvent[] = [];
 
@@ -40,7 +48,7 @@ function memoryEvent() {
 
 describe("writeThrough", () => {
     it("stores the item's labels before the write, then writes", async () => {
-        configure({ hashKey: "ab".repeat(32) });
+        learnProjectKey(PROJECT_KEY_TEXT);
         const scope = webScope();
         const value = { note: `Pay ${IBAN}` };
         const write = vi.fn(async () => {
@@ -83,12 +91,14 @@ describe("writeThrough", () => {
         });
     });
 
-    it("sends no values without a hash key, but keeps them in this process", async () => {
-        const scope = webScope();
+    it("stores nothing without the project's key, but keeps the labels in this process", async () => {
+        keyed.mockResolvedValueOnce(false).mockResolvedValueOnce(undefined);
 
-        await writeThrough(scope, "notes", `Pay ${IBAN}`, async () => undefined);
+        await writeThrough(webScope(), "notes", "no key yet", async () => undefined);
+        await writeThrough(webScope(), "notes", `Pay ${IBAN}`, async () => undefined);
 
-        expect(stored.mock.calls[0]?.[0][0]?.values).toEqual([]);
+        expect(stored).not.toHaveBeenCalled();
+        expect(memoryEvent()).toMatchObject({ verified: 0 });
         expect(keptLabels(printOf(`Pay ${IBAN}`))?.values).toEqual([
             expect.objectContaining({ hash: localHash("iban", IBAN), origin: "web:evil.com" }),
         ]);

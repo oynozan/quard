@@ -9,8 +9,6 @@ import { flushUploads } from "../transport/configure.ts";
 // Guarded tools called with values JSON can't hold, such as a BigInt or
 // an object inside itself. Webhook and control still get everything.
 
-const HASH_KEY = "ab".repeat(32);
-
 let control: ControlServer;
 let webhook: WebhookServer;
 
@@ -30,7 +28,6 @@ function connect(withControl = false): void {
     quard.configure({
         key: CONTROL_KEY,
         webhookUrl: webhook.url,
-        hashKey: HASH_KEY,
         ...(withControl ? { controlUrl: control.url } : {}),
     });
 }

@@ -1,4 +1,5 @@
 import { resetConfig } from "../core/config.ts";
+import { forgetProjectKey } from "../core/project-key.ts";
 import { takeEvents } from "../core/recorder.ts";
 import { clearRegistry } from "../context/registry.ts";
 import { clearApprovals } from "../guards/approval/approval.ts";
@@ -21,6 +22,7 @@ export function resetAll(): void {
     clearMemory();
     stopUploads();
     stopLink();
+    forgetProjectKey();
     clearDayCounts();
     clearVersions();
     clearChecked();

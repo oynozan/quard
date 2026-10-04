@@ -1,5 +1,5 @@
 import { MAX_BATCH, MAX_BATCH_BYTES, newEventId, type Redactor, type RunEvent, type UploadItem } from "@quard/shared";
-import { addDropped, takeDropped, takeEvents } from "../core/recorder.ts";
+import { addDropped, bufferedEvents, takeDropped, takeEvents } from "../core/recorder.ts";
 import { prepareEvent } from "./prepare.ts";
 
 export type Send = (url: string, init: RequestInit) => Promise<Response>;
@@ -7,7 +7,8 @@ export type Send = (url: string, init: RequestInit) => Promise<Response>;
 export type UploaderOptions = {
     webhookUrl: string;
     key: string;
-    redactor: Redactor;
+    // Redacts with the project's hash key, undefined while it can't be had
+    redactor: () => Promise<Redactor | undefined>;
     send?: Send;
     warn?: (message: string) => void;
 };
@@ -28,8 +29,8 @@ const MAX_DELAY = 60_000;
 // An event older than this when sent is marked degraded
 const LATE_MS = 30_000;
 
-// Statuses where a resend could work; any other 4xx refuses the batch for good
-function worthRetrying(status: number): boolean {
+// Statuses where a resend could work; any other 4xx refuses for good
+export function worthRetrying(status: number): boolean {
     return status >= 500 || status === 408 || status === 429;
 }
 
@@ -94,13 +95,16 @@ export function createUploader(options: UploaderOptions): Uploader {
         }
     }
 
-    function nextBatch(): Batch | undefined {
-        while (ready.length === 0) {
-            const events = takeEvents(MAX_BATCH);
-            if (events.length === 0) {
-                return undefined;
+    // Turns buffered events into batches. Without the project's key they
+    // stay in the buffer, and the result is false.
+    async function fill(): Promise<boolean> {
+        while (ready.length === 0 && bufferedEvents() > 0) {
+            const redactor = await options.redactor();
+            if (redactor === undefined) {
+                return false;
             }
-            const items = events.flatMap((event) => sized(event, options.redactor) ?? []);
+            const events = takeEvents(MAX_BATCH);
+            const items = events.flatMap((event) => sized(event, redactor) ?? []);
             if (items.length < events.length) {
                 drop(events.length - items.length);
             }
@@ -110,9 +114,7 @@ export function createUploader(options: UploaderOptions): Uploader {
                 ready = bySize(items).map((part, index) => ({ items: part, dropped: index === 0 ? dropped : 0 }));
             }
         }
-        const [next, ...rest] = ready;
-        ready = rest;
-        return next;
+        return true;
     }
 
     // True when the batch is stored, refused for good or can't be sent
@@ -148,7 +150,10 @@ export function createUploader(options: UploaderOptions): Uploader {
 
     async function drain(): Promise<boolean> {
         for (;;) {
-            pending ??= nextBatch();
+            if (pending === undefined && !(await fill())) {
+                return false;
+            }
+            pending ??= ready.shift();
             if (pending === undefined) {
                 return true;
             }

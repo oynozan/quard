@@ -1,5 +1,6 @@
 import { clientMessage, type ClientMessage, type ReadyMessage, type ServerMessage } from "@quard/shared";
 import { createLink, type LinkTiming } from "../transport/link/link.ts";
+import { PROJECT_KEY_TEXT } from "./hash-key.ts";
 import type { LinkSocket, OpenSocket, SocketEvents } from "../transport/link/socket.ts";
 
 export type FakeSocket = LinkSocket & {
@@ -24,6 +25,7 @@ export const READY: ReadyMessage = {
     quarantine: [],
     fleetObserveUntil: null,
     counters: [],
+    hashKey: PROJECT_KEY_TEXT,
 };
 
 // Sockets that tests drive by hand, where close() reports the close at once

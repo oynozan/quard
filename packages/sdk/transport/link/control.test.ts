@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { helloMessage, parseHashKey } from "@quard/shared";
+import { helloMessage } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerGuardedTool } from "../../context/registry.ts";
 import { dayUsed } from "../../guards/limit/daily.ts";
@@ -10,7 +10,6 @@ import { resetAll } from "../../test/reset.ts";
 import { createControl } from "./control.ts";
 import { SDK_VERSION } from "./version.ts";
 
-const KEY = parseHashKey("ab".repeat(32));
 const VERSION: AgentVersion = {
     agent: "billing",
     version: "f".repeat(16),
@@ -24,7 +23,6 @@ function setup() {
     const control = createControl({
         url: "ws://control.test/v1/connect",
         key: "qk_live_k",
-        hashKey: KEY,
         open: fake.open,
     });
     return { fake, control };
@@ -83,7 +81,7 @@ describe("createControl", () => {
         ]);
     });
 
-    it("sends a new agent version while connected", () => {
+    it("sends a new agent version while connected, and none before", () => {
         const { fake, control } = setup();
         control.sendAgent(VERSION);
         const socket = fake.connect();
@@ -123,22 +121,20 @@ describe("createControl", () => {
     it("closes the link and settles every waiting call when it stops", async () => {
         const { fake, control } = setup();
         const socket = fake.connect();
-        const ask = control.approvals.ask(
-            {
-                type: "ask",
-                askId: "c".repeat(16),
-                runId: "a".repeat(32),
-                stepId: "b".repeat(16),
-                agent: "billing",
-                tool: "payInvoice",
-                argsHash: "d".repeat(32),
-                args: {},
-                labels: [],
-                context: { trust: "trusted", sensitivity: "internal", origins: [], flagged: false },
-                reasons: [{ guard: "approval", rule: "approval", reason: "approval_required" }],
-            },
-            undefined,
-        );
+        const message = {
+            type: "ask" as const,
+            askId: "c".repeat(16),
+            runId: "a".repeat(32),
+            stepId: "b".repeat(16),
+            agent: "billing",
+            tool: "payInvoice",
+            argsHash: "d".repeat(32),
+            args: {},
+            labels: [],
+            context: { trust: "trusted" as const, sensitivity: "internal" as const, origins: [], flagged: false },
+            reasons: [{ guard: "approval", rule: "approval", reason: "approval_required" as const }],
+        };
+        const ask = control.approvals.ask({ askId: message.askId, message: () => message }, undefined);
         const count = control.requests.request(
             {
                 type: "count",
@@ -156,6 +152,5 @@ describe("createControl", () => {
         expect(await ask).toEqual({ kind: "down" });
         expect(await count).toBeUndefined();
         expect(control.replyMs).toBe(5000);
-        expect(control.hashKey).toBe(KEY);
     });
 });

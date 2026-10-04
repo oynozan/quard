@@ -1,7 +1,9 @@
 import type { AskMessage } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forgetProjectKey } from "../../core/project-key.ts";
 import { fakeLink, sentOf } from "../../test/fake-socket.ts";
-import { createApprovals } from "./approvals.ts";
+import { PROJECT_KEY } from "../../test/hash-key.ts";
+import { createApprovals, type Ask } from "./approvals.ts";
 
 const REQUEST = `apr_${"1".repeat(16)}`;
 const GRANT = `grt_${"2".repeat(16)}`;
@@ -22,6 +24,11 @@ function ask(askId: string): AskMessage {
     };
 }
 
+// The ask as the approval pipeline hands it over, built when sent
+function pending(askId: string): Ask {
+    return { askId, message: () => ask(askId) };
+}
+
 const A = "a".repeat(16);
 const B = "b".repeat(16);
 
@@ -35,6 +42,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    forgetProjectKey();
     vi.useRealTimers();
 });
 
@@ -43,7 +51,7 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         expect(sentOf(socket, "ask")).toEqual([ask(A)]);
         expect(socket.held).toBe(true);
         socket.reply({ type: "asked", askId: A, requestId: REQUEST });
@@ -57,7 +65,7 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         socket.reply({ type: "asked", askId: A, requestId: REQUEST });
         socket.reply({ type: "decided", askId: A, answer: "always", grantId: GRANT });
 
@@ -68,8 +76,8 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
 
-        const first = approvals.ask(ask(A), undefined);
-        const second = approvals.ask(ask(B), undefined);
+        const first = approvals.ask(pending(A), undefined);
+        const second = approvals.ask(pending(B), undefined);
         socket.reply({ type: "asked", askId: A, requestId: REQUEST });
         socket.reply({ type: "asked", askId: B, requestId: REQUEST });
         vi.advanceTimersByTime(15_000);
@@ -90,7 +98,7 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
 
-        const answer = approvals.ask(ask(A), 5000);
+        const answer = approvals.ask(pending(A), 5000);
         socket.reply({ type: "asked", askId: A, requestId: REQUEST });
         vi.advanceTimersByTime(5000);
 
@@ -103,7 +111,7 @@ describe("approvals through control", () => {
         const socket = fake.connect();
         const controller = new AbortController();
 
-        const answer = approvals.ask(ask(A), undefined, controller.signal);
+        const answer = approvals.ask(pending(A), undefined, controller.signal);
         socket.reply({ type: "asked", askId: A, requestId: REQUEST });
         controller.abort();
 
@@ -117,7 +125,7 @@ describe("approvals through control", () => {
         const socket = fake.connect();
         const controller = new AbortController();
 
-        const answer = approvals.ask(ask(A), undefined, controller.signal);
+        const answer = approvals.ask(pending(A), undefined, controller.signal);
         socket.reply({ type: "decided", askId: A, answer: "deny", requestId: REQUEST });
         await answer;
         controller.abort();
@@ -128,7 +136,7 @@ describe("approvals through control", () => {
     it("waits up to 30 s for control before it asks", async () => {
         const { fake, approvals } = setup();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         vi.advanceTimersByTime(29_000);
         const socket = fake.connect();
         socket.reply({ type: "decided", askId: A, answer: "once", requestId: REQUEST });
@@ -140,7 +148,7 @@ describe("approvals through control", () => {
     it("gives up when control can't be reached for 30 s", async () => {
         const { approvals } = setup();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         vi.advanceTimersByTime(30_000);
 
         expect(await answer).toEqual({ kind: "down" });
@@ -149,7 +157,7 @@ describe("approvals through control", () => {
     it("asks again after a reconnect, with the same ask id and the request id it knows", async () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         socket.reply({ type: "asked", askId: A, requestId: REQUEST });
 
         socket.drop();
@@ -167,7 +175,7 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         fake.connect();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         vi.advanceTimersByTime(30_000);
 
         expect(await Promise.race([answer, Promise.resolve("still waiting")])).toEqual({ kind: "down" });
@@ -176,7 +184,7 @@ describe("approvals through control", () => {
     it("gives up when control never takes the ask again after a reconnect", async () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         socket.reply({ type: "asked", askId: A, requestId: REQUEST });
 
         socket.drop();
@@ -189,7 +197,7 @@ describe("approvals through control", () => {
 
     it("gives up when the link stays down for 30 s while it waits", async () => {
         const { fake, approvals } = setup();
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         fake.connect().drop();
 
         vi.advanceTimersByTime(30_000);
@@ -203,7 +211,7 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         socket.reply({ type: "error", code: "server_error", message: "database down" });
         socket.reply({ type: "error", code: "server_error", message: "database down", id: A });
         vi.advanceTimersByTime(1000);
@@ -219,7 +227,7 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         for (let second = 0; second < 30; second += 1) {
             socket.reply({ type: "error", code: "server_error", message: "database down", id: A });
             vi.advanceTimersByTime(1000);
@@ -233,7 +241,7 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         const socket = fake.connect();
 
-        const answer = approvals.ask(ask(A), undefined);
+        const answer = approvals.ask(pending(A), undefined);
         socket.reply({ type: "error", code: "server_error", message: "database down", id: A });
         socket.drop();
         vi.advanceTimersByTime(1000);
@@ -260,9 +268,33 @@ describe("approvals through control", () => {
         const { fake, approvals } = setup();
         fake.connect();
 
-        const answers = Promise.all([approvals.ask(ask(A), 60_000), approvals.ask(ask(B), undefined)]);
+        const answers = Promise.all([approvals.ask(pending(A), 60_000), approvals.ask(pending(B), undefined)]);
         approvals.stop();
 
         expect(await answers).toEqual([{ kind: "down" }, { kind: "down" }]);
+    });
+
+    it("builds each ask with the project's key from control's ready message", async () => {
+        const { fake, approvals } = setup();
+        const message = vi.fn((_key: Buffer) => ask(A));
+
+        const answer = approvals.ask({ askId: A, message }, undefined);
+        const socket = fake.connect();
+        socket.reply({ type: "decided", askId: A, answer: "once" });
+
+        expect(message.mock.calls).toEqual([[PROJECT_KEY]]);
+        expect(await answer).toMatchObject({ kind: "decided" });
+    });
+
+    it("sends no ask while the key is unknown, and gives up like a link that is down", async () => {
+        const { fake, approvals } = setup();
+        const socket = fake.connect();
+        forgetProjectKey();
+
+        const answer = approvals.ask(pending(A), undefined);
+        vi.advanceTimersByTime(30_000);
+
+        expect(sentOf(socket, "ask")).toEqual([]);
+        expect(await answer).toEqual({ kind: "down" });
     });
 });

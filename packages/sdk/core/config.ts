@@ -46,13 +46,12 @@ export type QuardConfig = {
     onEvent?: (event: RunEvent) => void;
     // Asks a human in code, in place of the dashboard
     approver?: (request: ApprovalRequest) => Promise<ApprovalAnswer>;
-    // Uploads to webhook start once key, webhookUrl and hashKey are set
+    // The agent key. Webhook and control hand out the project's hash key to it.
     key?: string;
+    // Uploads to webhook start once key and webhookUrl are set
     webhookUrl?: string;
-    // The live link to control starts once key, controlUrl and hashKey are set
+    // The live link to control starts once key and controlUrl are set
     controlUrl?: string;
-    // The install's 64-hex hash key, the same as on the server
-    hashKey?: string;
     // A JSON file with guard rules, reread while the app runs
     policyFile?: string;
     // A feed of known attack signatures, from a file or a URL

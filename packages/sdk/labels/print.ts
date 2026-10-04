@@ -1,23 +1,13 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { parseHashKey } from "@quard/shared";
-import { getConfig } from "../core/config.ts";
+import { projectKey } from "../core/project-key.ts";
 
-// Without a hash key, records stay in this process, so prints go by a
-// key only it knows
+// Without the project's hash key, records stay in this process, so prints
+// go by a key only it knows
 const PROCESS_KEY = randomBytes(32);
 
-let cached: { text: string; key: Buffer } | undefined;
-
-// The install's hash key, never sent to us, or else the process key
+// The project's key, which only its agents get, or else the process key
 function printKey(): Buffer {
-    const text = getConfig().hashKey;
-    if (!text) {
-        return PROCESS_KEY;
-    }
-    if (cached?.text !== text) {
-        cached = { text, key: parseHashKey(text) };
-    }
-    return cached.key;
+    return projectKey() ?? PROCESS_KEY;
 }
 
 type Json = { toJSON: () => unknown };

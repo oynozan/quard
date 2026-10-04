@@ -1,6 +1,8 @@
 import type { ClientMessage, ServerMessage } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forgetProjectKey, projectKey } from "../../core/project-key.ts";
 import { fakeLink, fakeSockets, HELLO, READY, sentOf } from "../../test/fake-socket.ts";
+import { PROJECT_KEY } from "../../test/hash-key.ts";
 import { createLink, LINK_TIMING, MAX_MESSAGE } from "./link.ts";
 
 const BEAT: ClientMessage = { type: "beat", askIds: ["c".repeat(16)] };
@@ -11,6 +13,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    forgetProjectKey();
     vi.useRealTimers();
 });
 
@@ -32,6 +35,16 @@ describe("the link to control", () => {
 
         expect(link.ready()).toBe(true);
         expect(ready).toHaveBeenCalledWith(READY);
+    });
+
+    it("learns the project's hash key from ready before its listeners hear of it", () => {
+        const { fake, link } = fakeLink();
+        const keys: unknown[] = [];
+        link.listen({ ready: () => keys.push(projectKey()) });
+
+        fake.connect();
+
+        expect(keys).toEqual([PROJECT_KEY]);
     });
 
     it("ignores messages before ready, messages it can't read and a second ready", () => {

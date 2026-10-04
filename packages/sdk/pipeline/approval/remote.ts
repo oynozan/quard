@@ -13,11 +13,12 @@ export async function askControl(
     ms: number | undefined,
     signal?: AbortSignal,
 ): Promise<FailResult | "approved"> {
-    const message = askFor(call, asks, control.hashKey, rulesHash());
-    if (typeof message === "string") {
-        return blocked(call, message, "approval_unavailable");
+    const ask = askFor(call, asks, rulesHash());
+    if (typeof ask === "string") {
+        return blocked(call, ask, "approval_unavailable");
     }
-    const waiting = control.approvals.ask(message, ms, signal);
+    // Sent once control is there, which brings the project's key for its hash
+    const waiting = control.approvals.ask(ask, ms, signal);
     // The approver then finds the run in the dashboard
     void flushUploads();
     const answer = await waiting;

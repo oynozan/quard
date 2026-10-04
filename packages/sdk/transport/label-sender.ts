@@ -4,7 +4,8 @@ import type { Send } from "./uploader.ts";
 export type LabelSenderOptions = {
     webhookUrl: string;
     key: string;
-    redactor: Redactor;
+    // Undefined until the project's hash key is known
+    redactor: () => Redactor | undefined;
     send?: Send;
     timeoutMs?: number;
 };
@@ -24,8 +25,14 @@ export function createLabelSender(options: LabelSenderOptions): LabelSender {
     const timeoutMs = options.timeoutMs ?? STORE_MS;
 
     async function post(records: LabelRecord[]): Promise<boolean> {
+        const redactor = options.redactor();
+        // Records hold hashes made with the project's key, so none
+        // leaves before it is known
+        if (redactor === undefined) {
+            return false;
+        }
         const body = labelUpload.safeParse({
-            records: records.map((record) => redactRecord(record, options.redactor)),
+            records: records.map((record) => redactRecord(record, redactor)),
         });
         if (!body.success) {
             return false;

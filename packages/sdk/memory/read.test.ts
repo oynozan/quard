@@ -11,7 +11,11 @@ import type { MemoryLabels } from "./merge.ts";
 import { readThrough } from "./read.ts";
 import { localHash } from "./values.ts";
 
-vi.mock("../transport/labels.ts", () => ({ storeLabels: vi.fn(), lookupLabels: vi.fn(async () => undefined) }));
+vi.mock("../transport/labels.ts", () => ({
+    storeLabels: vi.fn(),
+    lookupLabels: vi.fn(async () => undefined),
+    waitForKey: vi.fn(async () => true),
+}));
 
 const IBAN = "DE89370400440532013000";
 const STEP = "00f067aa0ba902b7";

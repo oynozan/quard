@@ -1,4 +1,3 @@
-import { parseHashKey } from "@quard/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { newRun } from "../../context/run.ts";
 import { fakeSockets, sentOf, type FakeSocket } from "../../test/fake-socket.ts";
@@ -10,7 +9,7 @@ let control: Control | undefined;
 
 function setup() {
     const fake = fakeSockets();
-    control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    control = createControl({ url: "ws://c", key: "k", open: fake.open });
     return { fake, control };
 }
 

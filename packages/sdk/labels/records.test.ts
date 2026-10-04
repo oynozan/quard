@@ -1,4 +1,4 @@
-import { keyedHash, parseHashKey, type LabelRecord, type MessageRecord } from "@quard/shared";
+import { keyedHash, type LabelRecord, type MessageRecord } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const lookups = vi.hoisted(() => ({ answer: undefined as LabelRecord[] | undefined, calls: [] as unknown[] }));
@@ -10,12 +10,12 @@ vi.mock("../transport/labels.ts", () => ({
     },
 }));
 
-const { configure, resetConfig } = await import("../core/config.ts");
+const { forgetProjectKey, learnProjectKey } = await import("../core/project-key.ts");
+const { PROJECT_KEY, PROJECT_KEY_TEXT } = await import("../test/hash-key.ts");
 const { newRun } = await import("../context/run.ts");
 const { clearRecords, findRecord, forgetRuns, isLabelRef, keptRun, recordValues, saveRecord } =
     await import("./records.ts");
 
-const KEY = "ab".repeat(32);
 const IBAN = "DE89370400440532013000";
 const label = { trust: "trusted" as const, sensitivity: "internal" as const, origins: [], flagged: false };
 const value = {
@@ -62,7 +62,7 @@ function stored(id: string): MessageRecord {
 
 afterEach(() => {
     clearRecords();
-    resetConfig();
+    forgetProjectKey();
     lookups.answer = undefined;
     lookups.calls = [];
 });
@@ -80,11 +80,11 @@ describe("label records", () => {
         const run = newRun();
         expect(saveRecord(sent(ref(1), run.runId), run).values).toEqual([]);
 
-        configure({ hashKey: KEY });
+        learnProjectKey(PROJECT_KEY_TEXT);
 
         expect(saveRecord(sent(ref(2), run.runId), run).values).toEqual([
             {
-                hash: keyedHash(parseHashKey(KEY), "iban", IBAN),
+                hash: keyedHash(PROJECT_KEY, "iban", IBAN),
                 origin: "web:evil.com",
                 trust: "untrusted",
                 sensitivity: "public",
@@ -171,8 +171,8 @@ describe("recordValues", () => {
     });
 
     it("matches the hashed values of a record from control against the message", () => {
-        configure({ hashKey: KEY });
-        const hash = keyedHash(parseHashKey(KEY), "iban", IBAN);
+        learnProjectKey(PROJECT_KEY_TEXT);
+        const hash = keyedHash(PROJECT_KEY, "iban", IBAN);
         const { origin, trust, sensitivity, flags, stepId } = value;
         const record = { ...stored(ref(1)), values: [{ hash, origin, trust, sensitivity, flags, stepId }] };
 

@@ -22,7 +22,6 @@ beforeEach(async () => {
     quard.configure({
         key: CONTROL_KEY,
         controlUrl: server.url,
-        hashKey: "ab".repeat(32),
         onEvent: (event) => events.push(event),
     });
     await vi.waitFor(() => expect(activeControl()?.link.ready()).toBe(true));

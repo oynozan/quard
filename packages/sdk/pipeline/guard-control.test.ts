@@ -1,4 +1,4 @@
-import { parseHashKey, type ReadyMessage, type RunEvent } from "@quard/shared";
+import { type ReadyMessage, type RunEvent } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { isGuardRefusal } from "../core/refusal.ts";
@@ -35,7 +35,6 @@ function linked(ready: ReadyMessage | false = READY, timing: Partial<ControlTimi
     control = createControl({
         url: "ws://c",
         key: "k",
-        hashKey: parseHashKey("ab".repeat(32)),
         open: fake.open,
         timing,
     });

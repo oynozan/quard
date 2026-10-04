@@ -1,4 +1,11 @@
-import { createRedactor, labelUpload, parseHashKey, type LabelRecord, type MessageRecord } from "@quard/shared";
+import {
+    createRedactor,
+    labelUpload,
+    parseHashKey,
+    type LabelRecord,
+    type MessageRecord,
+    type Redactor,
+} from "@quard/shared";
 import { describe, expect, it } from "vitest";
 import { createLabelSender } from "./label-sender.ts";
 import type { Send } from "./uploader.ts";
@@ -40,8 +47,9 @@ function webhook(...statuses: Array<number | "down" | "silent">) {
     return { sent, send };
 }
 
-function sender(send: Send, timeoutMs?: number) {
-    return createLabelSender({ webhookUrl: "http://webhook.test/", key: "qk_live_abc", redactor, send, timeoutMs });
+function sender(send: Send, timeoutMs?: number, redactorOf: () => Redactor | undefined = () => redactor) {
+    const options = { webhookUrl: "http://webhook.test/", key: "qk_live_abc", redactor: redactorOf, send, timeoutMs };
+    return createLabelSender(options);
 }
 
 describe("createLabelSender", () => {
@@ -122,6 +130,13 @@ describe("createLabelSender", () => {
         expect(refused.sent).toHaveLength(2);
     });
 
+    it("sends nothing before the project's hash key is known", async () => {
+        const { sent, send } = webhook(201);
+
+        expect(await sender(send, undefined, () => undefined)([messageRecord("a".repeat(16))])).toBe(false);
+        expect(sent).toEqual([]);
+    });
+
     it("sends nothing for no records, or for records webhook would refuse", async () => {
         const { sent, send } = webhook(201);
 
@@ -131,7 +146,8 @@ describe("createLabelSender", () => {
     });
 
     it("uses fetch when no send function is given", async () => {
-        const store = createLabelSender({ webhookUrl: "http://127.0.0.1:9", key: "k", redactor, timeoutMs: 2000 });
+        const options = { webhookUrl: "http://127.0.0.1:9", key: "k", redactor: () => redactor, timeoutMs: 2000 };
+        const store = createLabelSender(options);
 
         expect(await store([messageRecord("a".repeat(16))])).toBe(false);
     });

@@ -1,4 +1,5 @@
 import { CLOSE_CODES, serverMessage, type ClientMessage, type ReadyMessage, type ServerMessage } from "@quard/shared";
+import { learnProjectKey } from "../../core/project-key.ts";
 import { openSocket, type LinkSocket, type OpenSocket, type SocketEvents } from "./socket.ts";
 
 export type LinkListener = {
@@ -122,6 +123,8 @@ export function createLink(options: LinkOptions): Link {
             state = "ready";
             delay = timing.firstDelay;
             watchFor(target, timing.silentMs);
+            // What listeners send may need the project's hash key, so it comes first
+            learnProjectKey(message.hashKey);
             emit((listener) => listener.ready?.(message));
         }
     }

@@ -4,7 +4,6 @@ import { guard, quard } from "../../index.ts";
 quard.configure({
     key: process.env.QUARD_TEST_KEY,
     controlUrl: process.env.QUARD_TEST_CONTROL_URL,
-    hashKey: "ab".repeat(32),
 });
 
 if (process.env.QUARD_TEST_MODE === "idle") {
