@@ -151,6 +151,9 @@ export { runPayments } from "./queries/payments/run.ts";
 export type { PaymentRow, PaymentStage } from "./queries/payments/run.ts";
 export { spendBy, spendByDay } from "./queries/payments/spend.ts";
 export type { SpendBy, SpendDay, SpendGroup, SpendTotal } from "./queries/payments/spend.ts";
+export { cleanExpired, cleanProject } from "./queries/retention/cleanup.ts";
+export type { CleanupCounts, CleanupOptions, CleanupResult } from "./queries/retention/cleanup.ts";
+export { RETENTION } from "./queries/retention/policy.ts";
 export { getRun, listRuns } from "./queries/runs.ts";
 export type {
     RunDecision,
