@@ -4,12 +4,15 @@ import type { Link } from "./link.ts";
 export type Answer =
     | { kind: "decided"; answer: ApprovalAnswer; requestId?: string; grantId?: string }
     | { kind: "timeout"; requestId?: string }
+    // The call was aborted while it waited
+    | { kind: "aborted"; requestId?: string }
     // Control could not be reached in time
     | { kind: "down" };
 
 export type Approvals = {
-    // Waits for a human's answer, up to the approval guard's timeout
-    ask(message: AskMessage, timeoutMs: number | undefined): Promise<Answer>;
+    // Waits for a human's answer, up to the approval guard's timeout or
+    // until the signal aborts
+    ask(message: AskMessage, timeoutMs: number | undefined, signal?: AbortSignal): Promise<Answer>;
     stop(): void;
 };
 
@@ -90,10 +93,16 @@ export function createApprovals(link: Link, downMs: number, beatMs: number = APP
         },
     });
 
-    function ask(message: AskMessage, timeoutMs: number | undefined): Promise<Answer> {
+    function ask(message: AskMessage, timeoutMs: number | undefined, signal?: AbortSignal): Promise<Answer> {
         return new Promise((resolve) => {
             const release = link.hold();
             let timer: NodeJS.Timeout | undefined;
+            // Control drops the request, so no one approves a call that is gone
+            const cancel = (answer: Answer) => {
+                link.send({ type: "cancel", askId: message.askId });
+                waiter.finish(answer);
+            };
+            const abort = () => cancel({ kind: "aborted", requestId: waiter.requestId });
             const waiter: Waiter = {
                 message,
                 requestId: undefined,
@@ -104,6 +113,7 @@ export function createApprovals(link: Link, downMs: number, beatMs: number = APP
                     clearTimeout(waiter.down);
                     clearTimeout(waiter.retry);
                     clearTimeout(timer);
+                    signal?.removeEventListener("abort", abort);
                     release();
                     if (waiters.size === 0) {
                         clearInterval(beat);
@@ -116,12 +126,10 @@ export function createApprovals(link: Link, downMs: number, beatMs: number = APP
             beat ??= setInterval(beatAll, beatMs);
             beat.unref();
             if (timeoutMs !== undefined) {
-                timer = setTimeout(() => {
-                    link.send({ type: "cancel", askId: message.askId });
-                    waiter.finish({ kind: "timeout", requestId: waiter.requestId });
-                }, timeoutMs);
+                timer = setTimeout(() => cancel({ kind: "timeout", requestId: waiter.requestId }), timeoutMs);
                 timer.unref();
             }
+            signal?.addEventListener("abort", abort, { once: true });
             // Control must take the ask in time, even on a live link
             waitForLink(waiter);
             if (link.ready()) {

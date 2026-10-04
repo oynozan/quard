@@ -98,6 +98,33 @@ describe("approvals through control", () => {
         expect(sentOf(socket, "cancel")).toEqual([{ type: "cancel", askId: A }]);
     });
 
+    it("stops waiting when the call is aborted and tells control", async () => {
+        const { fake, approvals } = setup();
+        const socket = fake.connect();
+        const controller = new AbortController();
+
+        const answer = approvals.ask(ask(A), undefined, controller.signal);
+        socket.reply({ type: "asked", askId: A, requestId: REQUEST });
+        controller.abort();
+
+        expect(await answer).toEqual({ kind: "aborted", requestId: REQUEST });
+        expect(sentOf(socket, "cancel")).toEqual([{ type: "cancel", askId: A }]);
+        expect(socket.held).toBe(false);
+    });
+
+    it("forgets the signal once the answer comes", async () => {
+        const { fake, approvals } = setup();
+        const socket = fake.connect();
+        const controller = new AbortController();
+
+        const answer = approvals.ask(ask(A), undefined, controller.signal);
+        socket.reply({ type: "decided", askId: A, answer: "deny", requestId: REQUEST });
+        await answer;
+        controller.abort();
+
+        expect(sentOf(socket, "cancel")).toEqual([]);
+    });
+
     it("waits up to 30 s for control before it asks", async () => {
         const { fake, approvals } = setup();
 
