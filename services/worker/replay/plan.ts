@@ -1,4 +1,5 @@
 import type { ModelCallRecord, StoredReplay, StoredVerdict } from "@quard/db";
+import { costOf } from "@quard/shared";
 import { costOfStep, keysOf, type StoredRun } from "../rootcause/run.ts";
 import { replayBody } from "./body.ts";
 import { rebuildRequest } from "./request.ts";
@@ -13,13 +14,29 @@ export type ReplayPlan = {
     base: Pick<StoredReplay, "model" | "harmfulCall" | "removed">;
     // The two requests to resend, with the map from stand-in keys back to
     // stored keys; or why replay can't run, in plain words
-    ready: { bodies: Record<Side, Body>; back: Map<string, string> } | string;
-    // What the first round will likely cost, when the turning call's price is known
+    ready: { bodies: Record<Side, Body>; back: Map<string, string[]> } | string;
+    // What the first round will likely cost, when the turning call's cost
+    // is known. Else what the warm-up pair will likely cost, when the
+    // model's price is known.
     firstRoundUsd: number | undefined;
 };
 
+// Room for the answer when a rerun's cost is guessed
+const OUTPUT_TOKENS = 1_000;
+
+// ponytail: about 4 characters a token, a rough guess at one rerun's cost
+// for calls that recorded none; count tokens if the cap needs to be exact
+function rerunUsd(body: Body): number | undefined {
+    const inputTokens = Math.ceil(JSON.stringify(body).length / 4);
+    return costOf(String(body.model), { inputTokens, cachedTokens: 0, outputTokens: OUTPUT_TOKENS }) ?? undefined;
+}
+
 // Everything a replay needs, from the verdict and what the run recorded
-export function planReplay(verdict: StoredVerdict, run: StoredRun, calls: ModelCallRecord[]): ReplayPlan {
+export function planReplay(
+    verdict: StoredVerdict,
+    run: Pick<StoredRun, "steps" | "labels">,
+    calls: ModelCallRecord[],
+): ReplayPlan {
     const { entry, turning, damage } = verdict;
     const stepsOf = (stepId: string) => run.steps.filter((step) => step.stepId === stepId);
     // The tool call whose result held the suspect content
@@ -48,5 +65,10 @@ export function planReplay(verdict: StoredVerdict, run: StoredRun, calls: ModelC
     }
     const standIns = standInsOf([...run.labels.flatMap((label) => label.keys), ...run.steps.flatMap(keysOf)]);
     const bodies = { with: withStandIns(body, standIns), without: withStandIns({ ...body, input: without }, standIns) };
-    return { ...plan, ready: { bodies, back: new Map(standIns.map((item) => [item.asKey, item.key])) } };
+    const guess = rerunUsd(bodies.with);
+    return {
+        base,
+        firstRoundUsd: plan.firstRoundUsd ?? (guess === undefined ? undefined : 2 * guess),
+        ready: { bodies, back: new Map(standIns.map((item) => [item.asKey, item.keys])) },
+    };
 }

@@ -14,8 +14,8 @@ function itemsOf(input: unknown): unknown[] {
 
 // The input of the call at `index`, with the responses it continued spelled
 // out first. Undefined when some of that history was not recorded.
-// ponytail: an earlier response's text and reasoning were not recorded, only
-// its tool calls; record output items if replays need them.
+// ponytail: an earlier response's reasoning was not recorded, only its text
+// and tool calls; record reasoning items if replays need them.
 function fullInput(calls: ModelCallRecord[], index: number, body: Body): unknown[] | undefined {
     if (body.conversation !== undefined && body.conversation !== null) {
         return undefined;
@@ -32,13 +32,18 @@ function fullInput(calls: ModelCallRecord[], index: number, body: Body): unknown
     if (earlier === undefined || history === undefined) {
         return undefined;
     }
+    const said = earlier.outputText.map((text) => ({
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text }],
+    }));
     const asked = earlier.toolCalls.map((call) => ({
         type: "function_call",
         call_id: call.callId,
         name: call.name,
         arguments: call.arguments,
     }));
-    return [...history, ...asked, ...own];
+    return [...history, ...said, ...asked, ...own];
 }
 
 // The turning point's recorded request with its whole input, or why it can't be rebuilt

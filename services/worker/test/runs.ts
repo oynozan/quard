@@ -116,5 +116,6 @@ export function attackRun(mode: "block" | "observe" = "block"): StoredRun {
             }),
             decision({ stepId: STEP.pay, tool: "payInvoice" }),
         ],
+        messages: [],
     };
 }

@@ -1,8 +1,8 @@
 import type { ModelCallRecord } from "@quard/db";
-import { ibanFrom } from "@quard/shared";
+import { costOf, ibanFrom } from "@quard/shared";
 import { describe, expect, it } from "vitest";
 import { bodies, MODEL, PAGE } from "../test/attack.ts";
-import { attackRun, changeStep, IBAN_KEY, STEP } from "../test/runs.ts";
+import { attackRun, changeStep, IBAN_KEY, label, STEP } from "../test/runs.ts";
 import { findVerdict } from "../rootcause/verdict.ts";
 import { planReplay } from "./plan.ts";
 import { NOT_RECORDED } from "./request.ts";
@@ -11,7 +11,7 @@ import { NOT_A_TOOL_RESULT, REMOVED } from "./without.ts";
 const STAND_IN = String(ibanFrom("DE", "465bcfb6141c9e5101e0a138e207ed3b"));
 
 function calls(): ModelCallRecord[] {
-    const record = { model: MODEL, responseId: null, toolCalls: [], at: new Date(0) };
+    const record = { model: MODEL, responseId: null, toolCalls: [], outputText: [], at: new Date(0) };
     return [
         { ...record, stepId: STEP.ask, requestBody: bodies().ask },
         { ...record, stepId: STEP.decide, requestBody: bodies().decide },
@@ -35,12 +35,35 @@ describe("planReplay", () => {
             harmfulCall: { tool: "payInvoice", keys: [IBAN_KEY] },
             removed: { contentId: "c2", origin: "web:invoices.evil-pay.com", callId: "call_1_0" },
         });
-        expect(plan.firstRoundUsd).toBeUndefined();
         const ready = typeof plan.ready === "string" ? undefined : plan.ready;
         const inputs = [ready?.bodies.with, ready?.bodies.without].map((body) => body?.input as { output?: string }[]);
         expect(inputs.map((input) => input.at(-1)?.output)).toEqual([PAGE.replace("DE89…3000", STAND_IN), REMOVED]);
         expect(ready?.bodies.with).toMatchObject({ model: MODEL, store: false, instructions: "You pay invoices." });
-        expect(ready?.back.get(`iban:${STAND_IN}`)).toBe(IBAN_KEY);
+        expect(ready?.back.get(`iban:${STAND_IN}`)).toEqual([IBAN_KEY]);
+    });
+
+    it("guesses the warm-up pair's cost from the request size when the turning call has none", () => {
+        const plan = planReplay(verdictOf(), attackRun(), calls());
+        const body = typeof plan.ready === "string" ? {} : plan.ready.bodies.with;
+        const inputTokens = Math.ceil(JSON.stringify(body).length / 4);
+
+        expect(plan.firstRoundUsd).toBeCloseTo(
+            2 * Number(costOf(MODEL, { inputTokens, cachedTokens: 0, outputTokens: 1_000 })),
+            9,
+        );
+
+        const unknown = calls().map((call) => ({ ...call, requestBody: { ...call.requestBody, model: "own-model" } }));
+        expect(planReplay(verdictOf(), attackRun(), unknown).firstRoundUsd).toBeUndefined();
+    });
+
+    it("maps a stand-in back to every stored value with its mask", () => {
+        const twin = `iban:DE89…3000#${"b".repeat(32)}`;
+        const run = attackRun();
+        const more = { ...run, labels: [...run.labels, label({ contentId: "c9", stepId: STEP.ask, keys: [twin] })] };
+        const plan = planReplay(verdictOf(), more, calls());
+        const back = typeof plan.ready === "string" ? [] : [...plan.ready.back.values()];
+
+        expect(back).toEqual([[IBAN_KEY, twin]]);
     });
 
     it("expects the first round to cost ten times the turning call", () => {

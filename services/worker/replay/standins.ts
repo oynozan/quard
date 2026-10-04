@@ -8,8 +8,8 @@ const HASHED = /^(iban|email):(.+)#([0-9a-f]{32})$/;
 export type StandIn = {
     mask: string;
     value: string;
-    // The stored key, and the key the stand-in gets when found in a rerun
-    key: string;
+    // Every stored key with this mask, and the key the stand-in gets when found in a rerun
+    keys: string[];
     asKey: string;
 };
 
@@ -22,14 +22,18 @@ function standInOf(key: string): StandIn[] {
     // An IBAN gets a valid checksum, and an email keeps its domain
     const value =
         kind === "iban" ? ibanFrom(mask.slice(0, 2), hash) : `${hash.slice(0, 12)}${mask.slice(mask.indexOf("@"))}`;
-    return value === undefined ? [] : [{ mask, value, key, asKey: `${kind}:${value}` }];
+    return value === undefined ? [] : [{ mask, value, keys: [key], asKey: `${kind}:${value}` }];
 }
 
-// One stand-in per mask among a run's value keys.
-// ponytail: two values with the same mask share one stand-in, so a rerun
-// can't tell them apart; build stand-ins per content if that matters.
+// One stand-in per mask among a run's value keys. Two values with the same
+// mask share one, so it maps back to the stored keys of both.
 export function standInsOf(keys: string[]): StandIn[] {
-    return [...new Map(keys.flatMap(standInOf).map((item) => [item.mask, item])).values()];
+    const all = [...new Set(keys)].flatMap(standInOf);
+    const last = new Map(all.map((item) => [item.mask, item]));
+    return [...last.values()].map((item) => ({
+        ...item,
+        keys: all.filter((other) => other.mask === item.mask).flatMap((other) => other.keys),
+    }));
 }
 
 // The body with each mask replaced by its stand-in, longest mask first

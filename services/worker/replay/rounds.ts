@@ -29,7 +29,8 @@ export type ReplayOptions = {
     // What the finder already spent on the incident, such as the AI reviewer
     spentUsd?: number;
     capUsd?: number;
-    // What the first round will likely cost, so it never starts past the cap
+    // What the first round, or at least its warm-up pair, will likely
+    // cost, so it never starts past the cap
     firstRoundUsd?: number;
     // Rounds played before, to continue after the cap was raised
     rounds?: Round[];

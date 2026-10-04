@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { NO_HISTORY, NOT_RECORDED, rebuildRequest } from "./request.ts";
 
 function call(stepId: string, requestBody: Record<string, unknown> | null, change: Partial<ModelCallRecord> = {}) {
-    return { stepId, model: "gpt-5.4-mini", responseId: null, toolCalls: [], requestBody, at: new Date(0), ...change };
+    const plain = { model: "gpt-5.4-mini", responseId: null, toolCalls: [], outputText: [], at: new Date(0) };
+    return { stepId, ...plain, requestBody, ...change };
 }
 
 const first = call(
@@ -12,6 +13,7 @@ const first = call(
     {
         responseId: "resp_1",
         toolCalls: [{ callId: "call_1", name: "fetchPage", arguments: '{"url":"https://a.example"}' }],
+        outputText: ["Let me open the invoice."],
     },
 );
 const output = { type: "function_call_output", call_id: "call_1", output: "page" };
@@ -23,7 +25,7 @@ describe("rebuildRequest", () => {
         expect(rebuildRequest([first, own], own.stepId)).toEqual({ model: "gpt-5.4-mini", input: [output] });
     });
 
-    it("spells out the responses a chained request continued", () => {
+    it("spells out the responses a chained request continued, text before tool calls", () => {
         const second = call(
             "2".repeat(16),
             { model: "gpt-5.4-mini", previous_response_id: "resp_1", input: [output] },
@@ -36,6 +38,11 @@ describe("rebuildRequest", () => {
             previous_response_id: "resp_2",
             input: [
                 { role: "user", content: "Pay the invoice" },
+                {
+                    type: "message",
+                    role: "assistant",
+                    content: [{ type: "output_text", text: "Let me open the invoice." }],
+                },
                 {
                     type: "function_call",
                     call_id: "call_1",

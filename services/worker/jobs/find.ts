@@ -1,4 +1,4 @@
-import { deferIncidentJob, failFind, getRun, saveVerdict, type ClaimedJob } from "@quard/db";
+import { deferIncidentJob, failFind, getAgentMessages, getRun, saveVerdict, type ClaimedJob } from "@quard/db";
 import type { StoredRun } from "../rootcause/run.ts";
 import { findVerdict } from "../rootcause/verdict.ts";
 import type { JobDeps } from "./deps.ts";
@@ -19,7 +19,8 @@ function damageOf(run: StoredRun): string | undefined {
 // Finds the incident's verdict, or waits for the run's events to arrive
 export async function runFind(deps: JobDeps, job: ClaimedJob): Promise<string> {
     const { db } = deps;
-    const run = await getRun(db, job.projectId, job.runId);
+    const found = await getRun(db, job.projectId, job.runId);
+    const run = found && { ...found, messages: await getAgentMessages(db, job.projectId, job.runId) };
     const damage = run && damageOf(run);
     const verdict = damage === undefined ? undefined : findVerdict(run as StoredRun, damage);
     if (verdict !== undefined) {

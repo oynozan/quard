@@ -34,6 +34,8 @@ describe("findVerdict", () => {
                 },
             ],
             versions: [],
+            acrossAgents: null,
+            handoffFault: null,
         });
     });
 
@@ -106,6 +108,7 @@ describe("findVerdict", () => {
                 steps: [failed, ...run.steps],
                 labels: [],
                 decisions: [decision({ stepId: STEP.pay, tool: "payInvoice", guard: "limit", rule: "limit" })],
+                messages: [],
             },
             STEP.pay,
         );

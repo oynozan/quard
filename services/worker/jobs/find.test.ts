@@ -1,7 +1,8 @@
 import { getIncident } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { STEP } from "../test/attack.ts";
+import { insertMessages } from "../../../db/test/messages.ts";
+import { RUN, STEP } from "../test/attack.ts";
 import { claim, storeAttack } from "../test/db.ts";
 import { IBAN_KEY } from "../test/runs.ts";
 import { NEVER_ARRIVED, runFind } from "./find.ts";
@@ -40,6 +41,21 @@ describe("runFind", () => {
                 missingGuard: null,
                 versions: [{ agent: "billing", version: "1".repeat(16) }],
             },
+        });
+    });
+
+    it("names the handoff that brought the run to the paying agent", async () => {
+        const { projectId, id } = await storeAttack(test.db);
+        const at = "2026-10-03T12:00:00.070Z";
+        await insertMessages(test.db, projectId, [
+            { runId: RUN, stepId: STEP.ask, kind: "handoff", from: "triage", to: "billing", at },
+        ]);
+
+        expect(await runFind(deps(), await claim(test.db))).toBe("verdict: bad input");
+
+        expect((await getIncident(test.db, projectId, id))?.verdict).toMatchObject({
+            acrossAgents: { entryAgent: "billing", handoff: { from: "triage", to: "billing", at } },
+            handoffFault: null,
         });
     });
 

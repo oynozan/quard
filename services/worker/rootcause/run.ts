@@ -1,5 +1,7 @@
+import type { AgentMessageRecord } from "@quard/db";
+
 // The parts of a stored run that the finder reads. They match RunDetail
-// from @quard/db, so what getRun() returns can be passed straight in.
+// from @quard/db, plus the run's messages from getAgentMessages().
 
 export type StoredStep = {
     stepId: string;
@@ -39,6 +41,7 @@ export type StoredRun = {
     steps: StoredStep[];
     labels: StoredLabel[];
     decisions: StoredDecision[];
+    messages: AgentMessageRecord[];
 };
 
 function fieldOf(detail: unknown, field: string): unknown {

@@ -1,6 +1,7 @@
-import type { IncidentCategory, MissingGuard, StoredVerdict, VerdictPlace } from "@quard/db";
+import type { HandoffFault, IncidentCategory, MissingGuard, StoredVerdict, VerdictPlace } from "@quard/db";
 import { pickEntry, stepEntry, type Entry } from "./entry.ts";
 import { missingGuard } from "./gap.ts";
+import { acrossAgentsOf, carrierOf, handoffFaultOf } from "./handoff.ts";
 import { callIdsOf, happenedBy, keysOf, readBy, versionOf, type StoredRun, type StoredStep } from "./run.ts";
 import { traceValues, type TracedValue } from "./trace.ts";
 
@@ -26,10 +27,17 @@ function brokenTool(steps: StoredStep[], turning: StoredStep): StoredStep | unde
         .at(-1);
 }
 
-// "bad handoff" needs messages between agents, which come with M4
-function categoryOf(traced: Entry, broken: boolean, gap: MissingGuard | null): IncidentCategory {
+function categoryOf(
+    traced: Entry,
+    fault: HandoffFault | null,
+    broken: boolean,
+    gap: MissingGuard | null,
+): IncidentCategory {
     if (traced.trust === "untrusted") {
         return "bad input";
+    }
+    if (fault !== null) {
+        return "bad handoff";
     }
     if (broken) {
         return "broken tool";
@@ -66,16 +74,22 @@ export function findVerdict(run: StoredRun, damageStepId: string): StoredVerdict
     const values = traceValues(keysOf(damage), run.labels, turning);
     const read = run.labels.filter((label) => label.agent === turning.agent).filter(readBy(turning));
     const traced = pickEntry(values, read, turning);
-    const broken = traced.trust === "trusted" ? brokenTool(run.steps, turning) : undefined;
+    const trusted = traced.trust === "trusted";
+    const carrier = carrierOf(run.messages, traced.agent, damage, turning);
+    const fault = trusted ? handoffFaultOf(carrier, run.messages, values, run.labels, damage) : null;
+    // A value a handoff carried explains the call better than a failed tool
+    const broken = trusted && fault === null ? brokenTool(run.steps, turning) : undefined;
     const entry = broken === undefined ? traced : stepEntry(broken, `tool:${broken.name}`);
     const gap = missingGuard(damage, run.decisions, entry);
     return {
-        category: categoryOf(traced, broken !== undefined, gap),
+        category: categoryOf(traced, fault, broken !== undefined, gap),
         entry: { ...entry, at: entry.at.toISOString() },
         turning: placeOf(turning),
         damage: { ...placeOf(damage), tool: damage.name, ran: damage.status !== "blocked" },
         missingGuard: gap,
         values: storedValues(values),
         versions: versionsOf(run.steps, [entry.agent, turning.agent, damage.agent], turning),
+        acrossAgents: acrossAgentsOf(run.messages, entry, turning, damage),
+        handoffFault: fault,
     };
 }

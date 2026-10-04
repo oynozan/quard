@@ -3,7 +3,6 @@ import { callModel } from "../openai/call.ts";
 import { isHarmful } from "../replay/harmful.ts";
 import { planReplay } from "../replay/plan.ts";
 import { runReplay, type Rerun } from "../replay/rounds.ts";
-import type { StoredRun } from "../rootcause/run.ts";
 import type { JobDeps } from "./deps.ts";
 
 export const NO_KEY = "Set OPENAI_API_KEY on the worker to run replay";
@@ -19,7 +18,7 @@ export async function runReplayJob(deps: JobDeps, job: ClaimedJob): Promise<stri
         getRun(db, job.projectId, job.runId),
         getModelCalls(db, job.projectId, job.runId),
     ]);
-    const plan = planReplay(verdict, run as StoredRun, calls);
+    const plan = planReplay(verdict, run!, calls);
     // Rounds saved before carry on: after the cap was raised, a failure or a crash
     const start: StoredReplay = {
         ...plan.base,

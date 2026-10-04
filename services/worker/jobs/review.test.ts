@@ -60,6 +60,8 @@ describe("runReview", () => {
         expect(body).toMatchObject({ model: REVIEW_MODEL, store: false, instructions: expect.any(String) });
         expect(body?.input).toContain("[IBAN 1]");
         expect(body?.input).not.toContain("DE89");
+        expect(body?.input).toContain('"acrossAgents":null,"handoffFault":null');
+        expect(body?.instructions).toContain("handoffFault");
     });
 
     it("saves the error of a failed call", async () => {
