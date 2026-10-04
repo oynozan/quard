@@ -1,6 +1,7 @@
-import { agentLinks, guardBlockHours, incidentCounts } from "@quard/db";
+import { agentLinks, guardBlockHours, incidentCounts, runLimitCounts } from "@quard/db";
 import { projectScope } from "../scope";
 import { blocksOf, windowStart } from "./blocks";
+import { runLimitsOf } from "./limits";
 import { untrustedLinksOf } from "./links";
 import type { FleetData } from "./types";
 
@@ -12,13 +13,15 @@ export async function getFleet(): Promise<FleetData> {
     const endAt = Date.now();
     const startAt = windowStart(endAt);
     const since = new Date(startAt);
-    const [hours, links, incidents] = scope
+    const range = { since, until: new Date(endAt) };
+    const [hours, links, incidents, limits] = scope
         ? await Promise.all([
-              guardBlockHours(scope.db, scope.project.id, { since, until: new Date(endAt) }),
+              guardBlockHours(scope.db, scope.project.id, range),
               agentLinks(scope.db, scope.project.id, { since }),
               incidentCounts(scope.db, scope.project.id, since),
+              runLimitCounts(scope.db, scope.project.id, range),
           ])
-        : [[], [], NO_INCIDENTS];
+        : [[], [], NO_INCIDENTS, []];
     const { byGuard, heatmap } = blocksOf(hours, startAt);
     return {
         startAt,
@@ -29,7 +32,6 @@ export async function getFleet(): Promise<FleetData> {
         blocksHeatmap: heatmap,
         agentPoints: incidents.agentPoints,
         untrustedLinks: untrustedLinksOf(links),
-        // Run limits have no source yet; the quarantine is read on its own
-        runLimits: [],
+        runLimits: runLimitsOf(limits),
     };
 }

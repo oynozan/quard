@@ -157,6 +157,36 @@ describe("getFleet", () => {
         expect(blocksHeatmap.total).toBe(0);
     });
 
+    it("counts the runs that went over each run limit, observed apart from stopped", async () => {
+        await project("Main");
+        const id = await project("Limits");
+        const over = (n: number, at: number, rule: string, more = {}) =>
+            block(runOf(n), at, "limit", { rule, reason: "limit_reached", ...more });
+        const observed = { mode: "observe", enforced: false } as const;
+        await ingestBatch(
+            test.db,
+            id,
+            itemsOf(
+                over(21, TODAY + HOUR, "max-depth", observed),
+                over(22, TODAY + HOUR, "max-depth", observed),
+                // Switched on later: a refused model call over the step limit
+                over(23, TODAY + 2 * HOUR, "max-steps", { tool: "gpt-5.4-mini" }),
+                // Before the window
+                over(24, START_AT - DAY, "max-loops"),
+            ),
+        );
+
+        const { runLimits } = await getFleet();
+
+        expect(runLimits).toEqual([
+            { name: "depth", rule: "max-depth", mode: "observe", wouldStop: 2, stopped: 0 },
+            { name: "fan-out", rule: "max-fan-out", mode: "block", wouldStop: 0, stopped: 0 },
+            { name: "loops", rule: "max-loops", mode: "block", wouldStop: 0, stopped: 0 },
+            { name: "steps", rule: "max-steps", mode: "block", wouldStop: 0, stopped: 1 },
+            { name: "cost", rule: "max-cost", mode: "block", wouldStop: 0, stopped: 0 },
+        ]);
+    });
+
     it("counts incidents with a verdict by entry source, damaging tool and agent", async () => {
         const id = await project("Main");
         await ingestBatch(
