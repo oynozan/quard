@@ -92,6 +92,28 @@ Then:
 node --env-file=sandbox/.env.deploy sandbox/00-check-deploy.ts
 ```
 
+## Playground
+
+`playground/` runs one scenario you can edit, with the real SDK, the way an app would.
+
+- `scenario.json`: the model, the system prompt, what the user asks, the email `readEmail` returns, the page `fetchPage` returns, the tools the model gets, and whether an AI detector checks untrusted content.
+- `policy.json`: every guard rule, in the policy file format. A tool left out of `guards` has no rules; the feed still checks its arguments.
+- `signatures.json`: the signature feed `policy.json` points at.
+
+The defaults show an attack on the first run: an invoice email that hides instructions to pay another IBAN and send the customer list outside. `git checkout sandbox/playground` puts them back.
+
+Run it once in the terminal:
+
+```sh
+node sandbox/playground/run.ts
+```
+
+In a terminal it tells a short story and asks what the agent should do; without one, as in scripts, it uses the prompt in `scenario.json`. It then prints each step, what Quard detected, where the run went and how long Quard's checks took. The last line, `@result`, holds the same as JSON for scripts. Quard rereads `policy.json` and `signatures.json` before each guarded call, so an edit applies from the next guarded call. With `TYPESAFE_API_KEY` in `sandbox/.env` the detector is Jev; without it an OpenAI model scores the text, as in example 19.
+
+With `QUARD_AGENT_KEY` and `QUARD_HASH_KEY` in `sandbox/.env` and the backend running (see "See runs in the dashboard"), the run shows up in the dashboard, and anything Quard blocked or flagged opens an incident.
+
+The playground has tests, which need no API key: `pnpm --filter @quard/sandbox test`.
+
 ## Examples
 
 | File                           | What it shows                                                     |
@@ -141,3 +163,4 @@ These run with or without it:
 - `lib/agent.ts` is a plain agent loop on the Responses API, and `lib/tools.ts` holds the tool definitions the model sees.
 - `lib/x402/` holds a local x402 server with a stub facilitator and a fake signer, so the payment examples need no chain or wallet.
 - `lib/env.ts` loads `.env`, `lib/terminal.ts` asks for approvals, and `lib/show.ts` prints events.
+- `playground/` holds the runner (`run.ts`), the service (`server.ts`, with `service/`) and the default files. `test/` has a fake OpenAI server that scripts the model's tool calls.

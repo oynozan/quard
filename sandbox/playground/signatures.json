@@ -1,0 +1,22 @@
+{
+    "version": "1",
+    "signatures": [
+        {
+            "id": "SBX-PHISH-001",
+            "title": "Fake Acme billing site",
+            "category": "other",
+            "where": ["content"],
+            "any": ["acme-billing-update.com"],
+            "action": "block"
+        },
+        {
+            "id": "SBX-IBAN-002",
+            "title": "IBAN reported in invoice scams",
+            "category": "other",
+            "where": ["input"],
+            "tools": ["payInvoice"],
+            "any": ["NL91 ABNA 0417 1643 00"],
+            "action": "block"
+        }
+    ]
+}

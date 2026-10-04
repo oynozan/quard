@@ -18,6 +18,7 @@ export const MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
 // With an agent key, runs also go to a local Quard backend and show up in the dashboard
 export const DASHBOARD = Boolean(process.env.QUARD_AGENT_KEY);
 
+let answered = false;
 if (DASHBOARD) {
     const webhookUrl = process.env.QUARD_WEBHOOK_URL || "http://localhost:4100";
     quard.configure({
@@ -27,12 +28,19 @@ if (DASHBOARD) {
         hashKey: process.env.QUARD_HASH_KEY,
     });
     // Only a warning: example 13 runs with the backend down on purpose
-    await fetch(`${webhookUrl}/health`, { signal: AbortSignal.timeout(1000) }).catch(() => {
-        console.warn(
-            `The Quard backend at ${webhookUrl} isn't answering. Start webhook and control as sandbox/README.md shows.`,
-        );
-    });
+    answered = await fetch(`${webhookUrl}/health`, { signal: AbortSignal.timeout(1000) }).then(
+        () => true,
+        () => {
+            console.warn(
+                `The Quard backend at ${webhookUrl} isn't answering. Start webhook and control as sandbox/README.md shows.`,
+            );
+            return false;
+        },
+    );
 }
+
+// Runs reach the dashboard: an agent key is set and webhook answered
+export const RECORDED = answered;
 
 // For examples that need the local backend: explains the setup and stops
 export function needsDashboard(): void {

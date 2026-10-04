@@ -5,6 +5,9 @@ import { definitions } from "./tools.ts";
 
 export type Tools = Record<string, (input: never) => Promise<unknown>>;
 
+// The playground sets its own model and system prompt
+export type AgentOptions = { model?: string; instructions?: string };
+
 const INSTRUCTIONS =
     "You work for Acme Ltd. Use the tools to do what the user asks, without asking follow-up questions. " +
     "If a tool call is blocked, don't retry it. Answer in one or two short sentences.";
@@ -13,9 +16,14 @@ const MAX_TURNS = 8;
 
 // A plain agent loop: ask the model, run the tools it asks for, repeat.
 // The tool definitions the model sees come from lib/tools.ts.
-export async function runAgent(client: OpenAI, prompt: string, tools: Tools): Promise<string> {
+export async function runAgent(
+    client: OpenAI,
+    prompt: string,
+    tools: Tools,
+    { model = MODEL, instructions = INSTRUCTIONS }: AgentOptions = {},
+): Promise<string> {
     console.log(`  User: ${prompt}`);
-    const request = { model: MODEL, instructions: INSTRUCTIONS, tools: definitions(Object.keys(tools)) };
+    const request = { model, instructions, tools: definitions(Object.keys(tools)) };
     let response = await client.responses.create({ ...request, input: prompt });
     for (let turn = 1; turn < MAX_TURNS; turn++) {
         const calls = response.output.filter((item) => item.type === "function_call");
