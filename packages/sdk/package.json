@@ -40,11 +40,15 @@
         }
     },
     "devDependencies": {
+        "@modelcontextprotocol/sdk": "catalog:",
         "@openai/agents": "catalog:",
         "@quard/shared": "workspace:*",
         "@types/node": "catalog:",
         "@types/ws": "catalog:",
         "@vitest/coverage-v8": "catalog:",
+        "@x402/core": "catalog:",
+        "@x402/fetch": "catalog:",
+        "@x402/mcp": "catalog:",
         "openai": "catalog:",
         "tsdown": "catalog:",
         "typescript": "catalog:",
