@@ -101,7 +101,7 @@ describe("x402Mcp", () => {
 
     it("works with any client that has callTool, with no server name", async () => {
         const payment = { x402Version: 2, accepted: { scheme: "exact", network: "solana:devnet" }, payload: {} };
-        markChecked(payment);
+        markChecked(payment, "solana.example");
         const answers: unknown[] = [
             "not a record",
             { isError: true, content: [{ type: "image" }] },

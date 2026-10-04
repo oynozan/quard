@@ -1,7 +1,7 @@
-import { hasPayment, readPayment, readPrice, readSettlement } from "@quard/shared";
+import { hasPayment, normalizeHost, readPayment, readPrice, readSettlement } from "@quard/shared";
 import type { Fetch } from "../../monitor/fetch.ts";
 import { parseJson } from "../../monitor/json.ts";
-import { isChecked } from "../checked.ts";
+import { checkedHost } from "../checked.ts";
 import {
     paidStep,
     recordPrice,
@@ -13,7 +13,7 @@ import {
     type PaidStep,
     type Place,
 } from "../record/payments.ts";
-import { UNGUARDED_REASON, unguardedResponse } from "../refusal.ts";
+import { HOST_MISMATCH_REASON, HOST_MISMATCH_TEXT, UNGUARDED_REASON, unguardedResponse } from "../refusal.ts";
 import { headersOf, placeOf, urlOf } from "./place.ts";
 
 // A 402 with no price header may carry a v1 price in its body
@@ -55,10 +55,16 @@ export function createX402Fetch(inner: Fetch): Fetch {
         }
         const payment = readPayment(get);
         const step = paidStep(place, payment);
-        if (payment === undefined || !isChecked(payment)) {
+        const host = payment === undefined ? undefined : checkedHost(payment);
+        if (host === undefined) {
             recordRefused(step, UNGUARDED_REASON);
             warnUnguarded(step);
             return unguardedResponse();
+        }
+        // The 402 names the paid URL, so a server could name a host it is not
+        if (host !== normalizeHost(place.host)) {
+            recordRefused(step, HOST_MISMATCH_REASON);
+            return unguardedResponse(HOST_MISMATCH_TEXT);
         }
         recordSigned(step);
         const response = await inner(input, init);

@@ -6,9 +6,15 @@ export const UNGUARDED_TEXT =
 
 export const UNGUARDED_REASON = "unguarded";
 
+// What a payment sent to another host than the guard checked gets
+export const HOST_MISMATCH_TEXT =
+    "Blocked by Quard: the x402 guard checked this payment for another host. The x402 payment did NOT happen. Do not retry it.";
+
+export const HOST_MISMATCH_REASON = "host_mismatch";
+
 // A 403, not a 402: a 402 would invite the caller to pay again
-export function unguardedResponse(): Response {
-    const error = { message: UNGUARDED_TEXT, type: BLOCKED_ERROR_TYPE, code: "unguarded_x402", param: null };
+export function unguardedResponse(text = UNGUARDED_TEXT): Response {
+    const error = { message: text, type: BLOCKED_ERROR_TYPE, code: "unguarded_x402", param: null };
     return new Response(JSON.stringify({ error }), {
         status: 403,
         headers: { "content-type": "application/json", "x-should-retry": "false" },

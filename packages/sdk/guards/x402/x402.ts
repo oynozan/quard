@@ -15,7 +15,7 @@ import { checkPayment } from "./checks.ts";
 import type { PaymentCreationContext, X402Client } from "./client.ts";
 import { countPayment, reportRefusedPayee } from "./count.ts";
 import { noteRefused } from "./frame.ts";
-import { paymentInput, readPayment, type Payment } from "./payment.ts";
+import { paidHost, paymentInput, readPayment, type Payment } from "./payment.ts";
 import { checkX402Options, x402Settings, type X402Settings } from "./settings.ts";
 
 type Abort = { abort: true; reason: string };
@@ -125,6 +125,7 @@ export function x402<C extends X402Client>(client: C, options: X402Options): C {
     registerGuardedTool(name, [options]);
     syncRules();
     client.onBeforePaymentCreation((context) => beforePayment(name, options, context));
-    client.onAfterPaymentCreation(async (context) => markChecked(context.paymentPayload));
+    // x402Fetch sends the payment only to the host the checks ran on
+    client.onAfterPaymentCreation(async (context) => markChecked(context.paymentPayload, paidHost(context)));
     return client;
 }

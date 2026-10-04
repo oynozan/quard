@@ -97,12 +97,13 @@ export function checkPayment(
         const failed = cap !== undefined && BigInt(payment.amount) > BigInt(cap);
         results.push(result("asset-caps", assetCaps, failed ? "x402_unknown_value_over_cap" : undefined));
     }
+    // A payment with no host can't be checked against a host list
     if (blockHosts !== undefined) {
-        const failed = blockHosts.value.some((pattern) => hostMatches(host, pattern));
+        const failed = host === "" || blockHosts.value.some((pattern) => hostMatches(host, pattern));
         results.push(result("block-hosts", blockHosts, failed ? "x402_host_blocked" : undefined));
     }
     if (allowHosts !== undefined) {
-        const failed = !allowHosts.value.some((pattern) => hostMatches(host, pattern));
+        const failed = host === "" || !allowHosts.value.some((pattern) => hostMatches(host, pattern));
         results.push(result("allow-hosts", allowHosts, failed ? "x402_host_blocked" : undefined));
     }
     if (untrusted !== undefined) {

@@ -41,6 +41,11 @@ function hostOf(url: string): string {
     }
 }
 
+// The host the guard checks a payment for, or "" when the 402 names none
+export function paidHost(context: PaymentCreationContext): string {
+    return hostOf(resourceUrl(context));
+}
+
 export function readPayment(context: PaymentCreationContext): Payment {
     const chosen = context.selectedRequirements;
     const raw = chosen.amount ?? chosen.maxAmountRequired;

@@ -1,5 +1,7 @@
 import { x402Client } from "@x402/core/client";
 import type { PaymentPayloadResult, SchemeNetworkClient } from "@x402/core/types";
+import type { PaymentCreationContext } from "../../guards/x402/client.ts";
+import { paidHost } from "../../guards/x402/payment.ts";
 import { markChecked } from "../../x402/checked.ts";
 
 let nonce = 0;
@@ -31,7 +33,9 @@ export function testClient(guarded = true): x402Client {
         .registerV1("base-sepolia", fakeScheme)
         .setSpendControls(false);
     if (guarded) {
-        client.onAfterPaymentCreation(async ({ paymentPayload }) => markChecked(paymentPayload));
+        client.onAfterPaymentCreation(async (context) =>
+            markChecked(context.paymentPayload, paidHost(context as PaymentCreationContext)),
+        );
     }
     return client;
 }

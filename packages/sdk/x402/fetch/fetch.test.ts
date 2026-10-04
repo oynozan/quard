@@ -4,9 +4,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { quard } from "../../index.ts";
 import { resetAll } from "../../test/reset.ts";
 import { testClient } from "../../test/x402/client.ts";
-import { PAYEE, USDC_SEPOLIA } from "../../test/x402/facilitator.ts";
+import { PAYEE, USDC_SEPOLIA, v2Options } from "../../test/x402/facilitator.ts";
 import { startX402Server, type X402Server } from "../../test/x402/server.ts";
-import { UNGUARDED_TEXT } from "../refusal.ts";
+import { markChecked } from "../checked.ts";
+import { HOST_MISMATCH_TEXT, UNGUARDED_TEXT } from "../refusal.ts";
 
 let server: X402Server;
 let events: RunEvent[] = [];
@@ -125,9 +126,8 @@ describe("x402Fetch with a v1 server", () => {
     });
 
     it("sends a checked v1 payment with no price seen, without a record", async () => {
-        const { markChecked } = await import("../checked.ts");
         const payment = { x402Version: 1, scheme: "exact", network: "base-sepolia", payload: { signature: "0xfake" } };
-        markChecked(payment);
+        markChecked(payment, "127.0.0.1");
         const header = Buffer.from(JSON.stringify(payment)).toString("base64");
         const response = await quard.x402Fetch(fetch)(`${server.url}/v1/data`, { headers: { "X-PAYMENT": header } });
         expect(response.status).toBe(200);
@@ -159,6 +159,20 @@ describe("x402Fetch and payments no guard checked", () => {
         expect(server.paid).toEqual([]);
         expect(payments()).toEqual([]);
         expect(events.filter((event) => event.type === "warning")).toHaveLength(1);
+    });
+
+    it("keeps back a payment the guard checked for another host", async () => {
+        const payment = { x402Version: 2, accepted: v2Options[0], payload: { signature: "0xfake" } };
+        markChecked(payment, "api.trusted.dev");
+        const headers = { "PAYMENT-SIGNATURE": Buffer.from(JSON.stringify(payment)).toString("base64") };
+        const response = await quard.x402Fetch(fetch)(`${server.url}/v2/data`, { headers });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ error: { message: HOST_MISMATCH_TEXT } });
+        expect(server.paid).toEqual([]);
+        expect(payments()).toEqual([
+            expect.objectContaining({ stage: "refused", reason: "host_mismatch", host: "127.0.0.1" }),
+        ]);
+        expect(events.some((event) => event.type === "warning")).toBe(false);
     });
 });
 
