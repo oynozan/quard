@@ -1,8 +1,10 @@
 // @vitest-environment node
+import type { StoredVerdict } from "@quard/db";
 import { describe, expect, it } from "vitest";
 import { incidentRow, pendingRow, storedVerdict } from "../../../../../test/incidents/rows";
 import { at, M1, M2, RUN, storedRun, T1, T2 } from "../../../../../test/runs-fixture";
 import { runDetailOf } from "../../runs/live/detail";
+import type { VerdictHandoff } from "../types";
 import { incidentDetailOf, incidentPath } from "./detail";
 
 const run = runDetailOf(storedRun(), at(30).getTime());
@@ -57,6 +59,59 @@ describe("incidentPath", () => {
     });
 });
 
+describe("incidentPath across agents", () => {
+    const handoff: VerdictHandoff = {
+        stepId: "h1",
+        kind: "handoff",
+        from: "research",
+        to: "billing",
+        at: at(4).toISOString(),
+        trust: "untrusted",
+        verified: false,
+    };
+    const across = (fields: Partial<VerdictHandoff> | null) =>
+        storedVerdict({
+            category: "bad handoff",
+            acrossAgents: {
+                entryAgent: "research",
+                handoff: fields && { ...handoff, ...fields },
+                turningAgent: "billing",
+                damageAgent: "billing",
+            },
+        });
+
+    it("puts the handoff that carried the content between the entry and the turning point", () => {
+        const path = incidentPath(run, across({}));
+        expect(path.map((node) => [node.role, node.kind])).toEqual([
+            ["entry", "origin"],
+            ["carry", "handoff"],
+            ["turning", "agent"],
+            ["damage", "call"],
+        ]);
+        expect(path[1]).toEqual({
+            kind: "handoff",
+            role: "carry",
+            title: "research to billing",
+            detail: "Not verified: no label record matched",
+            agent: "research",
+            runId: RUN,
+            stepId: "h1",
+            label: { origin: "agent:research", trust: "untrusted", sensitivity: "internal" },
+            at: at(4).getTime(),
+        });
+    });
+
+    it("draws a message or an agent run as a tool as a message", () => {
+        const kindOf = (kind: "message" | "tool") => incidentPath(run, across({ kind, verified: true }))[1];
+        expect(kindOf("message")).toMatchObject({ kind: "message", detail: "Verified: its label record matched" });
+        expect(kindOf("tool").kind).toBe("message");
+    });
+
+    it("adds no node when no handoff was found", () => {
+        expect(incidentPath(run, across(null))).toHaveLength(3);
+    });
+});
+
 describe("incidentDetailOf", () => {
     it("holds the verdict, the path, the replay and why there is no note yet", () => {
         const guard = { text: "No rule on payInvoice stopped this call", tool: "payInvoice", guard: null, rule: null };
@@ -70,11 +125,31 @@ describe("incidentDetailOf", () => {
             category: "bad input",
             missingGuard: { ...guard, observe: false },
             handoffFault: null,
+            acrossAgents: null,
             versions: [{ agent: "billing", version: "v3" }],
         });
         expect(detail.findings?.path).toHaveLength(3);
         expect(detail.findings?.replay.status).toBe("not started");
         expect(detail.findings).toMatchObject({ reviewer: null, reviewerStatus: "No explanation yet" });
+    });
+
+    it("keeps the handoff fault and the agents of each part", () => {
+        const acrossAgents = { entryAgent: "research", handoff: null, turningAgent: "billing", damageAgent: "billing" };
+        const verdict = storedVerdict({ category: "bad handoff", handoffFault: "constraint dropped", acrossAgents });
+        const detail = incidentDetailOf(incidentRow({ verdict }), run);
+        expect(detail.findings?.verdict).toMatchObject({
+            category: "bad handoff",
+            handoffFault: "constraint dropped",
+            acrossAgents,
+        });
+    });
+
+    it("reads a verdict stored before handoffs were recorded", () => {
+        const { acrossAgents, handoffFault, ...old } = storedVerdict();
+        expect([acrossAgents, handoffFault]).toEqual([null, null]);
+        const detail = incidentDetailOf(incidentRow({ verdict: old as StoredVerdict }), run);
+        expect(detail.findings?.verdict).toMatchObject({ handoffFault: null, acrossAgents: null });
+        expect(detail.findings?.path).toHaveLength(3);
     });
 
     it("keeps the AI reviewer's note", () => {

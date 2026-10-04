@@ -4,7 +4,14 @@ import type { MissingGuard, Verdict } from "@/lib/data/incidents/types";
 import { VerdictBlock } from "./verdict";
 
 function verdictOf(extra: Partial<Verdict>): Verdict {
-    return { category: "bad input", missingGuard: null, handoffFault: null, versions: [], ...extra };
+    return {
+        category: "bad input",
+        missingGuard: null,
+        handoffFault: null,
+        acrossAgents: null,
+        versions: [],
+        ...extra,
+    };
 }
 
 const OBSERVED: MissingGuard = {
@@ -27,6 +34,7 @@ describe("VerdictBlock", () => {
         expect(valueOf("Category").textContent).toBe("bad input");
         expect(valueOf("Missing guard").textContent).toBe("None, guards held");
         expect(screen.queryByText("Bad handoff")).toBeNull();
+        expect(screen.queryByText("Entry agent")).toBeNull();
         expect(screen.queryByRole("button", { name: "Agent versions" })).toBeNull();
     });
 
@@ -47,6 +55,45 @@ describe("VerdictBlock", () => {
     it("names a bad handoff in sentence case", () => {
         render(<VerdictBlock verdict={verdictOf({ category: "bad handoff", handoffFault: "constraint dropped" })} />);
         expect(valueOf("Bad handoff").textContent).toBe("Constraint dropped");
+    });
+
+    it("names the agent of each part and the handoff that carried the content", () => {
+        const handoff = {
+            stepId: "h1",
+            kind: "tool",
+            from: "research bot",
+            to: "billing",
+            at: "2026-10-03T12:00:00.000Z",
+            trust: "untrusted",
+            verified: false,
+        } as const;
+        const across = { entryAgent: "research bot", handoff, turningAgent: "billing", damageAgent: "payer" };
+        render(<VerdictBlock verdict={verdictOf({ category: "bad handoff", acrossAgents: across })} />);
+        expect(valueOf("Category").textContent).toBe("bad handoff");
+        const agentOf = (term: string) => valueOf(term).querySelector("a")?.getAttribute("href");
+        expect(agentOf("Entry agent")).toBe("/agents/research%20bot");
+        expect(agentOf("Turning agent")).toBe("/agents/billing");
+        expect(agentOf("Damage agent")).toBe("/agents/payer");
+        expect(valueOf("Carried by").textContent).toBe("Agent run as a toolresearch bottobillingnot verified");
+    });
+
+    it("marks a verified handoff, and says when no handoff was found", () => {
+        const across = { entryAgent: "a", turningAgent: "b", damageAgent: "b" };
+        const handoff = { stepId: "h1", from: "a", to: "b", at: "", trust: "trusted", verified: true } as const;
+        const { rerender } = render(
+            <VerdictBlock
+                verdict={verdictOf({ acrossAgents: { ...across, handoff: { ...handoff, kind: "message" } } })}
+            />,
+        );
+        expect(valueOf("Carried by").textContent).toBe("Messageatobverified");
+        rerender(
+            <VerdictBlock
+                verdict={verdictOf({ acrossAgents: { ...across, handoff: { ...handoff, kind: "handoff" } } })}
+            />,
+        );
+        expect(valueOf("Carried by").textContent).toBe("Handoffatobverified");
+        rerender(<VerdictBlock verdict={verdictOf({ acrossAgents: { ...across, handoff: null } })} />);
+        expect(valueOf("Carried by").textContent).toBe("No handoff found");
     });
 
     it("lists agent versions behind a toggle, each linking to its agent", () => {

@@ -21,6 +21,8 @@ export function storedVerdict(fields: Partial<StoredVerdict> = {}): StoredVerdic
         missingGuard: null,
         values: [],
         versions: [{ agent: "billing", version: "v3" }],
+        acrossAgents: null,
+        handoffFault: null,
         ...fields,
     };
 }

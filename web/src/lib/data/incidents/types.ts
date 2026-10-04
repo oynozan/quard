@@ -1,18 +1,23 @@
-import type { MissingGuard } from "@quard/db";
+import type { MissingGuard, StoredVerdict } from "@quard/db";
 import type { RunRow } from "../runs/types";
 import type { Incident, IncidentCategory, PathNode, ReplayStatus } from "../types";
 
 export type { MissingGuard };
 
 // The three kinds of bad handoff the root-cause finder tells apart.
-export type HandoffFault = "wrong information sent" | "constraint dropped" | "correct message misread";
+export type HandoffFault = NonNullable<StoredVerdict["handoffFault"]>;
+
+// The agents of the entry, turning point and damage, and the handoff that carried the content
+export type AcrossAgents = NonNullable<StoredVerdict["acrossAgents"]>;
+export type VerdictHandoff = NonNullable<AcrossAgents["handoff"]>;
 
 export type Verdict = {
     category: IncidentCategory;
     // The guard that would have stopped it. Null when the guards worked.
     missingGuard: MissingGuard | null;
-    // Needs messages between agents (M4), so it is always null for now
     handoffFault: HandoffFault | null;
+    // Null when one agent did it all
+    acrossAgents: AcrossAgents | null;
     // The agent versions involved, so the incident ties to the version that caused it.
     versions: { agent: string; version: string }[];
 };

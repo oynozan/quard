@@ -30,6 +30,20 @@ export const INCIDENT_DETAIL: IncidentDetail = {
                 observe: true,
             },
             handoffFault: null,
+            acrossAgents: {
+                entryAgent: "researcher",
+                handoff: {
+                    stepId: "s2",
+                    kind: "handoff",
+                    from: "researcher",
+                    to: "billing",
+                    at: new Date(START + 30 * SECOND).toISOString(),
+                    trust: "untrusted",
+                    verified: true,
+                },
+                turningAgent: "billing",
+                damageAgent: "billing",
+            },
             versions: [
                 { agent: "researcher", version: "v5" },
                 { agent: "billing", version: "v12" },

@@ -2,7 +2,7 @@ import type { IncidentRow, StoredVerdict, VerdictEntry } from "@quard/db";
 import { nodeOf, originNode, originTitle } from "../../approvals/live/influence";
 import type { RunDetail } from "../../runs/types";
 import type { PathNode, PathRole } from "../../types";
-import type { IncidentDetail, IncidentFindings } from "../types";
+import type { IncidentDetail, IncidentFindings, VerdictHandoff } from "../types";
 import { incidentOf } from "./incident";
 import { replayOf } from "./replay";
 
@@ -22,14 +22,34 @@ function entryNode(run: RunDetail, entry: VerdictEntry): PathNode {
     return { ...node, role: "entry" };
 }
 
-// Entry point, turning point and damage. A step the run does not hold is left out.
+// The message or handoff that carried the content to another agent
+function carryNode(run: RunDetail, handoff: VerdictHandoff): PathNode {
+    return {
+        kind: handoff.kind === "handoff" ? "handoff" : "message",
+        role: "carry",
+        title: `${handoff.from} to ${handoff.to}`,
+        detail: handoff.verified ? "Verified: its label record matched" : "Not verified: no label record matched",
+        agent: handoff.from,
+        runId: run.summary.id,
+        stepId: handoff.stepId,
+        // The verdict keeps only its trust
+        label: { origin: `agent:${handoff.from}`, trust: handoff.trust, sensitivity: "internal" },
+        at: Date.parse(handoff.at),
+    };
+}
+
+// Entry point, any handoff across agents, turning point and damage.
+// A step the run does not hold is left out.
 export function incidentPath(run: RunDetail, verdict: StoredVerdict): PathNode[] {
     const marked = (stepId: string, role: PathRole): PathNode[] => {
         const step = run.steps.find((item) => item.id === stepId);
         return step ? [{ ...nodeOf(run, step), role }] : [];
     };
+    // Verdicts stored before M4 have no acrossAgents
+    const handoff = verdict.acrossAgents?.handoff;
     return [
         entryNode(run, verdict.entry),
+        ...(handoff ? [carryNode(run, handoff)] : []),
         ...marked(verdict.turning.stepId, "turning"),
         ...marked(verdict.damage.stepId, "damage"),
     ];
@@ -55,12 +75,13 @@ function reviewerOf(row: IncidentRow): Pick<IncidentFindings, "reviewer" | "revi
 
 function findingsOf(row: IncidentRow, verdict: StoredVerdict, run: RunDetail): IncidentFindings {
     return {
-        // Handoff faults need messages between agents (M4)
+        // Verdicts stored before M4 lack the last two fields
         verdict: {
             category: verdict.category,
             missingGuard: verdict.missingGuard,
-            handoffFault: null,
             versions: verdict.versions,
+            handoffFault: verdict.handoffFault ?? null,
+            acrossAgents: verdict.acrossAgents ?? null,
         },
         path: incidentPath(run, verdict),
         replay: replayOf(row, verdict, run),

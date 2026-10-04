@@ -1,8 +1,9 @@
+import { Glyph } from "@/components/icons/glyphs";
 import { SectionHeading } from "@/components/kit/headings";
 import { Badge } from "@/components/kit/labels";
 import { TextLink } from "@/components/kit/links";
 import { Absent, DetailList, DetailRow } from "@/components/kit/detail/detail-list";
-import type { MissingGuard as Missing, Verdict } from "@/lib/data/incidents/types";
+import type { AcrossAgents, MissingGuard as Missing, Verdict, VerdictHandoff } from "@/lib/data/incidents/types";
 import { sentenceCase } from "../lib/labels";
 import { Disclosure } from "./disclosure";
 
@@ -17,6 +18,56 @@ function MissingGuard({ guard }: { guard: Missing }) {
             </span>
             <span className="text-[12px] text-ink-muted">{guard.text}</span>
         </span>
+    );
+}
+
+const LINK_WORD: Record<VerdictHandoff["kind"], string> = {
+    message: "Message",
+    handoff: "Handoff",
+    tool: "Agent run as a tool",
+};
+
+function AgentLink({ agent }: { agent: string }) {
+    return (
+        <TextLink href={`/agents/${encodeURIComponent(agent)}`} mono>
+            {agent}
+        </TextLink>
+    );
+}
+
+// The kind, "from › to", and whether the receiver matched its label record
+function Handoff({ handoff }: { handoff: VerdictHandoff }) {
+    return (
+        <span className="inline-flex flex-wrap items-center justify-end gap-x-[6px] gap-y-1">
+            <span className="text-ink-2">{LINK_WORD[handoff.kind]}</span>
+            <span className="mono inline-flex items-center gap-1">
+                {handoff.from}
+                <Glyph name="chevronRight" size={11} className="opacity-60" />
+                <span className="sr-only">to</span>
+                {handoff.to}
+            </span>
+            <Badge>{handoff.verified ? "verified" : "not verified"}</Badge>
+        </span>
+    );
+}
+
+// Which agent played each part, in path order
+function AgentRows({ across }: { across: AcrossAgents }) {
+    return (
+        <>
+            <DetailRow term="Entry agent">
+                <AgentLink agent={across.entryAgent} />
+            </DetailRow>
+            <DetailRow term="Carried by">
+                {across.handoff ? <Handoff handoff={across.handoff} /> : <Absent>No handoff found</Absent>}
+            </DetailRow>
+            <DetailRow term="Turning agent">
+                <AgentLink agent={across.turningAgent} />
+            </DetailRow>
+            <DetailRow term="Damage agent">
+                <AgentLink agent={across.damageAgent} />
+            </DetailRow>
+        </>
     );
 }
 
@@ -39,21 +90,14 @@ export function VerdictBlock({ verdict }: { verdict: Verdict }) {
                 {verdict.handoffFault ? (
                     <DetailRow term="Bad handoff">{sentenceCase(verdict.handoffFault)}</DetailRow>
                 ) : null}
+                {verdict.acrossAgents ? <AgentRows across={verdict.acrossAgents} /> : null}
             </DetailList>
 
             {verdict.versions.length > 0 ? (
                 <Disclosure label="Agent versions" className="mt-4">
                     <DetailList className="border-t border-line">
                         {verdict.versions.map((item) => (
-                            <DetailRow
-                                key={item.agent}
-                                term={
-                                    <TextLink href={`/agents/${encodeURIComponent(item.agent)}`} mono>
-                                        {item.agent}
-                                    </TextLink>
-                                }
-                                mono
-                            >
+                            <DetailRow key={item.agent} term={<AgentLink agent={item.agent} />} mono>
                                 {item.version}
                             </DetailRow>
                         ))}

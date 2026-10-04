@@ -84,7 +84,11 @@ describe("IncidentPage", () => {
         const replay = within(screen.getByRole("region", { name: "Replay" }));
         expect(replay.getByText("Confirmed")).toBeTruthy();
         expect(screen.getByText(findings.reviewer!.paragraphs[0])).toBeTruthy();
-        expect(within(screen.getByRole("region", { name: "Verdict" })).getByText("bad input")).toBeTruthy();
+        const verdict = within(screen.getByRole("region", { name: "Verdict" }));
+        expect(verdict.getByText("bad input")).toBeTruthy();
+        expect(verdict.getByText("Carried by").nextElementSibling?.textContent).toBe(
+            "Handoffresearchertobillingverified",
+        );
     });
 
     it("keeps the replay and AI reviewer panes before the first round and note", async () => {
