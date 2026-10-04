@@ -2,6 +2,7 @@ import type { RunEvent } from "@quard/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configure } from "../core/config.ts";
 import { isGuardRefusal } from "../core/refusal.ts";
+import { quard } from "../index.ts";
 import { decisionsOf } from "../test/events.ts";
 import { resetAll } from "../test/reset.ts";
 import { guardWithSignal } from "./guard.ts";
@@ -68,12 +69,17 @@ describe("guardWithSignal", () => {
 });
 
 // Aborts the call as soon as its limit check is recorded
-function abortOnLimit(controller: AbortController) {
+function abortOnLimit(controller: AbortController, later = false) {
     const events: RunEvent[] = [];
     const onEvent = (event: RunEvent) => {
         events.push(event);
-        if (event.type === "decision" && event.guard === "limit") {
-            controller.abort();
+        if (event.type === "decision" && event.guard === "limit" && !controller.signal.aborted) {
+            // A microtask lands while the call is being counted
+            if (later) {
+                queueMicrotask(() => controller.abort());
+            } else {
+                controller.abort();
+            }
         }
     };
     configure({ onEvent });
@@ -81,6 +87,21 @@ function abortOnLimit(controller: AbortController) {
 }
 
 describe("a call aborted before it ran", () => {
+    it("uses up no limit", async () => {
+        const controller = new AbortController();
+        abortOnLimit(controller);
+        const { raw, pay } = payWith({ type: "limit", maxCallsPerRun: 1 });
+
+        const [first, second] = await quard.run({ agent: "billing" }, async () => [
+            await pay(controller.signal, [{ amount: 1 }]),
+            await pay(new AbortController().signal, [{ amount: 2 }]),
+        ]);
+
+        expect(second).toBe("paid");
+        expect(raw).toHaveBeenCalledExactlyOnceWith({ amount: 2 });
+        expect(isGuardRefusal(first) && first.reason).toBe("call_aborted");
+    });
+
     it("is recorded with its own guard and reason, not as an approval", async () => {
         const controller = new AbortController();
         const events = abortOnLimit(controller);
@@ -95,5 +116,16 @@ describe("a call aborted before it ran", () => {
         expect(decisions).toContainEqual(
             expect.objectContaining({ guard: "abort", rule: "aborted", decision: "block", reason: "call_aborted" }),
         );
+    });
+
+    it("never runs the tool when the abort lands while the call is counted", async () => {
+        const controller = new AbortController();
+        abortOnLimit(controller, true);
+        const { raw, pay } = payWith({ type: "limit", maxCallsPerRun: 5 });
+
+        const refused = await pay(controller.signal, [{ amount: 1 }]);
+
+        expect(isGuardRefusal(refused) && refused.reason).toBe("call_aborted");
+        expect(raw).not.toHaveBeenCalled();
     });
 });

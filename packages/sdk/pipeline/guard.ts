@@ -158,9 +158,13 @@ async function runPipeline(code: Spec, args: unknown[], signal: AbortSignal | un
         return refuse(spec, call, requested, final);
     }
 
-    // 7. Count, then run inside the scope so calls made by the tool join this run
+    // 7. Count, then run inside the scope so calls made by the tool join
+    // this run. A call its caller gave up on is not counted.
     const stop =
-        (await countCall(call, spec.list, checked)) ?? changed(call, approvedArgs) ?? callAborted(call, signal);
+        callAborted(call, signal) ??
+        (await countCall(call, spec.list, checked)) ??
+        changed(call, approvedArgs) ??
+        callAborted(call, signal);
     if (stop !== undefined) {
         return refuse(spec, call, requested, stop);
     }
@@ -181,7 +185,7 @@ type Guarded<F extends (...args: never[]) => unknown> = (
 ) => Promise<Awaited<ReturnType<F>> | GuardRefusal>;
 
 // guard() with an abort signal for each call. An aborted call stops
-// waiting for approval and never runs the tool.
+// waiting for approval, uses up no limits and never runs the tool.
 export function guardWithSignal<F extends (...args: never[]) => unknown>(
     fn: F,
     options: GuardOptions | GuardOptions[],
