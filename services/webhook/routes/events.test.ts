@@ -155,6 +155,51 @@ describe("POST /v1/events", () => {
         expect(await (await post(batch)).json()).toEqual({ received: 3, stored: 0 });
     });
 
+    it("stores an x402 payment, wallets in clear, and adds it to the run's spend", async () => {
+        const runId = "7".repeat(32);
+        const payTo = "0x209693Bc6afc0C5328bA36FaF03C514EF312287C";
+        const payment = {
+            type: "payment",
+            runId,
+            stepId: "8".repeat(16),
+            agent: "billing",
+            at: AT,
+            stage: "settled",
+            host: "api.example.com",
+            resource: "https://api.example.com/report?token=sk-live-1234567890abcdef",
+            x402Version: 2,
+            scheme: "exact",
+            network: "eip155:8453",
+            asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            amount: "50000",
+            usd: 0.05,
+            payTo,
+            transaction: "0x" + "ab".repeat(32),
+            delivered: true,
+        };
+        const batch = { events: [{ id: id(), event: payment }] };
+
+        expect(await (await post(batch)).json()).toEqual({ received: 1, stored: 1 });
+        expect(await (await post(batch)).json()).toEqual({ received: 1, stored: 0 });
+
+        const row = await test.db
+            .selectFrom("payments")
+            .selectAll()
+            .where("project_id", "=", projectId)
+            .where("run_id", "=", runId)
+            .executeTakeFirstOrThrow();
+        expect(row).toMatchObject({ stage: "settled", amount: "50000", usd: 0.05, pay_to: payTo, delivered: true });
+        expect(row.tx_hash).toBe(payment.transaction);
+        expect(row.resource).not.toContain("sk-live-1234567890abcdef");
+        const run = await test.db
+            .selectFrom("runs")
+            .select(["spend_usd", "spend_known"])
+            .where("project_id", "=", projectId)
+            .where("run_id", "=", runId)
+            .executeTakeFirstOrThrow();
+        expect(run).toEqual({ spend_usd: 0.05, spend_known: true });
+    });
+
     it.each([
         ["no key", ""],
         ["an unknown key", "Bearer qk_live_nope"],
