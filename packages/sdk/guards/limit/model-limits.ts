@@ -3,6 +3,7 @@ import { runLimits } from "../../core/config.ts";
 import { now, record } from "../../core/recorder.ts";
 import { GuardRefusal } from "../../core/refusal.ts";
 import type { RunState } from "../../context/run.ts";
+import { rulesHash } from "../../policy/rules.ts";
 import { policyVersion } from "../../policy/state.ts";
 
 export type ModelCall = { run: RunState; agent: string; stepId: string; model: string };
@@ -39,6 +40,7 @@ export function judgeModelCall(call: ModelCall, steps: number, costUsd: number):
             enforced: limits.mode === "block",
             reason: "limit_reached",
             policy: policyVersion(),
+            rules: rulesHash(),
         });
     }
     if (over.length === 0 || limits.mode === "observe") {

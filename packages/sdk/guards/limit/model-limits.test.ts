@@ -2,7 +2,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { configure } from "../../core/config.ts";
 import { takeEvents } from "../../core/recorder.ts";
+import { registerGuardedTool } from "../../context/registry.ts";
 import { newRun } from "../../context/run.ts";
+import { rulesHash } from "../../policy/rules.ts";
 import { tempDir, writeJson } from "../../test/files.ts";
 import { resetAll } from "../../test/reset.ts";
 import { addModelCost, checkModelCall, countModelCall, judgeModelCall, type ModelCall } from "./model-limits.ts";
@@ -51,7 +53,25 @@ describe("checkModelCall", () => {
                 enforced: false,
                 reason: "limit_reached",
                 policy: undefined,
+                rules: undefined,
             },
+        ]);
+    });
+
+    it("records the rules hash on step and cost decisions", () => {
+        registerGuardedTool("pay", [{ type: "approval" }]);
+        configure({ runLimits: { mode: "block", steps: 1, costUsd: 0.5 } });
+        const call = modelCall();
+        call.run.modelCalls = 1;
+        call.run.costUsd = 0.5;
+
+        checkModelCall(call);
+
+        const hash = rulesHash();
+        expect(hash).toMatch(/^[0-9a-f]{16}$/);
+        expect(takeEvents().map((event) => "rule" in event && [event.rule, event.rules])).toEqual([
+            ["max-steps", hash],
+            ["max-cost", hash],
         ]);
     });
 
