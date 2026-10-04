@@ -17,6 +17,7 @@ const delegation = (from: string, to: string, delegations: number, untrusted: nu
 const talk = (from: string, to: string, handoffs: number, messages: number, untrusted: number, secondsAgo: number) => ({
     from,
     to,
+    delegations: 0,
     handoffs,
     messages,
     untrusted,
@@ -40,6 +41,41 @@ describe("linksOf", () => {
                 untrusted: 1,
                 untrustedShare: 0.333,
                 lastAt: NOW - 5_000,
+            },
+        ]);
+    });
+
+    it("adds delegations from another process to the ones made in-process", () => {
+        const links = linksOf(
+            [delegation("orchestrator", "billing", 2, 1, 5)],
+            [
+                { ...talk("orchestrator", "billing", 1, 1, 1, 9), delegations: 3 },
+                { ...talk("orchestrator", "support", 0, 0, 0, 2), delegations: 1 },
+            ],
+        );
+
+        expect(links).toEqual([
+            {
+                from: "orchestrator",
+                to: "billing",
+                delegations: 5,
+                handoffs: 1,
+                messages: 1,
+                total: 7,
+                untrusted: 2,
+                untrustedShare: 0.286,
+                lastAt: NOW - 5_000,
+            },
+            {
+                from: "orchestrator",
+                to: "support",
+                delegations: 1,
+                handoffs: 0,
+                messages: 0,
+                total: 1,
+                untrusted: 0,
+                untrustedShare: 0,
+                lastAt: NOW - 2_000,
             },
         ]);
     });

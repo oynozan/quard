@@ -5,9 +5,9 @@ export type LayoutNode = { name: string; layer: number; slot: number };
 
 export type GraphLayout = { nodes: LayoutNode[]; layers: number; slots: number };
 
-// Delegations and messages set the layers. A delegation across processes counts
-// as a message, so it still does. Handoffs never push an agent deeper. Busiest
-// links go first, and one that would close a loop, such as a reply, is left out.
+// Delegations, including ones across processes, and messages set the layers.
+// Handoffs never push an agent deeper. Busiest links go first, and one that
+// would close a loop, such as a reply, is left out.
 function layersOf(names: string[], edges: AgentEdge[]): Map<string, number> {
     const into = new Map<string, string[]>();
     const outOf = new Map<string, string[]>();
