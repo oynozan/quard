@@ -76,8 +76,15 @@ export type {
     RulesSnapshot,
     ServerMessage,
 } from "./control/protocol.ts";
-export { labelsMessage, lookupMessage, runCountMessage } from "./control/labels.ts";
-export type { LabelsMessage, LookupMessage, RunCountMessage } from "./control/labels.ts";
+export {
+    labelsMessage,
+    lookupMessage,
+    MAX_RUN_COUNTS,
+    runCount,
+    runCountedMessage,
+    runCountMessage,
+} from "./control/labels.ts";
+export type { LabelsMessage, LookupMessage, RunCount, RunCountedMessage, RunCountMessage } from "./control/labels.ts";
 export type { UploadBatch, UploadItem } from "./events/upload.ts";
 export { isRunId, isStepId, newEventId, newRunId, newStepId } from "./ids/ids.ts";
 export { combineLabels } from "./labels/combine.ts";

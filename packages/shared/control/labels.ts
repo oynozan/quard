@@ -18,18 +18,27 @@ export const lookupMessage = z.object({
     ]),
 });
 
-// Adds to a counter of one run, as count does for a day. Control
-// answers with "counted".
-export const runCountMessage = z.object({
-    type: z.literal("run_count"),
-    id,
-    runId: hex(32),
+// The most counters one run_count adds to
+export const MAX_RUN_COUNTS = 20;
+
+// One addition to a run counter. With max it only adds while the run's
+// total stays at or under it; without max it always adds.
+export const runCount = z.object({
     counter: z
         .string()
         .regex(/^(steps|cost|calls:.+|amount:.+)$/)
         .max(200),
     add: z.number().finite().nonnegative(),
     max: z.number().finite().nonnegative().optional(),
+});
+
+// Adds to counters of one run, as count does for a day: all of them, or
+// none when one would pass its max. Control answers with "run_counted".
+export const runCountMessage = z.object({
+    type: z.literal("run_count"),
+    id,
+    runId: hex(32),
+    counts: z.array(runCount).min(1).max(MAX_RUN_COUNTS),
 });
 
 // --- control to SDK ---
@@ -42,6 +51,17 @@ export const labelsMessage = z.object({
     records: z.array(labelRecord).max(20),
 });
 
+// Each counter's total, in the order sent. Nothing was added when ok
+// is false.
+export const runCountedMessage = z.object({
+    type: z.literal("run_counted"),
+    id,
+    ok: z.boolean(),
+    used: z.array(z.number()).max(MAX_RUN_COUNTS),
+});
+
 export type LookupMessage = z.infer<typeof lookupMessage>;
+export type RunCount = z.infer<typeof runCount>;
 export type RunCountMessage = z.infer<typeof runCountMessage>;
+export type RunCountedMessage = z.infer<typeof runCountedMessage>;
 export type LabelsMessage = z.infer<typeof labelsMessage>;
