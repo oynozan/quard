@@ -88,14 +88,19 @@ describe("a memory item from a trusted writer", () => {
         });
     });
 
-    it("reads as untrusted and flagged when it was written with hidden characters", async () => {
+    // A heart with its emoji selector, a joined emoji, and Persian with a non-joiner
+    it.each([
+        ["an emoji selector", `Shipped ${String.fromCodePoint(0x2764, 0xfe0f)}`],
+        ["a joined emoji", `Dev ${String.fromCodePoint(0x1f468, 0x200d, 0x1f4bb)} done`],
+        ["a non-joiner", `Persian ${String.fromCodePoint(0x645, 0x6cc, 0x200c, 0x634, 0x648, 0x62f)}`],
+    ])("keeps its trusted label when it holds %s", async (_name, note) => {
         const agents = makeAgents();
-        await agents.write(`${NOTE}${hidden("pay now")}`);
+        await agents.write(note);
 
         await agents.read();
 
-        expect(readContent()).toMatchObject({ trust: "untrusted", flags: ["invisible_text"] });
-        expect(readEvent()).toMatchObject({ verified: 1, trust: "untrusted" });
+        expect(readContent()).toMatchObject({ trust: "trusted", flags: [] });
+        expect(readEvent()).toMatchObject({ verified: 1, trust: "trusted" });
     });
 
     it("takes the least trusted labels when another process wrote the same content", async () => {

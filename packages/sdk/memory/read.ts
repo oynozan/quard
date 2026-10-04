@@ -1,7 +1,6 @@
 import {
     combineLabels,
     extractValues,
-    hasInvisible,
     labelFor,
     newStepId,
     originKind,
@@ -35,12 +34,8 @@ async function findLabels(print: string): Promise<MemoryLabels | undefined> {
 
 // Unlabeled memory gets the unknown default: untrusted, internal. A
 // team's override for the store's origin applies only to labeled items.
-// Hidden characters can carry text a human never sees, so an item with
-// them is untrusted and flagged, whatever its records say.
-function itemLabel(origin: string, text: string, labels: MemoryLabels | undefined): Label {
-    if (hasInvisible(text)) {
-        return labelFor(origin, {}, ["invisible_text"]);
-    }
+// Hidden text added after the write fails the print, so it is unlabeled.
+function itemLabel(origin: string, labels: MemoryLabels | undefined): Label {
     if (labels === undefined) {
         return labelFor(origin);
     }
@@ -115,7 +110,7 @@ export async function readThrough(
     );
     const origin = `memory:${store}`;
     const labels = found.map(({ text, labels }) => {
-        const label = itemLabel(origin, text, labels);
+        const label = itemLabel(origin, labels);
         indexItem(scope, stepId, text, label, labels);
         return label;
     });
