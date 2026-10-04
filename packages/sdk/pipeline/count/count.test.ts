@@ -73,47 +73,92 @@ describe("countCall", () => {
     });
 });
 
+function linkedControl() {
+    const fake = fakeSockets();
+    const control = createControl({ url: "ws://c", key: "k", hashKey: parseHashKey("ab".repeat(32)), open: fake.open });
+    setActiveControl(control);
+    return { control, socket: fake.connect() };
+}
+
+function sharedCall(input: object) {
+    const call = makeAskableCall(input);
+    markShared(call.run);
+    return call;
+}
+
+const settle = () => vi.advanceTimersByTimeAsync(0);
+
 describe("countCall for a run that spans processes", () => {
     it("counts per-run limits through control and delegation here", async () => {
-        const fake = fakeSockets();
-        const control = createControl({
-            url: "ws://c",
-            key: "k",
-            hashKey: parseHashKey("ab".repeat(32)),
-            open: fake.open,
-        });
-        setActiveControl(control);
-        const socket = fake.connect();
-        const call = makeAskableCall({ to: "helper" });
-        markShared(call.run);
+        const { control, socket } = linkedControl();
+        const call = sharedCall({ to: "helper" });
 
         const counted = countCall(call, [{ type: "limit", maxCallsPerRun: 3, delegateTo: "to" }], []);
+        await settle();
         const [count] = sentOf(socket, "run_count");
-        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: 2 });
+        socket.reply({ type: "run_counted", id: count?.id as string, ok: true, used: [2] });
 
         expect(await counted).toBeUndefined();
-        expect([count?.counter, count?.max]).toEqual(["calls:payInvoice", 3]);
+        expect(count?.counts).toEqual([{ counter: "calls:payInvoice", add: 1, max: 3 }]);
         expect(call.run.counters.get("calls:payInvoice")).toBe(2);
         expect(call.run.helpers.get("billing")).toEqual(new Set(["helper"]));
         control.stop();
     });
 
-    it("stops at a per-run refusal, and takes back only the delegation when a per-day limit refuses", async () => {
-        const call = makeAskableCall({ to: "helper" });
-        markShared(call.run);
-        const list = [
-            { type: "limit" as const, maxCallsPerRun: 1, delegateTo: "to" },
-            { type: "limit" as const, maxCallsPerDay: 2 },
-        ];
+    it("counts per-run limits last, after the per-day counts and the fleet check", async () => {
+        const { control, socket } = linkedControl();
+        const call = sharedCall({ url: "https://acme.com" });
+        const list = [{ type: "limit" as const, maxCallsPerRun: 3, maxCallsPerDay: 3, fleetCheck: ["url"] }];
+
+        const counted = countCall(call, list, []);
+        await settle();
+        const [count] = sentOf(socket, "count");
+        socket.reply({ type: "counted", id: count?.id as string, ok: true, used: 1 });
+        await settle();
+        const [fleet] = sentOf(socket, "fleet");
+        socket.reply({ type: "fleet_result", id: fleet?.id as string, quarantined: [], fleetObserveUntil: null });
+        await settle();
+        const [runCount] = sentOf(socket, "run_count");
+        socket.reply({ type: "run_counted", id: runCount?.id as string, ok: true, used: [1] });
+
+        expect(await counted).toBeUndefined();
+        expect(socket.sent.map((message) => message.type).slice(1)).toEqual(["count", "fleet", "run_count"]);
+        control.stop();
+    });
+
+    it("sends no per-run count when the fleet check refuses the call, and takes back the delegation", async () => {
+        const { control, socket } = linkedControl();
+        const call = sharedCall({ url: "https://evil-pay.com", to: "helper" });
+        const list = [{ type: "limit" as const, maxCallsPerRun: 3, fleetCheck: ["url"], delegateTo: "to" }];
+
+        const counted = countCall(call, list, []);
+        await settle();
+        const [fleet] = sentOf(socket, "fleet");
+        const quarantined = [{ key: "domain:evil-pay.com", observe: false }];
+        socket.reply({ type: "fleet_result", id: fleet?.id as string, quarantined, fleetObserveUntil: null });
+
+        expect(await counted).toMatchObject({ rule: "fleet-check" });
+        expect(sentOf(socket, "run_count")).toEqual([]);
+        expect([...(call.run.helpers.get("billing") ?? [])]).toEqual([]);
+        control.stop();
+    });
+
+    it("adds nothing per run when a per-day limit refuses the call", async () => {
+        const call = sharedCall({});
+        const list = [{ type: "limit" as const, maxCallsPerRun: 5, maxCallsPerDay: 1 }];
+        await countCall(call, list, []);
+
+        expect(await countCall(call, list, [])).toMatchObject({ rule: "max-calls-per-day" });
+        expect(call.run.counters.get("calls:payInvoice")).toBe(1);
+    });
+
+    it("leaves the per-day count when the per-run limit refuses the call last", async () => {
+        const call = sharedCall({});
+        const list = [{ type: "limit" as const, maxCallsPerRun: 1, maxCallsPerDay: 5 }];
         await countCall(call, list, []);
 
         expect(await countCall(call, list, [])).toMatchObject({ rule: "max-calls-per-run" });
-        expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(1);
-
-        const other = makeAskableCall({ to: "helper" });
-        markShared(other.run);
-        await countCall(other, list, []);
-        expect(await countCall(makeAskableCall({}), list, [])).toMatchObject({ rule: "max-calls-per-day" });
-        expect(other.run.helpers.get("billing")).toEqual(new Set(["helper"]));
+        expect(call.run.counters.get("calls:payInvoice")).toBe(1);
+        expect(dayUsed(utcDay(), "payInvoice", "calls")).toBe(2);
     });
 });
