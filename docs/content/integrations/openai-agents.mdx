@@ -57,7 +57,7 @@ const result = await runner.run(orchestrator, "Pay invoice 114 from Acme Supplie
 
 - Every call runs through Quard's checks. Only the input is checked, and `execute` still gets the run context and the call details.
 - A block becomes a tool guardrail rejection from the `quard` guardrail. The model reads Quard's refusal as the tool result, and `result.toolOutputGuardrailResults` holds it.
-- With `onBlock: "throw"`, the run stops and `run()` rejects with `GuardBlockedError`. Its `cause` is the SDK's `ToolCallError`.
+- With `onBlock: "throw"`, the run stops and `run()` rejects with `GuardBlockedError`. Its `cause` is the SDK's `ToolCallError`. A streamed run gives the same error through `result.completed`, its events and `result.error`.
 - An approval guard waits inside the call for an answer from the dashboard, as anywhere else. The SDK's own `needsApproval` still works beside it.
 
 ## Known gaps

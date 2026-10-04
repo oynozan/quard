@@ -1,6 +1,6 @@
-import { RunState, Runner, StreamedRunResult, ToolCallError, type Agent } from "@openai/agents";
-import { GuardBlockedError } from "../../core/refusal.ts";
+import { RunState, Runner, StreamedRunResult, type Agent } from "@openai/agents";
 import { currentScope, runScope, withScope, type Scope } from "../../context/scope.ts";
+import { unwrapBlocked } from "./blocked.ts";
 import { handOff, isFrame, startToolCall, toolFrame, topFrame } from "./frames.ts";
 
 type Run = (this: Runner, agent: Agent, input: unknown, options?: unknown) => Promise<unknown>;
@@ -15,20 +15,6 @@ export function followProvider(provider: object): void {
     providers.add(provider);
 }
 
-// The SDK wraps errors thrown in tool calls. A guard's own throw comes
-// out as itself, so app code catches GuardBlockedError as usual.
-async function unwrapBlocked<T>(promise: Promise<T>): Promise<T> {
-    try {
-        return await promise;
-    } catch (error) {
-        if (error instanceof ToolCallError && error.error instanceof GuardBlockedError) {
-            error.error.cause ??= error;
-            throw error.error;
-        }
-        throw error;
-    }
-}
-
 // A run() outside any quard scope starts a Quard run. It ends with the
 // result, or for a stream, when the stream completes.
 function startRun<T>(agent: string, call: () => Promise<T>): Promise<T> {
@@ -39,7 +25,7 @@ function startRun<T>(agent: string, call: () => Promise<T>): Promise<T> {
             if (result instanceof StreamedRunResult) {
                 // The caller reads the stream while the run goes on
                 resolve(result);
-                await unwrapBlocked(result.completed);
+                await result.completed;
             }
             return result;
         }).then(resolve, reject);
