@@ -9,6 +9,8 @@ import { askMessage, HASH, IBAN, RULES } from "../test/messages.ts";
 import { ask, beat, cancel } from "./ask.ts";
 
 const DANA = "dana@acme.com";
+// Far older than the stale limit
+const LONG_AGO = new Date("2026-01-01T00:00:00.000Z");
 
 let test: TestDb;
 
@@ -26,11 +28,18 @@ async function setup() {
     return { project, ctx, ...(await readyConnection(ctx, project)) };
 }
 
-// Opens a request for a payInvoice call that then leaves, and returns its id
+// Opens a request for a payInvoice call that then leaves: its connection closes
+// and its beats stop. Returns the request id.
 async function leftRequest(ctx: Context, project: TestProject, argsHash = HASH): Promise<string> {
     const { connection, socket } = await readyConnection(ctx, project);
-    await ask(ctx, connection, askMessage({ argsHash }));
+    const message = askMessage({ argsHash });
+    await ask(ctx, connection, message);
     ctx.registry.remove(connection);
+    await test.db
+        .updateTable("approval_waiters")
+        .set({ last_beat_at: LONG_AGO })
+        .where("ask_id", "=", message.askId)
+        .execute();
     return String(socket.of("asked")[0]?.requestId);
 }
 

@@ -24,6 +24,8 @@ const HASH_KEY = "ab".repeat(32);
 const INVOICE = { iban: "DE89370400440532013000", amount: 4950 };
 const APP = join(import.meta.dirname, "..", "test", "waiting-app.ts");
 const WAIT = { timeout: 10_000, interval: 20 };
+// Far older than the stale limit
+const LONG_AGO = new Date("2026-01-01T00:00:00.000Z");
 
 type Invoice = typeof INVOICE;
 
@@ -213,6 +215,12 @@ describe("approvals from the dashboard", { timeout: 30_000 }, () => {
         app.kill("SIGKILL");
         // Control lets go of the dead process's call once its connection is closed
         await vi.waitFor(async () => expect(await connectedPids()).toEqual([]), WAIT);
+        // Its beats stopped long ago, so the dashboard shows it as no longer waiting
+        await test.db
+            .updateTable("approval_waiters")
+            .set({ last_beat_at: LONG_AGO })
+            .where("request_id", "=", request.id)
+            .execute();
         expect(await decideApproval(test.db, project.projectId, request.id, "once", DANA)).toBe("decided");
 
         linkSdk();

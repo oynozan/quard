@@ -1,7 +1,24 @@
 import { sql, type ExpressionBuilder } from "kysely";
 import type { Db } from "../../connect/connect.ts";
 import type { Database } from "../../schema/database.ts";
+import { STILL_WAITS } from "./live.ts";
 import type { OnceClaim } from "./types.ts";
+
+// No other call that still waits on the request row `approval_requests` is
+// ahead of this one. Calls on a request wait their turn by `since`, and a call
+// that does not wait on it comes after all of them.
+function firstInLine(askId: string) {
+    return sql<boolean>`NOT EXISTS (
+        SELECT 1 FROM approval_waiters w
+        WHERE w.project_id = approval_requests.project_id AND w.request_id = approval_requests.id
+            AND w.ask_id <> ${askId} AND ${STILL_WAITS}
+            AND NOT EXISTS (
+                SELECT 1 FROM approval_waiters me
+                WHERE me.project_id = w.project_id AND me.request_id = w.request_id AND me.ask_id = ${askId}
+                    AND (me.since, me.ask_id) < (w.since, w.ask_id)
+            )
+    )`;
+}
 
 // The unrevoked "always approve" for this agent, tool and arguments
 export async function findActiveGrant(
@@ -36,7 +53,8 @@ export async function useGrant(db: Db, projectId: string, grantId: string): Prom
 }
 
 // Gives this call an unused "approve once" for the identical call, oldest
-// decision first, for example one given after the waiting process died.
+// decision first, once no call on that request still beats: for example one
+// given after the waiting process died.
 // SKIP LOCKED lets two claims at the same time take different requests.
 export async function claimOnce(db: Db, projectId: string, claim: OnceClaim): Promise<string | undefined> {
     const sameCall = (eb: ExpressionBuilder<Database, "approval_requests">) =>
@@ -67,6 +85,7 @@ export async function claimOnce(db: Db, projectId: string, claim: OnceClaim): Pr
                 .select("id")
                 .where(sameCall)
                 .where("used_by", "is", null)
+                .where(firstInLine(claim.askId))
                 .orderBy("decided_at")
                 .orderBy("id")
                 .limit(1)

@@ -1,4 +1,4 @@
-import { claimOnce, claimRequest, decideApproval, decidedRequests, getApprovalRequest } from "@quard/db";
+import { claimRequest, decideApproval, decidedRequests, getApprovalRequest } from "@quard/db";
 import { startTestDb, type TestDb } from "@quard/db/testing";
 import { APPROVAL_STALE_MS, type ApprovalAnswer, type AskMessage } from "@quard/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -10,6 +10,8 @@ import { ask, beat } from "./ask.ts";
 import { createDelivery } from "./deliver.ts";
 
 const DANA = "dana@acme.com";
+// Far older than the stale limit
+const LONG_AGO = new Date("2026-01-01T00:00:00.000Z");
 
 let test: TestDb;
 let hashes = 0;
@@ -59,6 +61,25 @@ async function setup() {
 
 function beatOf(ctx: Context, call: { connection: Connection; message: AskMessage }) {
     return beat(ctx, call.connection, { type: "beat", askIds: [call.message.askId] });
+}
+
+// The stored beats of these calls stopped long ago too
+async function staleRows(...calls: ({ message: AskMessage } | undefined)[]) {
+    const askIds = calls.map((call) => String(call?.message.askId));
+    await test.db
+        .updateTable("approval_waiters")
+        .set({ last_beat_at: LONG_AGO })
+        .where("ask_id", "in", askIds)
+        .execute();
+}
+
+// Another call ran the approve once already
+function usedBy(requestId: string, askId: string) {
+    return test.db
+        .updateTable("approval_requests")
+        .set({ used_by: askId, used_at: new Date() })
+        .where("id", "=", requestId)
+        .execute();
 }
 
 describe("delivery of deny and always approve", () => {
@@ -113,10 +134,9 @@ describe("delivery of approve once", () => {
 
     it("asks everyone again when another call already ran it", async () => {
         const { project, ctx, delivery } = await setup();
-        const { calls, requestId, argsHash } = await waitingCalls(ctx, project.projectId, 1);
+        const { calls, requestId } = await waitingCalls(ctx, project.projectId, 1);
         await decideApproval(test.db, project.projectId, requestId, "once", DANA);
-        const call = { agent: "billing", tool: "payInvoice", argsHash };
-        await claimOnce(test.db, project.projectId, { ...call, askId: "7".repeat(16) });
+        await usedBy(requestId, "7".repeat(16));
 
         await delivery.check();
 
@@ -212,6 +232,7 @@ describe("delivery of approve once", () => {
         const { project, ctx, clock, delivery } = await setup();
         const { calls, requestId, argsHash } = await waitingCalls(ctx, project.projectId, 1);
         clock.now += APPROVAL_STALE_MS + 1;
+        await staleRows(calls[0]);
         await decideApproval(test.db, project.projectId, requestId, "once", DANA);
 
         await delivery.check();

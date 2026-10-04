@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { connect, type Db } from "../../connect/connect.ts";
-import { askId, HASH, requestInput } from "../../test/approvals.ts";
+import { askId, HASH, requestInput, waiterInput } from "../../test/approvals.ts";
 import { startTestDb, type TestDb } from "../../test/pglite.ts";
 import { createProject } from "../projects.ts";
 import { claimOnce, claimRequest, findActiveGrant, useGrant } from "./claims.ts";
 import { decideApproval, revokeGrant } from "./decide.ts";
 import { getApprovalRequest, openApprovalRequest } from "./requests.ts";
+import { addWaiter, finishWaiters } from "./waiters.ts";
 
 let test: TestDb;
 // A pool with several connections, for calls that race
@@ -22,6 +23,29 @@ afterAll(async () => {
 });
 
 const call = { agent: "billing", tool: "payInvoice", argsHash: HASH };
+// Far older than the stale limit
+const LONG_AGO = new Date("2026-01-01T00:00:00.000Z");
+
+// Calls that wait on a request, the first one longest, each still beating
+async function waitOn(projectId: string, requestId: string, count: number): Promise<string[]> {
+    const askIds: string[] = [];
+    for (let n = 0; n < count; n += 1) {
+        const waiter = waiterInput(requestId);
+        await addWaiter(test.db, projectId, waiter);
+        await test.db
+            .updateTable("approval_waiters")
+            .set({ since: new Date(Date.UTC(2026, 9, 3, 12, n)) })
+            .where("ask_id", "=", waiter.askId)
+            .execute();
+        askIds.push(waiter.askId);
+    }
+    return askIds;
+}
+
+// The call stopped beating long ago
+async function stopBeating(askId: string): Promise<void> {
+    await test.db.updateTable("approval_waiters").set({ last_beat_at: LONG_AGO }).where("ask_id", "=", askId).execute();
+}
 
 // Opens a request for the payInvoice call and answers it
 async function decided(projectId: string, answer: "once" | "always" | "deny", argsHash = HASH): Promise<string> {
@@ -73,6 +97,22 @@ describe("claimOnce", () => {
             usedBy: first,
             usedAt: expect.any(Date),
         });
+    });
+
+    it("leaves an approve once to the calls that wait on it, until they stop beating", async () => {
+        const projectId = await createProject(test.db, "Acme");
+        const { id: waited } = await openApprovalRequest(test.db, projectId, requestInput());
+        const [waiting] = await waitOn(projectId, waited, 1);
+        await decideApproval(test.db, projectId, waited, "once", "dana@acme.com");
+        const { id: left } = await openApprovalRequest(test.db, projectId, requestInput());
+        const [done] = await waitOn(projectId, left, 1);
+        await finishWaiters(test.db, projectId, [done!]);
+        await decideApproval(test.db, projectId, left, "once", "dana@acme.com");
+
+        expect(await claimOnce(test.db, projectId, { ...call, askId: askId() })).toBe(left);
+        expect(await claimOnce(test.db, projectId, { ...call, askId: askId() })).toBeUndefined();
+        await stopBeating(waiting!);
+        expect(await claimOnce(test.db, projectId, { ...call, askId: askId() })).toBe(waited);
     });
 
     it("gives a call the request it already has", async () => {
