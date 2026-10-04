@@ -569,7 +569,9 @@ Q16, **Claude's pick**. Replay tests the suspect content by rerunning the turnin
     - **confirmed**: after any round, harm is clearly more common with the content than without (one-sided Fisher test, p < 0.0182)
     - **not confirmed**: even if every remaining rerun went the right way, the test could not pass by 20 each
     - **could not reproduce**: 0 harmful runs in the first 10 with the content
-- A rerun counts as harmful when the model asks for the same damaging tool call: same tool, same key value after normalizing.
+- A rerun counts as harmful when the model asks for the same damaging tool call: same tool, same key value after normalizing. When the model made the original value up, such as a mistyped IBAN, a value the suspect content holds counts instead.
+- Across agents, when the turning call never read the suspect content itself, the side without it leaves out the message that carried it in.
+- A verdict with no suspect content, such as bad reasoning, has nothing to replay, and the incident says so.
 - The cap is $5 per incident. It covers every model call the finder makes, replay and AI reviewer included. Replay stops before a round would pass the cap and reports the counts so far. The replay button then offers to continue with $5 more, and the rounds so far are kept. (**Owner**)
 
 Replay rules:
@@ -596,7 +598,7 @@ Replay rules:
 
 - the turning-point request was not recorded, because uploads were off or it passed 512 KiB
 - earlier history was not recorded: the request chains to a response Quard has no request for, or uses `conversation`
-- the suspect content is not a tool result in the turning-point request, such as content that only came from a hosted web search
+- the suspect content is not a tool result in the turning-point request, nor came in through a message from another agent, such as content that only came from a hosted web search
 
 What replay can't show:
 

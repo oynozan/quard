@@ -78,5 +78,8 @@ Replay is **limited**, and does not run, when:
 
 - **The request was not recorded.** Uploads were off, or the request was larger than 512 KiB. Agents that resend the whole history on every call can pass that size in long runs.
 - **Earlier history was not recorded.** The request continues an earlier response that Quard has no request for, or uses a `conversation`.
-- **The suspect content is not a tool result** in the turning-point request, such as text from the user or from a hosted web search.
+- **The suspect content is not a tool result** in the turning-point request, such as text from the user or from a hosted web search. Content another agent passed on in a message is fine: replay leaves out that message.
+
+A verdict with no suspect content, such as bad reasoning, has **nothing to replay**.
+
 - **There is no harmful call to test.** A guard flagged the content and the agent did nothing harmful with it, or the run went over a run limit.
