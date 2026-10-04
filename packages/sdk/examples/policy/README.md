@@ -80,7 +80,7 @@ Each signature has an `id`, a `title`, a `category`, `where` (`input` for tool a
 
 ## AI detector
 
-A detector is an object with a `name` and a `label(text, { signal })` function. It picks one label from a fixed list for the text, and gives the chance of each label, from 0 to 1. It can also give `injection`: the chance that some part of the text tries to instruct the AI agent reading it. Quard comes with Jev from TypeSafe, pinned to `jev-1.13.0`. Set it in code:
+A detector is an object with a `name` and a `label(text, { signal })` function. It picks one label from a fixed list for the text, and gives the chance of each label, from 0 to 1. It can also give `injection`: the chance that some part of the text tries to instruct the AI agent reading it. Quard comes with Jev from TypeSafe, pinned to `jev-1.13.0`. It is off, and nothing is labeled, until you set it in code with a TypeSafe API key:
 
 ```ts
 import { jevDetector, quard } from "quard";
@@ -90,17 +90,18 @@ quard.configure({ detector: jevDetector({ apiKey: process.env.TYPESAFE_API_KEY ?
 
 What is sent:
 
-- Only content labeled `public` goes to the detector. Web pages, outside email and MCP results are public by default, intranet hosts included. Mark your own servers and hosts `sensitivity: "internal"` under `origins` to keep them away from it.
-- Secrets are removed, and emails, IBANs and card numbers are masked first. Values of fields named like secrets, such as `password` or `client_secret`, are never sent. Names, street addresses and phone numbers are sent as written.
+- Only content labeled `public` goes to the detector. Web pages, email and MCP results are public by default, intranet hosts included. Mark your own servers and hosts `sensitivity: "internal"` under `origins` to keep them away from it.
+- Every `email:` origin is public, so a colleague's mail read by an inbox tool goes to the detector too. The origin comes from the tool's arguments, such as `email:readInbox`, not from the sender. Marking it internal, as in `"email:readInbox": { "sensitivity": "internal" }`, keeps all its mail away from the detector, outside mail included.
+- Secrets are removed, and emails, IBANs and card numbers are masked first. Values of fields named like secrets, such as `password` or `client_secret`, are never sent, also when the JSON arrives as text, as most MCP results do. Names, street addresses and phone numbers are sent as written.
 - Short values, and keys that read like text, are packed together, and bare numbers are skipped, so a wide JSON result takes a few requests. A long text is cut into chunks of up to 4,000 characters at line breaks, sentence ends or spaces, never inside an IBAN, card number, email or secret. Chunks cut from one paragraph overlap a little.
 - Jev answers two questions about each chunk in one request: which label fits, and whether any part of it tries to instruct the AI agent reading it.
 
 What it does:
 
-- `enforce` (the default) waits up to 5 seconds in total, with at most 8 requests in flight per process. A busy or unreachable API gets one retry.
-- A chunk is removed when the yes or no answer, or its `prompt_injection` chance, reaches `stripAt` (0.9). The whole chunk goes, ordinary text in it included, and the agent is not told. A key can't be removed, so a key that holds an injection only flags the content.
+- `enforce` (the default) waits up to 5 seconds in total, with at most 8 requests in flight per process. A busy or unreachable API gets one retry, unless its `Retry-After` asks for more than 1.5 seconds or the 5 seconds run out.
+- A chunk is removed when the yes or no answer, or its `prompt_injection` chance, reaches `stripAt` (0.9). The whole chunk goes, ordinary text in it included, and the agent is not told. A key can't be removed, so a key that holds an injection only flags the content `detector:prompt_injection`.
 - A chunk whose risky labels add up to `flagAt` (0.5) flags the content, such as `detector:payment_fraud`, so the agent's later actions face stricter rules. The flag names the most likely risky label.
-- A chunk that fails or answers late is unchecked. `enforce` still acts on the chunks that answered, and flags the content `detector:unchecked`, so values from it can't pay or send anything without a person. A `detector_error` warning gives the reason, such as `http_401`, `http_429`, `timeout` or `bad_reply`. A refused key or another model version is also logged once.
+- A chunk that fails, answers late or can't reach the API is unchecked. `enforce` still acts on the chunks that answered, and flags the content `detector:unchecked`. Like any flag, it only counts in `action` rules: a value from it fails `from` rules, which block by default, and makes `neverSeen` rules ask a person. Egress guards and `max` rules don't read flags. A `detector_error` warning gives the reason, such as `http_401`, `http_429`, `timeout` or `bad_reply`. A refused key or another model version is also logged once.
 - `observe` does not wait and changes nothing. It records what `enforce` would do. Set it with `detectorRules: { mode: "observe" }` to check the labels first.
 - The detector only tightens: it can flag or remove content, never allow what a rule blocked.
 

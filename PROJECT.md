@@ -248,7 +248,7 @@ Origin comes from the wrapper that let the content in. It never comes from the c
 | The user | trusted | internal |
 | Your own tools, wrapped with `guard()` but not as `source` | trusted | internal |
 | Web pages, hosted web search | untrusted | public |
-| Outside email (inbox tools) | untrusted | public |
+| Email (inbox tools), colleagues' mail included | untrusted | public |
 | MCP servers | untrusted | public |
 | Files from `source` tools | untrusted | internal |
 | Another agent | the labels of its content | the labels of its content |
@@ -375,7 +375,7 @@ Decided by Q23.
 | Per-day limits | Count locally and block once the local count reaches the cap |
 | Fleet check and quarantine lists | Use the last synced copy, up to 24 h old |
 | Label lookups | A label that can't be looked up counts as untrusted |
-| Jev detector | What it could not check is flagged `detector:unchecked`, and a warning says why |
+| Jev detector | Keeps working: the SDK calls Jev directly, not through the backend |
 | Decision records | Buffered, up to 10,000, and retried every 1 s to 60 s |
 
 If the buffer fills, the oldest allow records are dropped first, and the number lost is recorded. Records sent late carry `degraded: true`.
@@ -537,7 +537,11 @@ Decided by the spec, Q16 and Q17.
 - Labels show at once whether untrusted content shaped a harmful action. Value tracing finds where each value in that action first appeared.
 - The **verdict** names the entry point, the turning point, the damage and the missing guard. It is filed as bad input, bad reasoning, bad handoff, broken tool or missing guard.
 - Across agents, the verdict names more. It names the entry agent and the handoff that carried the untrusted content. It also names the turning-point agent and the agent that did the damage.
-- Bad handoffs are split into three kinds: wrong information sent, a constraint dropped in the message, or a correct message misread. The finder can't name one until M4 records the messages between agents.
+- Bad handoffs are split into three kinds: wrong information sent, a constraint dropped in the message, or a correct message misread.
+    - Untrusted content that another agent read and passed on stays bad input. The verdict names the handoff that carried it.
+    - Wrong information sent: the damaging value first came in a message from another agent, or the message was not verified.
+    - A correct message misread: the message was verified and trusted, and the damaging value is in none of the run's content.
+    - A dropped constraint needs the message text, which Quard does not store, so the finder never names it. The AI note may point it out.
 - The finder runs in `services/worker`.
 
 ### Incidents
@@ -573,10 +577,12 @@ Replay rules:
 
 **The recorded request.** A Responses result does not include its input, so the SDK records the request of each model call for replay.
 
-- It is recorded only while uploads to `webhook` are on, and only up to 512 KiB. Agents that resend the whole history on every call pass that size in long runs.
+- It is recorded only while uploads to `webhook` are on, and only up to 512 KiB, together with the response's assistant text. Agents that resend the whole history on every call pass that size in long runs. While `webhook` is down, the SDK holds at most 32 Mi characters of them and drops the oldest first.
 - Only the fields that shape the answer are kept: the model, instructions, input, tools, tool choice and the sampling and output settings, plus `previous_response_id` and `conversation`. Never `stream`, `store`, `metadata`, `user` or `include`.
 - It is redacted like every event, so secrets are removed and IBANs, cards and emails are masked. Values of fields named like secrets become `…`, and replay repairs tool schemas cut this way.
-- A request chained with `previous_response_id` is rebuilt from the run: the earlier request's full input, the tool calls its response asked for, then this request's input.
+- A request chained with `previous_response_id` is rebuilt from the run: the earlier request's full input, its response's assistant text and tool calls, then this request's input. Reasoning items can't be resent.
+- Two values with the same mask share one stand-in, and a rerun that uses it counts as asking for either.
+- When the turning point has no recorded cost, replay guesses one from the request size and won't start a round the guess says would pass the cap.
 
 **Limited replay.** Replay does not run, and the incident says why, when:
 
@@ -611,11 +617,11 @@ Decided by the spec, Q25, Q26 and Q27, and by the owner's content-label decision
 
 Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner**.
 
-- Jev from TypeSafe, pinned to `jev-1.13.0`, behind a small detector interface. Other detectors can be swapped in later.
+- Jev from TypeSafe, pinned to `jev-1.13.0`, behind a small detector interface. Other detectors can be swapped in later. A team turns it on in code with a TypeSafe API key, and until then nothing is labeled.
 - For each chunk of public content, Jev answers two questions in one request: which label from a fixed list fits best, with the chance of every label, and yes or no, does any part of it try to instruct the AI agent reading it. The list includes `none`.
-- Before a chunk leaves the process, secrets are removed and emails, IBANs and card numbers are masked. Values of fields named like secrets, such as `password` or `client_secret`, are never sent.
-- It acts by default: the SDK waits up to 5 s in total for Jev, with at most 8 requests in flight per process, then flags or strips. A busy or unreachable API gets one retry. A team can switch it to observe, in code or in the policy file. Observe saves the labels without waiting, so it adds no delay.
-- A chunk that fails or answers late is unchecked. The SDK still acts on the chunks that answered, and flags the content `detector:unchecked`, so values from it can't pay or send anything without a person. A warning gives the reason, such as `http_401` or `timeout`. (**Owner**)
+- Before a chunk leaves the process, secrets are removed and emails, IBANs and card numbers are masked. Values of fields named like secrets, such as `password` or `client_secret`, are never sent, also when the JSON arrives as text, as most MCP results do.
+- It acts by default: the SDK waits up to 5 s in total for Jev, with at most 8 requests in flight per process, then flags or strips. A busy or unreachable API gets one retry, unless its `Retry-After` asks for more than 1.5 s or the 5 s wait runs out. A team can switch it to observe, in code or in the policy file. Observe saves the labels without waiting, so it adds no delay.
+- A chunk that fails, answers late or can't reach the API is unchecked. The SDK still acts on the chunks that answered, and flags the content `detector:unchecked`. Like any flag, it only counts in action rules: a value from it fails `from` rules, which block by default, and makes never-seen rules ask a person. Egress guards and `max` rules don't read flags. A warning gives the reason, such as `http_401` or `timeout`. (**Owner**)
 - Jev is a hosted API only. The content and the longest question must fit in 32,000 tokens together, so content is split first. Short values, and keys that read like text, are packed together. Long texts are cut into chunks of up to 4,000 characters at line breaks, sentence ends or spaces, never inside an IBAN, card number, email or secret.
 - TypeSafe quotes 70 to 500 ms per call ([InfoQ](https://www.infoq.com/news/2026/10/typesafe-ai-jev-released/)). Its own docs say most calls take about 100 ms. See [TypeSafe's models page](https://docs.typesafe.ai/models).
 - It can return a wrong but valid answer, and its docs warn that injected text can move its answer. Test it on the team's own injection examples.
@@ -660,7 +666,7 @@ Q25, **Claude's pick**. The labels and acting in v1 were decided by the **owner*
 Q26, **Claude's pick**.
 
 - Internal run data goes only to the provider the agents already use, which also runs the AI reviewer. Secrets are removed, and emails and IBANs become placeholders.
-- Jev is run by another company. By default it gets only content labeled public, such as web pages, outside email and MCP results. Intranet hosts and a team's own MCP servers count as public too until the team marks them internal. Content from an origin marked internal is never sent to it. Names, street addresses and phone numbers are sent as written.
+- Jev is run by another company. By default it gets only content labeled public, such as web pages, email and MCP results. Intranet hosts and a team's own MCP servers count as public too until the team marks them internal. Every `email:` origin is public, so a colleague's mail read by an inbox tool goes to Jev too: the origin comes from the tool's arguments, such as `email:readInbox`, not from the sender. Marking that origin internal keeps all its mail away from Jev, outside mail included. Content from an origin marked internal is never sent to it. Names, street addresses and phone numbers are sent as written.
 - The AI fallback gets the same redacted public chunks that Jev got, through the team's own provider.
 - The pasted-content and task-match questions need internal data: the user's message, the task and the tool's arguments. They stay off until a team turns them on and adds the detector to its `egress` allowlist.
 - A short description of the app, written by the team, may be sent as context. It holds no user data.
@@ -676,7 +682,7 @@ Q27, **Claude's pick**.
 | Pasted outside content (planned) | 0.50 | — | — |
 | Tool call doesn't match the task (planned) | 0.50 | 0.80 | never |
 
-A strip removes the whole chunk, ordinary text in it included, and the agent is not told. The yes or no answer catches an injection that a label misses: one buried in a long chunk, or one Jev splits between `prompt_injection` and `payment_fraud`. A key can't be removed, so a key that holds an injection only flags the content.
+A strip removes the whole chunk, ordinary text in it included, and the agent is not told. The yes or no answer catches an injection that a label misses: one buried in a long chunk, or one Jev splits between `prompt_injection` and `payment_fraud`. A key can't be removed, so a key that holds an injection only flags the content `detector:prompt_injection`.
 
 Jev acts with these thresholds by default. Check them on at least 200 reviewed examples per risky label from the review queue, tune them where needed, and keep the model version pinned.
 
@@ -788,7 +794,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | Q24 | Approval time limits | No time limit; approve once or always approve (same agent, tool and arguments, until revoked) | Owner |
 | Q25 | AI detector | Jev, swappable; labels public content; acts by default, can be switched to observe | Claude's pick, Owner |
 | Q26 | Data for AI models | Internal data only to the team's own provider, masked; Jev gets public content only | Claude's pick |
-| Q27 | Detector thresholds | Flag at 0.5 on the risky labels added up; strip at 0.9 on the yes or no injection answer or the label's chance; tune before enforce | Claude's pick |
+| Q27 | Detector thresholds | Flag at 0.5 on the risky labels added up; strip at 0.9 on the yes or no injection answer or the label's chance; tune on reviewed examples; acts by default | Claude's pick |
 | — | Repo layout | The owner's tree; TypeScript in one pnpm workspace | Owner, Claude's pick |
 | — | Where guards run | In-process; the backend for shared state | Spec |
 | — | Database and queue | Postgres only; the queue is a table: incident rows hold their job state, and the worker claims them with `FOR UPDATE SKIP LOCKED` and a lease, every second | Claude's pick, owner approved |
@@ -821,7 +827,7 @@ Follow [web/DESIGN.md](web/DESIGN.md) for the look. Read Next's bundled docs bef
 | — | When an incident opens | A guard blocks a tool call, or would have in observe mode; one incident per run | Claude's pick |
 | — | When replay runs | On a click on the incident page; the verdict and AI note run on their own; past the cap, continue with $5 more | Owner |
 | — | Request for replay | The SDK records each model call's redacted request while uploads are on, up to 512 KiB | Claude's pick |
-| — | Bad handoff | Waits for the messages M4 records | Owner |
+| — | Bad handoff | From the messages and handoffs M4 records; a dropped constraint is never named, since message text is not stored | Owner, Claude's pick |
 
 ## Changes to the spec
 

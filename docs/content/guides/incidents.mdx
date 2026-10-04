@@ -23,7 +23,7 @@ Until Quard opens its first incident, the list stays in place and reads **No inc
 | Broken tool   | A tool returned wrong data                                                            |
 | Missing guard | No guard was in place to stop the harmful call                                        |
 
-A bad handoff needs the messages between agents, which Quard does not record yet, so no incident is filed as one today.
+When untrusted content passes from one agent to another, the incident stays **Bad input** and names the handoff that carried it. **Bad handoff** is for a message that brought a damaging value no untrusted content holds: it sent wrong information, or a correct message was misread. Quard does not store message text, so it never says a constraint was dropped.
 
 ## Incident page
 
@@ -63,7 +63,7 @@ Replay cannot show a cause that triggers harm only rarely, that the removed cont
 
 Replay needs the turning-point request as your agent sent it. While the SDK uploads events to Quard, it records the request of each model call, redacted like every event.
 
-- A request that continues an earlier response with `previous_response_id` is rebuilt from the requests recorded before it.
+- A request that continues an earlier response with `previous_response_id` is rebuilt from the requests and answers recorded before it.
 - Masked values, such as IBANs and emails, are replaced with stand-ins in the same format, built from the stored hash. An IBAN stand-in has a valid checksum, and an email keeps its domain.
 - The side without the suspect content keeps the tool call but replaces its result with `[Removed for replay]`.
 - Hosted web search is left out of the rerun.
