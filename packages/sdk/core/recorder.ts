@@ -10,10 +10,43 @@ function isQuiet(event: RunEvent): boolean {
     return event.type === "decision" && (event.decision === "allow" || event.decision === "pass");
 }
 
+// ponytail: 32 Mi characters of request bodies held while the webhook is
+// down; past it the oldest model calls lose theirs, and their replay is limited
+const MAX_BODY_CHARS = 32 * 1024 * 1024;
+const bodySizes = new WeakMap<RunEvent, number>();
+let bodyChars = 0;
+
+function forget(events: RunEvent[]): RunEvent[] {
+    for (const event of events) {
+        bodyChars -= bodySizes.get(event) ?? 0;
+    }
+    return events;
+}
+
+function holdBody(event: RunEvent): void {
+    if (event.type !== "model_call" || event.requestBody === undefined) {
+        return;
+    }
+    const size = JSON.stringify(event.requestBody).length;
+    bodySizes.set(event, size);
+    bodyChars += size;
+    for (const [i, held] of buffer.entries()) {
+        if (bodyChars <= MAX_BODY_CHARS) {
+            return;
+        }
+        const heldSize = bodySizes.get(held);
+        if (held.type === "model_call" && heldSize !== undefined) {
+            const { requestBody: _body, ...rest } = held;
+            buffer[i] = rest;
+            bodyChars -= heldSize;
+        }
+    }
+}
+
 // A full buffer drops the oldest allow decision first, then the oldest event
 function makeRoom(): void {
     const quiet = buffer.findIndex(isQuiet);
-    buffer.splice(Math.max(quiet, 0), 1);
+    forget(buffer.splice(Math.max(quiet, 0), 1));
     dropped += 1;
 }
 
@@ -22,6 +55,7 @@ export function record(event: RunEvent): void {
         makeRoom();
     }
     buffer.push(event);
+    holdBody(event);
     try {
         getConfig().onEvent?.(event);
     } catch {
@@ -31,7 +65,7 @@ export function record(event: RunEvent): void {
 
 // Hands over the oldest buffered events, all of them by default
 export function takeEvents(max = buffer.length): RunEvent[] {
-    return buffer.splice(0, max);
+    return forget(buffer.splice(0, max));
 }
 
 // Counts events lost after they left the buffer, reported like the ones it drops

@@ -1,10 +1,11 @@
-import type { RunEvent } from "@quard/shared";
+import type { ModelCallEvent, RunEvent, UploadBatch } from "@quard/shared";
 import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { guard, isGuardRefusal, quard } from "../index.ts";
 import { runAgent } from "../test/agent.ts";
 import { fakeResponses, toolOutputs } from "../test/fake-responses.ts";
 import { resetAll } from "../test/reset.ts";
+import { flushUploads } from "../transport/configure.ts";
 
 // The M1 acceptance test: an agent reads a web page that holds an
 // IBAN and an injected instruction, then tries to pay that IBAN.
@@ -27,6 +28,7 @@ beforeEach(() => {
 
 afterEach(() => {
     resetAll();
+    vi.unstubAllGlobals();
 });
 
 function makeTools() {
@@ -99,6 +101,47 @@ describe("an IBAN taken from a web page", () => {
         expect(rawPay).not.toHaveBeenCalled();
         const runIds = new Set(events.flatMap((event) => ("runId" in event ? [event.runId] : [])));
         expect(runIds.size).toBe(1);
+    });
+});
+
+describe("the turning point's request", () => {
+    const UPLOADS = { key: "qk_test_abcdefghijklmnop", webhookUrl: "http://webhook.test", hashKey: "ab".repeat(32) };
+
+    function turningPoint(list: readonly RunEvent[]): ModelCallEvent | undefined {
+        return list.find(
+            (event): event is ModelCallEvent =>
+                event.type === "model_call" && event.toolCalls.some((call) => call.name === "payInvoice"),
+        );
+    }
+
+    it("is recorded for replay when uploads are on, and redacted on the way out", async () => {
+        const sent: UploadBatch[] = [];
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (_url: string, init: RequestInit) => {
+                sent.push(JSON.parse(String(init.body)) as UploadBatch);
+                return new Response(null, { status: 202 });
+            }),
+        );
+        quard.configure(UPLOADS);
+
+        await quard.run({ agent: "billing" }, () => runAgent(client(attack.fetch), makeTools().tools, PROMPT));
+        await flushUploads();
+
+        const body = turningPoint(events)?.requestBody;
+        expect(body).toMatchObject({ model: "test-model", input: [{ role: "user", content: PROMPT }, {}, {}] });
+        expect(body).not.toHaveProperty("store");
+        const uploaded = JSON.stringify(turningPoint(sent.flatMap((batch) => batch.events.map((item) => item.event))));
+        expect(uploaded).toContain("New bank details: DE89…3000.");
+        expect(uploaded).not.toContain("0532");
+    });
+
+    it("is not recorded when uploads are off", async () => {
+        await quard.run({ agent: "billing" }, () => runAgent(client(attack.fetch), makeTools().tools, PROMPT));
+
+        const call = turningPoint(events);
+        expect(call?.status).toBe("ok");
+        expect(call).not.toHaveProperty("requestBody");
     });
 });
 

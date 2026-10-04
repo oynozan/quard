@@ -34,6 +34,7 @@ describe("runEvent", () => {
             toolCalls: [{ callId: "c", name: "t", arguments: "{}" }],
             usage: { inputTokens: 10, cachedTokens: 2, outputTokens: 5 },
             agentVersion: "f".repeat(16),
+            requestBody: { model: "gpt", input: [{ role: "user", content: "hi" }], store: false },
             status: "ok",
             durationMs: 3,
         },
@@ -128,6 +129,7 @@ describe("runEvent", () => {
         ["a time that is not ISO", { at: "yesterday" }],
         ["an empty agent", { agent: "" }],
         ["a negative duration", { durationMs: -1 }],
+        ["a request body that is not an object", { requestBody: "{}" }],
     ])("rejects %s", (_, change) => {
         const event = {
             type: "model_call",

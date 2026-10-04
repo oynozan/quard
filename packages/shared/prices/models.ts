@@ -48,3 +48,19 @@ export function costOf(model: string, usage: TokenUsage): number | null {
     const micro = fresh * known.input + usage.cachedTokens * known.cachedInput + usage.outputTokens * known.output;
     return Math.round(micro) / 1_000_000;
 }
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+}
+
+// Token counts from a finished Responses API response, when the API sent them
+export function usageOf(response: unknown): TokenUsage | undefined {
+    const usage = asRecord(asRecord(response)?.usage);
+    const input = usage?.input_tokens;
+    const output = usage?.output_tokens;
+    if (typeof input !== "number" || typeof output !== "number") {
+        return undefined;
+    }
+    const cached = asRecord(usage?.input_tokens_details)?.cached_tokens;
+    return { inputTokens: input, cachedTokens: typeof cached === "number" ? cached : 0, outputTokens: output };
+}

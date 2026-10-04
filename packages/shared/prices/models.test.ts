@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { costOf, priceOf } from "./models.ts";
+import { costOf, priceOf, usageOf } from "./models.ts";
 
 describe("priceOf", () => {
     it("finds a model by name, also with a date suffix or other case", () => {
@@ -33,5 +33,25 @@ describe("costOf", () => {
 
     it("returns null for a model without a known price", () => {
         expect(costOf("my-local-model", { inputTokens: 1, cachedTokens: 0, outputTokens: 1 })).toBeNull();
+    });
+});
+
+describe("usageOf", () => {
+    it("reads token usage, with cached tokens when sent", () => {
+        const usage = { input_tokens: 120, output_tokens: 30, input_tokens_details: { cached_tokens: 100 } };
+
+        expect(usageOf({ usage })).toEqual({ inputTokens: 120, cachedTokens: 100, outputTokens: 30 });
+        expect(usageOf({ usage: { input_tokens: 5, output_tokens: 1 } })).toEqual({
+            inputTokens: 5,
+            cachedTokens: 0,
+            outputTokens: 1,
+        });
+    });
+
+    it("finds no usage when the counts are missing or not numbers", () => {
+        expect(usageOf({})).toBeUndefined();
+        expect(usageOf(null)).toBeUndefined();
+        expect(usageOf({ usage: { input_tokens: "5", output_tokens: 1 } })).toBeUndefined();
+        expect(usageOf({ usage: { input_tokens: 5 } })).toBeUndefined();
     });
 });

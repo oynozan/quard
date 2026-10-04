@@ -97,19 +97,39 @@ export function normalizeIban(value: string): string {
     return value.replace(/\s+/g, "").toUpperCase();
 }
 
-// Checks the country length and the mod-97 check digits
-export function isValidIban(value: string): boolean {
-    const iban = normalizeIban(value);
-    if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(iban) || LENGTHS[iban.slice(0, 2)] !== iban.length) {
-        return false;
-    }
+// The mod-97 remainder, with the country and check digits moved to the end
+function mod97(iban: string): number {
     const moved = iban.slice(4) + iban.slice(0, 4);
     const digits = moved.replace(/[A-Z]/g, (letter) => String(letter.charCodeAt(0) - 55));
     let rest = 0;
     for (const digit of digits) {
         rest = (rest * 10 + Number(digit)) % 97;
     }
-    return rest === 1;
+    return rest;
+}
+
+// Checks the country length and the mod-97 check digits
+export function isValidIban(value: string): boolean {
+    const iban = normalizeIban(value);
+    if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(iban) || LENGTHS[iban.slice(0, 2)] !== iban.length) {
+        return false;
+    }
+    return mod97(iban) === 1;
+}
+
+// A valid IBAN for a country, its account digits taken from a hex seed.
+// Undefined for a country with no IBAN length.
+export function ibanFrom(country: string, seedHex: string): string | undefined {
+    const length = Object.hasOwn(LENGTHS, country) ? LENGTHS[country] : undefined;
+    if (length === undefined) {
+        return undefined;
+    }
+    const digits = BigInt(`0x${seedHex}`)
+        .toString()
+        .padStart(length - 4, "0")
+        .slice(0, length - 4);
+    const check = String(98 - mod97(`${country}00${digits}`)).padStart(2, "0");
+    return `${country}${check}${digits}`;
 }
 
 // How many raw characters hold the first `count` non-space characters

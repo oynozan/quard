@@ -5,6 +5,7 @@ const URL_RESPONSES = "https://api.openai.com/v1/responses";
 
 describe("parseRequest", () => {
     it("reads a plain text input and the settings", () => {
+        const tools = [{ type: "function", name: "fetchPage" }, { type: "web_search" }, { name: 5 }, null];
         expect(
             parseRequest({
                 model: "gpt",
@@ -12,7 +13,7 @@ describe("parseRequest", () => {
                 stream: true,
                 previous_response_id: "resp_1",
                 instructions: "Be brief",
-                tools: [{ type: "function", name: "fetchPage" }, { type: "web_search" }, { name: 5 }, null],
+                tools,
             }),
         ).toEqual({
             model: "gpt",
@@ -26,7 +27,33 @@ describe("parseRequest", () => {
                 { role: "user", text: "hi" },
             ],
             callIds: [],
+            replayBody: { model: "gpt", input: "hi", previous_response_id: "resp_1", instructions: "Be brief", tools },
         });
+    });
+
+    it("keeps only the fields a replay resends", () => {
+        const kept = {
+            model: "gpt",
+            instructions: "i",
+            input: [],
+            tools: [],
+            tool_choice: "auto",
+            parallel_tool_calls: false,
+            temperature: 0.2,
+            top_p: 1,
+            reasoning: { effort: "low" },
+            text: { format: { type: "text" } },
+            max_output_tokens: 500,
+            max_tool_calls: 3,
+            truncation: "auto",
+            top_logprobs: 0,
+            prompt: { id: "pmpt_1" },
+            previous_response_id: "resp_1",
+            conversation: "conv_1",
+        };
+        const dropped = { stream: true, store: true, metadata: { a: "b" }, user: "u1", include: [], background: true };
+
+        expect(parseRequest({ ...kept, ...dropped }).replayBody).toEqual(kept);
     });
 
     it("reads no tools when the tools are not a list", () => {
@@ -56,6 +83,7 @@ describe("parseRequest", () => {
                 { type: "function_call_output", call_id: "call_1", output: '{"body":"line one\\nIBAN DE89"}' },
                 { type: "function_call_output", call_id: "call_2", output: "42" },
                 { type: "function_call_output", call_id: "call_3", output: "plain text" },
+                { type: "function_call_output", call_id: "call_5", output: '{"token":"Xk9mP2qL7v","note":"hi"}' },
                 {
                     type: "function_call_output",
                     call_id: "call_4",
@@ -66,7 +94,7 @@ describe("parseRequest", () => {
 
         expect(request.model).toBe("unknown");
         expect(request.stream).toBe(false);
-        expect(request.callIds).toEqual(["call_1", "call_1", "call_2", "call_3", "call_4"]);
+        expect(request.callIds).toEqual(["call_1", "call_1", "call_2", "call_3", "call_5", "call_4"]);
         expect(request.texts).toEqual([
             { role: "user", text: "pay the invoice" },
             { role: "user", text: "part one\npart two" },
@@ -75,6 +103,8 @@ describe("parseRequest", () => {
             { role: "tool", text: "body\nline one\nIBAN DE89", callId: "call_1" },
             { role: "tool", text: "42", callId: "call_2" },
             { role: "tool", text: "plain text", callId: "call_3" },
+            // Values under secret-named fields are left out of what gets indexed
+            { role: "tool", text: "token\nnote\nhi", callId: "call_5" },
             { role: "tool", text: "from parts", callId: "call_4" },
         ]);
     });

@@ -1,4 +1,4 @@
-import { labelFor, newStepId, type TokenUsage } from "@quard/shared";
+import { labelFor, newStepId, usageOf, type TokenUsage } from "@quard/shared";
 import { getConfig } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import { BLOCKED_ERROR_TYPE, type GuardRefusal } from "../core/refusal.ts";
@@ -12,6 +12,7 @@ import {
 import { currentScope, newScope, type Scope } from "../context/scope.ts";
 import { checkModelCall, countModelCall } from "../guards/limit/model-limits.ts";
 import { isShared } from "../guards/limit/run-counts.ts";
+import { uploadsOn } from "../transport/configure.ts";
 import { addCost, countSharedModelCall } from "../pipeline/count/steps.ts";
 import { activeControl } from "../transport/link/active.ts";
 import { briefLabel } from "./agent-brief.ts";
@@ -19,7 +20,7 @@ import { checkRequestedCalls } from "./check.ts";
 import { unguardedOutputLabel } from "./framework-tools.ts";
 import { asRecord, parseJson } from "./json.ts";
 import { readResponsesRequest, type ResponsesRequest } from "./request.ts";
-import { functionCallOf, functionCallsOf, responseIdOf, usageOf, type FunctionCall } from "./response.ts";
+import { functionCallOf, functionCallsOf, responseIdOf, type FunctionCall } from "./response.ts";
 import { tapSse } from "./sse.ts";
 import { rememberVersion, versionOf } from "./versions.ts";
 
@@ -36,6 +37,17 @@ function refusedResponse(refusal: GuardRefusal): Response {
         status: 403,
         headers: { "content-type": "application/json", "x-should-retry": "false" },
     });
+}
+
+// ponytail: agents that resend the whole input each call pass this cap on
+// long runs; dedupe input items by keyed hash per run if that matters
+const MAX_REQUEST_BODY = 512 * 1024;
+
+// The body replay resends. Kept only while uploads are on, or the
+// event buffer would hold it for nothing.
+function requestBodyOf(step: Step): { requestBody?: Record<string, unknown> } {
+    const body = step.request.replayBody;
+    return uploadsOn() && JSON.stringify(body).length <= MAX_REQUEST_BODY ? { requestBody: body } : {};
 }
 
 // The current scope, or the run of the response, conversation or tool
@@ -119,20 +131,23 @@ function recordModelCall(
     calls: FunctionCall[] = [],
     usage?: TokenUsage,
 ): void {
+    // One clock read, so at minus durationMs is the start
+    const end = Date.now();
     record({
         type: "model_call",
         runId: step.scope.run.runId,
         stepId: step.stepId,
         agent: step.scope.agent,
-        at: now(),
+        at: new Date(end).toISOString(),
         parentStepId: step.scope.parentStepId,
         model: step.request.model,
         responseId,
         toolCalls: calls.map((call) => ({ callId: call.callId, name: call.name, arguments: call.arguments })),
         status,
-        durationMs: Date.now() - step.started,
+        durationMs: end - step.started,
         agentVersion: step.version,
         ...(usage === undefined ? {} : { usage }),
+        ...requestBodyOf(step),
     });
 }
 

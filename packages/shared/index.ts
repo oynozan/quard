@@ -123,7 +123,7 @@ export type {
 } from "./labels/types.ts";
 export { findHosts, hostMatches, mainDomain, normalizeHost } from "./normalize/domain.ts";
 export { emailHost, emailSpans, findEmails, normalizeEmail, replaceEmails } from "./normalize/email.ts";
-export { findIbans, isValidIban, normalizeIban, replaceIbans } from "./normalize/iban.ts";
+export { findIbans, ibanFrom, isValidIban, normalizeIban, replaceIbans } from "./normalize/iban.ts";
 export { findIds, isIdentifierLike } from "./normalize/identifier.ts";
 export { findPaths, normalizePath } from "./normalize/path.ts";
 export { cleanText, hasInvisible, INVISIBLE } from "./normalize/text.ts";
@@ -137,7 +137,7 @@ export { createRedactor, redactText } from "./redact/redactor.ts";
 export type { Redactor } from "./redact/redactor.ts";
 export { removeSecrets, SECRET_FIELD } from "./redact/secrets.ts";
 export { stripSecrets, tooDeepToStrip } from "./redact/strip.ts";
-export { costOf, priceOf } from "./prices/models.ts";
+export { costOf, priceOf, usageOf } from "./prices/models.ts";
 export type { ModelPrice, TokenUsage } from "./prices/models.ts";
 export { findSensitive, maskSensitive } from "./redact/sensitive.ts";
 export type { Sensitive, SensitiveKind } from "./redact/sensitive.ts";

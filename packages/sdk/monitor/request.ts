@@ -14,7 +14,30 @@ export type ResponsesRequest = {
     texts: InputText[];
     // Tool call ids in the input, which tie it to an earlier run
     callIds: string[];
+    // The body cut to what a replay resends
+    replayBody: Record<string, unknown>;
 };
+
+// Never stream, store, metadata, user, include and the like
+const REPLAY_FIELDS = new Set([
+    "model",
+    "instructions",
+    "input",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "temperature",
+    "top_p",
+    "reasoning",
+    "text",
+    "max_output_tokens",
+    "max_tool_calls",
+    "truncation",
+    "top_logprobs",
+    "prompt",
+    "previous_response_id",
+    "conversation",
+]);
 
 function contentText(content: unknown): string {
     if (typeof content === "string") {
@@ -78,6 +101,7 @@ export function parseRequest(body: Record<string, unknown>): ResponsesRequest {
         conversationId: conversationOf(body.conversation),
         texts: [],
         callIds: [],
+        replayBody: Object.fromEntries(Object.entries(body).filter(([name]) => REPLAY_FIELDS.has(name))),
     };
     if (request.instructions !== undefined) {
         request.texts.push({ role: "system", text: request.instructions });

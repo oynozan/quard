@@ -53,6 +53,8 @@ export const modelCallEvent = z.object({
         .string()
         .regex(/^[0-9a-f]{16}$/)
         .optional(),
+    // The request body, redacted and cut to what a replay resends
+    requestBody: z.record(z.string(), z.unknown()).optional(),
     status: z.enum(["ok", "error"]),
     durationMs,
 });

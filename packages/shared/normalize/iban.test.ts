@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findIbans, isValidIban, normalizeIban, replaceIbans } from "./iban.ts";
+import { findIbans, ibanFrom, isValidIban, normalizeIban, replaceIbans } from "./iban.ts";
 
 const VALID = "DE89370400440532013000";
 
@@ -59,5 +59,31 @@ describe("replaceIbans", () => {
 
     it("leaves text without IBANs alone", () => {
         expect(replaceIbans("No IBAN in DE89370400440532013001", () => "x")).toBe("No IBAN in DE89370400440532013001");
+    });
+});
+
+describe("ibanFrom", () => {
+    it("makes a valid IBAN of the country's length from the seed", () => {
+        const seed = "0123456789abcdef0123456789abcdef";
+        const iban = ibanFrom("DE", seed);
+
+        expect(iban).toMatch(/^DE\d{20}$/);
+        expect(isValidIban(String(iban))).toBe(true);
+        expect(iban?.slice(4)).toBe(BigInt(`0x${seed}`).toString().slice(0, 18));
+        expect(ibanFrom("DE", seed)).toBe(iban);
+        expect(ibanFrom("DE", "ff".repeat(16))).not.toBe(iban);
+    });
+
+    it("pads a short seed and keeps one-digit check digits", () => {
+        const all = Array.from({ length: 200 }, (_, n) => ibanFrom("NO", n.toString(16)));
+
+        expect(all[1]).toMatch(/^NO\d{2}0{10}1$/);
+        expect(all.every((iban) => isValidIban(String(iban)))).toBe(true);
+        expect(all.some((iban) => iban?.charAt(2) === "0")).toBe(true);
+    });
+
+    it("gives nothing for a country without IBANs", () => {
+        expect(ibanFrom("XX", "ab")).toBeUndefined();
+        expect(ibanFrom("constructor", "ab")).toBeUndefined();
     });
 });

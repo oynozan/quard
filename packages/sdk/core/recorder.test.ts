@@ -98,6 +98,42 @@ describe("recorder", () => {
         expect(takeEvents(1)).toEqual([warning("0")]);
     });
 
+    it("strips the oldest request bodies past 32 Mi characters", () => {
+        const call = (input: string): RunEvent => ({
+            type: "model_call",
+            runId: "r",
+            stepId: input.slice(0, 1),
+            agent: "a",
+            at: "t",
+            model: "m",
+            toolCalls: [],
+            status: "ok",
+            durationMs: 1,
+            agentVersion: "v",
+            ...(input === "" ? {} : { requestBody: { input } }),
+        });
+        const big = (name: string) => call(name.repeat(12 * 1024 * 1024));
+        record(warning("first"));
+        record(call(""));
+        record(big("a"));
+        record(big("b"));
+        record(big("c"));
+
+        const events = takeEvents();
+        expect(events.map((event) => event.type === "model_call" && event.requestBody !== undefined)).toEqual([
+            false,
+            false,
+            false,
+            true,
+            true,
+        ]);
+        record(big("d"));
+        record(big("e"));
+        expect(takeEvents().every((event) => event.type === "model_call" && event.requestBody !== undefined)).toBe(
+            true,
+        );
+    });
+
     it("stamps the time as ISO text", () => {
         expect(now()).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
