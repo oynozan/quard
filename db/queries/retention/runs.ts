@@ -10,6 +10,9 @@ export function runKeepers(sweep: Sweep): RawBuilder<boolean>[] {
         // Verdicts and replay keep working for a year, and a job in progress finishes
         sql<boolean>`EXISTS (SELECT 1 FROM incidents i WHERE i.project_id = x.project_id
             AND i.run_id = x.run_id AND (i.opened_at >= ${incidentCutoff} OR i.leased_until > ${sweep.now}))`,
+        // A person reviewed its content labels, which tune the detector for a year
+        sql<boolean>`EXISTS (SELECT 1 FROM chunk_labels c WHERE c.project_id = x.project_id
+            AND c.run_id = x.run_id AND c.reviewed_at >= ${incidentCutoff})`,
     ];
 }
 

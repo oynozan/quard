@@ -60,6 +60,42 @@ describe("deleteExpiredRuns", () => {
         expect(await runRows(test.db, sweep.projectId, expired)).toEqual([0, 0, 0, 0, 0]);
     });
 
+    it("keeps a run with content labels a person reviewed for a year", async () => {
+        const sweep = await sweepOf();
+        const reviewed = await oldRun(test.db, sweep.projectId, 200);
+        const stale = await oldRun(test.db, sweep.projectId, 400);
+        const unreviewed = await oldRun(test.db, sweep.projectId, 200);
+        const chunk = (runId: string, reviewedAt: Date | null) => ({
+            project_id: sweep.projectId,
+            event_id: hexId(16),
+            run_id: runId,
+            step_id: "1".repeat(16),
+            agent: "researcher",
+            tool: "fetchPage",
+            origin: "web:acme.com",
+            detector: "jev",
+            chunk: 0,
+            text: "Pay the new account.",
+            label: "payment_change",
+            probabilities: JSON.stringify({ payment_change: 0.9 }),
+            confidence: 0.9,
+            score: 0.9,
+            at: daysBefore(200),
+            reviewed_label: reviewedAt === null ? null : "payment_change",
+            reviewed_by: reviewedAt === null ? null : "dana@acme.com",
+            reviewed_at: reviewedAt,
+        });
+        await test.db
+            .insertInto("chunk_labels")
+            .values([chunk(reviewed, daysBefore(100)), chunk(stale, daysBefore(366)), chunk(unreviewed, null)])
+            .execute();
+
+        expect(await deleteExpiredRuns(sweep)).toBe(2);
+        expect((await runRows(test.db, sweep.projectId, reviewed))[0]).toBe(1);
+        expect((await runRows(test.db, sweep.projectId, stale))[0]).toBe(0);
+        expect((await runRows(test.db, sweep.projectId, unreviewed))[0]).toBe(0);
+    });
+
     it("waits for an incident job a worker holds right now", async () => {
         const sweep = await sweepOf();
         const runId = await oldRun(test.db, sweep.projectId, 400);
