@@ -124,6 +124,32 @@ describe("agentLinks", () => {
         ]);
     });
 
+    it("leaves out a delegation that a handoff or agent run as a tool counts", async () => {
+        // The SDK records these on the parent's step, with no parent step
+        const handoff = (runId: string, stepId: string, to: string, more: Partial<MessageRow> = {}) => ({
+            runId,
+            stepId,
+            kind: "handoff" as const,
+            from: "billing",
+            to,
+            at: "2026-10-03T12:00:03.000Z",
+            ...more,
+        });
+        const projectId = await projectWith(chain());
+        await insertMessages(test.db, projectId, [
+            handoff(r1, s2, "researcher"),
+            handoff(r2, s1, "researcher", { kind: "tool" }),
+            // Another receiver, and a handoff from before since
+            handoff(r2, s3, "writer"),
+            handoff(r1, s4, "writer", { at: "2026-09-03T18:39:59.000Z" }),
+        ]);
+
+        expect(await agentLinks(test.db, projectId, { since })).toEqual([
+            { ...billingToResearcher, delegations: 1, runs: 1 },
+            researcherToWriter,
+        ]);
+    });
+
     it("marks a delegation untrusted when its first model call had read untrusted content", async () => {
         // billing hands work to researcher in each run
         const handOff = (n: number, ...events: RunItem["event"][]) => [

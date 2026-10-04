@@ -20,8 +20,9 @@ export type LinksOptions = { since: Date; agent?: string };
 // the parent's step that started it. As on the run page (agentsOf in web
 // live/detail.ts), the parent is the agent of that step, when it differs.
 // A delegation counts when one of its model calls is at or after `since`.
-// Across processes the receiver also records a message naming the same step.
-// That message counts it instead (agentMessageLinks), so it is left out here.
+// Across processes the receiver also records a message naming the same step,
+// and the OpenAI Agents SDK records a handoff or tool row on that step. That
+// row counts it instead (agentMessageLinks), so it is left out here.
 export async function agentLinks(db: Db, projectId: string, options: LinksOptions): Promise<AgentLinkRow[]> {
     let calls = db
         .selectFrom("steps as c")
@@ -51,10 +52,18 @@ export async function agentLinks(db: Db, projectId: string, options: LinksOption
                         .select(sql`1`.as("one"))
                         .whereRef("m.project_id", "=", "c.project_id")
                         .whereRef("m.run_id", "=", "c.run_id")
-                        .whereRef("m.parent_step_id", "=", "c.parent_step_id")
                         .whereRef("m.to_agent", "=", "c.agent")
-                        .where("m.kind", "=", "message")
-                        .where("m.at", ">=", options.since),
+                        .where("m.at", ">=", options.since)
+                        // A message names the parent's step; a handoff or tool row is on it
+                        .where((m) =>
+                            m.or([
+                                m.and([
+                                    m("m.kind", "=", "message"),
+                                    m("m.parent_step_id", "=", m.ref("c.parent_step_id")),
+                                ]),
+                                m.and([m("m.kind", "<>", "message"), m("m.step_id", "=", m.ref("c.parent_step_id"))]),
+                            ]),
+                        ),
                 ),
             ),
         )
