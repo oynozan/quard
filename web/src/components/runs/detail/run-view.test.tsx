@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runDetailOf } from "@/lib/data/runs/live/detail";
 import type { ApprovalInfo } from "@/lib/data/runs/types";
 import { makeAgent, makeDetail, makeGuard, makeRow, makeStep } from "../../../../test/runs-detail-list/fixtures";
+import { makePayment } from "../../../../test/payments/spend";
 import { ASK, at, REQUEST, runWaiter, storedWaitingRun } from "../../../../test/runs-fixture";
 import { RunView } from "./run-view";
 
@@ -49,6 +50,15 @@ describe("RunView", () => {
         expect(graphRow().className).toContain("grid-cols-[minmax(0,1fr)_268px]");
         expect(container.textContent).toContain("Took 1 min 15 s");
         expect(screen.queryByRole("dialog")).toBeNull();
+        // A run that paid nothing has no payments table
+        expect(screen.queryByRole("region", { name: "Payments" })).toBeNull();
+    });
+
+    it("shows the run's x402 payment steps under the timeline", () => {
+        render(<RunView run={makeDetail({ payments: [makePayment({ delivered: false })] })} />);
+        const payments = screen.getByRole("region", { name: "Payments" });
+        expect(within(payments).getByText("1 payment paid, not delivered")).toBeTruthy();
+        expect(within(payments).getByText("api.example.com")).toBeTruthy();
     });
 
     it("keeps every pane for a run that has only started, with an empty timeline and no limits", () => {
