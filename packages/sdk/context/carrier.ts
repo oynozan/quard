@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { extractValues, isRunId, isStepId, newStepId } from "@quard/shared";
+import { runLimits } from "../core/config.ts";
 import { now, record } from "../core/recorder.ts";
 import type { ContentIndex } from "../labels/content-index.ts";
 import { printOf } from "../labels/content-index.ts";
@@ -68,6 +69,10 @@ function valuesOf(text: string, index: ContentIndex): ValueRecord[] {
     return [...found.values()];
 }
 
+function warn(runId: string, agent: string, code: string, stepId = newStepId()): void {
+    record({ type: "warning", runId, stepId, agent, at: now(), code });
+}
+
 // quard.inject(): stores the message's labels, then returns what travels with it
 export async function inject(options: InjectOptions): Promise<Carrier> {
     const scope = currentScope();
@@ -97,14 +102,7 @@ export async function inject(options: InjectOptions): Promise<Carrier> {
     // Without uploads the record lives in this process only
     if (uploadsOn() && !(await storeLabels([stored]))) {
         // A receiver in another process will read the message as untrusted
-        record({
-            type: "warning",
-            runId: run.runId,
-            stepId: stepId ?? newStepId(),
-            agent,
-            at: now(),
-            code: "label_record_not_stored",
-        });
+        warn(run.runId, agent, "label_record_not_stored", stepId);
     }
     return stepId === undefined ? { runId: run.runId, labelRef } : { runId: run.runId, parentStepId: stepId, labelRef };
 }
@@ -124,15 +122,21 @@ export async function resume<T>(carrier: unknown, fn: () => T, options: ResumeOp
     if (kept === undefined) {
         startSharing(run);
     }
+    const agent = options.agent ?? "default";
+    if (known === undefined) {
+        // Without the record, only the agent's own list caps its tools, and
+        // its depth counts as at the limit, so it may not delegate further
+        warn(run.runId, agent, "label_record_not_found");
+    }
     // The sender's tools cap what this agent may use
     const granted = known?.tools === undefined ? undefined : new Set(known.tools);
     const scope: Scope = {
         run,
-        agent: options.agent ?? "default",
+        agent,
         parentStepId: checked.parentStepId,
         tools: narrowTools(granted, options.tools),
         lastStepId: undefined,
-        depth: known === undefined ? 0 : known.depth + 1,
+        depth: known === undefined ? runLimits().depth : known.depth + 1,
     };
     resumed.set(scope, { carrier: checked, found });
     return await withScope(scope, fn);
