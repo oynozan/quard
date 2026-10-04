@@ -9,6 +9,7 @@ const meta: MetaRecord = {
     agents: "Agents",
     summary: "Summary",
     search: "Search",
+    labels: "Labels",
     settings: "Settings",
 };
 

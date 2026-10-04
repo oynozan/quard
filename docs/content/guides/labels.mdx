@@ -1,0 +1,19 @@
+# Labels
+
+The Labels page is the review queue for content labels. Jev labels each chunk of public content an agent reads, such as `invoice` or `payment_fraud`. Here a person checks those labels, so you can tell how often the detector is right before you trust its flags.
+
+## Review a chunk
+
+1. **To review.** Chunks nobody has reviewed yet, least sure first, then newest. Each row shows the start of the chunk, its origin, the label Jev picked and how sure it was.
+2. **AI fallback.** When Jev picks `none`, the worker asks your own model to label the chunk. It picks a fixed label if one fits, or suggests a new short one with a one-line reason. It shows **Waiting** until the worker gets to it, and **Skipped** when the worker has no `OPENAI_API_KEY`.
+3. **Review.** Opens the whole chunk, its likeliest labels and where it came from. The right label starts at the fallback's label when there is one, and at Jev's otherwise. Click **Approve** to keep it, or pick another label and click **Correct**. Quard saves who reviewed it.
+
+Chunks are stored as Jev got them: secrets removed, and emails, IBANs and card numbers masked. Only public content is labeled and stored this way.
+
+## Read the counts
+
+**Per label** counts, for each label Jev picked, the chunks still waiting, the chunks reviewed and how often a review kept the label. For risky labels, **Right when flagged** shows how often a review agreed when the chunk was risky enough to be flagged. Check the thresholds on at least 200 reviewed examples per risky label.
+
+**Reviewed** lists the latest reviews, with what Jev said, the label a person chose and who chose it.
+
+A review never changes a guard decision that was already made. See [Labels and trust](/concepts/labels#labels-and-ai) for how detector labels flag content.
